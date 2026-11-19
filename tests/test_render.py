@@ -2,7 +2,7 @@ import json
 import subprocess
 
 from proofreel.demo import demo
-from proofreel.motion import FAST, Camera, Pointer, spans, timeline
+from proofreel.motion import FAST, Camera, Pointer, fit, spans, timeline
 
 
 def test_timeline_ramps_and_slows_for_actions():
@@ -12,6 +12,14 @@ def test_timeline_ramps_and_slows_for_actions():
     assert all(abs(b - a) < FAST * 0.6 for a, b in zip(speeds, speeds[1:]))
     near_click = [speed for now, speed in plan if 18.8 <= now <= 22]
     assert near_click and max(near_click) < 1.05
+
+
+def test_a_long_stall_plays_fast_but_actions_stay_real_time():
+    events = [{"t": 5.0, "kind": "click"}, {"t": 905.0, "kind": "click"}]
+    plan = fit(spans([], events), 910, target=30)
+    assert len(plan) / 30 < 45
+    near_click = [speed for now, speed in plan if 904.5 <= now <= 905.5]
+    assert near_click and max(near_click) < 3
 
 
 def test_camera_view_stays_on_the_screen():
