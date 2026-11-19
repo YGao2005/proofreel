@@ -39,7 +39,16 @@ def _any(spans_, a, b):
     return any(spans_[j][1] >= a for j in range(max(0, i - 8), i))
 
 
-def timeline(spans_, end, fps=FPS, fast=FAST):
+def fit(spans_, end, target=None, fps=FPS):
+    """The plan of `timeline`, with busy time played up to 2.5x faster when that brings the video near `target` s."""
+    plan = timeline(spans_, end, fps=fps)
+    if target and len(plan) / fps > target:
+        base = min(2.5, len(plan) / fps / target)
+        plan = timeline(spans_, end, fps=fps, base=base)
+    return plan
+
+
+def timeline(spans_, end, fps=FPS, fast=FAST, base=1.0):
     """The real time shown in each video frame, and its speed. Speed ramps, so a jump to FAST is never a cut."""
     actions, waits, shown = spans_
     frames, now, speed = [], 0.0, 1.0
@@ -47,13 +56,13 @@ def timeline(spans_, end, fps=FPS, fast=FAST):
         frames.append((now, speed))
         ahead = now + speed * 0.4
         if _any(actions, now, ahead):
-            target = 1.0
+            target = base
         elif _any(waits, now, ahead):
-            target = WAITING
+            target = WAITING * base
         elif _any(shown, now, ahead):
-            target = 1.0
+            target = base
         else:
-            target = fast
+            target = max(fast, base)
         speed += (target - speed) * (0.5 if target < speed else 0.12)
         now += speed / fps
     return frames

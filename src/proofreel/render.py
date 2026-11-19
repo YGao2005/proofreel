@@ -20,7 +20,7 @@ from pathlib import Path
 from PIL import Image, ImageChops, ImageStat
 
 from . import draw, page
-from .motion import FAST, FPS, Camera, Pointer, ease, spans, timeline
+from .motion import FAST, FPS, Camera, Pointer, ease, fit, spans
 
 CHANGED = 1.5
 CHIP_KINDS = {"click", "double", "right", "drag", "type", "key", "open", "scroll", "wait", "check"}
@@ -159,9 +159,9 @@ class Scene:
             draw.paste(view, sprite, self.out[0] - sprite.width - margin, margin, alpha)
         clock = draw.pill(draw.clock(now), int(15 * ui), fill=draw.INK + (150,))
         draw.paste(view, clock, margin, margin, 0.9)
-        if speed > 1.6:
-            badge = draw.pill(f"{FAST}x  no change on screen" if speed > 3.5 else "3x  waiting", int(15 * ui), fill=draw.INK + (190,))
-            draw.paste(view, badge, margin + clock.width + int(8 * ui), margin, min(1.0, (speed - 1.6) / 3))
+        if speed > 1.3:
+            badge = draw.pill(f"{speed:.0f}x speed" if speed >= 2 else f"{speed:.1f}x speed", int(15 * ui), fill=draw.INK + (190,))
+            draw.paste(view, badge, margin + clock.width + int(8 * ui), margin, min(1.0, (speed - 1.3) / 1.5))
 
 
 def even(n):
@@ -185,11 +185,11 @@ def _frame(job):
     return _worker["scene"].render(_worker["cached"][1], now, speed, box).tobytes()
 
 
-def video(folder, events, frames, times, start, end, framed, width, crf):
+def video(folder, events, frames, times, start, end, framed, width, crf, target):
     first = Image.open(frames[-1])
     out_w = even(width or first.width)
     out_size = (out_w, even(out_w * first.height / first.width))
-    plan = timeline(spans(screen_changes(frames, times, start), events), end)
+    plan = fit(spans(screen_changes(frames, times, start), events), end, target)
     scene = Scene(first.size, out_size, events, framed)
     real = [t - start for t in times]
     jobs = [(max(0, bisect_right(real, now) - 1), now, speed, scene.camera.step(now, 1 / FPS)) for now, speed in plan]
@@ -228,7 +228,7 @@ def shots(folder, events, frames, times, start):
         e["shot"] = f"shots/{n}.jpg"
 
 
-def render(folder, framed=True, width=None, crf=28):
+def render(folder, framed=True, width=None, crf=28, target=30):
     folder = Path(folder)
     info, events, frames, times = load(folder)
     start = times[0]
@@ -237,7 +237,7 @@ def render(folder, framed=True, width=None, crf=28):
     scale = Image.open(frames[-1]).width / screen_w
     rel = relative(events, start, scale)
     end = max(times[-1] - start, max((e["t"] for e in rel), default=0) + 2.0)
-    length = video(folder, rel, frames, times, start, end, framed, width, crf)
+    length = video(folder, rel, frames, times, start, end, framed, width, crf, target)
     shots(folder, rel, frames, times, start)
     verdict = page.write(folder, info, rel, length, end)
     size = (folder / "session.mp4").stat().st_size / 1e6

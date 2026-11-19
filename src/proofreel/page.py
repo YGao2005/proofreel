@@ -131,7 +131,7 @@ def write(folder, info, events, length, real):
 <div class="grid">
   <div class="player"><video controls playsinline muted preload="metadata" poster="poster.jpg" src="session.mp4"></video>
     <div class="bar"><div class="track"></div><div class="done"></div>{marks}</div>
-    <p>Recorded from the screen as the agent drove it. Blue rings are clicks. Time with no change on the screen plays at up to {FAST}x. The clock is real time. Click a row or a mark to jump to it.</p></div>
+    <p>Recorded from the screen as the agent drove it. Blue rings are clicks. The video is sped up to fit about 30 s: a badge shows the speed (up to {FAST}x with no change on the screen). The clock is real time. Click a row or a mark to jump to it.</p></div>
   <ol>{"".join(row(n, e) for n, e in enumerate(shown))}</ol>
 </div>
 <footer>Made with proofreel.</footer>
