@@ -32,18 +32,16 @@ import argparse
 import json
 import os
 import shlex
-import shutil
 import subprocess
 import sys
 import time
 from pathlib import Path
 
-from . import HOME, Problem, ax, conditions, flow, guest
+from . import HOME, Problem, ax, conditions, flow, guest, recording
+from .recording import log
 from . import vm as vms
 from .screen import Screen, center, find, screen_text, wait_for
 
-SESSIONS = Path(os.environ.get("PROOFREEL_SESSIONS", HOME / "sessions"))
-ACTIVE = HOME / f"{vms.RUN}-session.json"
 
 
 def target(args):
@@ -58,72 +56,22 @@ def target(args):
     raise Problem("No screen. Use --vnc host::port, PROOFREEL_VNC, or proofreel vm up <state>.")
 
 
-def active():
-    return json.loads(ACTIVE.read_text()) if ACTIVE.exists() else None
-
-
-def log(kind, text, t=None, **fields):
-    session = active()
-    if session:
-        with open(Path(session["dir"]) / "events.jsonl", "a") as out:
-            out.write(json.dumps({"t": t or time.time(), "kind": kind, "text": text, **fields}) + "\n")
-
-
 def start(args):
-    if active():
-        raise Problem(f"A session is recording: {active()['dir']}. Stop it first.")
     server, password, run = target(args)
-    folder = SESSIONS / f"{args.name}-{time.strftime('%Y%m%d-%H%M%S')}"
-    folder.mkdir(parents=True)
     meta = dict(item.split("=", 1) for item in args.meta)
-    faked = []
+    faked = run["conditions"] if run else []
     if run:
         meta.setdefault("from state", run["state"])
-        faked = run["conditions"]
         if faked:
             meta.setdefault("conditions", ", ".join(conditions.names(faked)))
-        run.guest.mark(run)
     meta.setdefault("", time.strftime("%Y-%m-%d %H:%M"))
-    (folder / "session.json").write_text(json.dumps({"title": args.title or args.name, "about": args.about,
-                                                    "meta": meta, "app": args.app, "conditions": faked,
-                                                    "os": run["os"] if run else None, "run": run and run["id"],
-                                                    "started": time.time()}))
-    recorder = subprocess.Popen([sys.executable, "-m", "proofreel.capture", str(folder), server, password or "",
-                                 str(args.fps), str(args.reduce)], stdout=open(folder / "recorder.log", "w"),
-                                stderr=subprocess.STDOUT, start_new_session=True)
-    ACTIVE.write_text(json.dumps({"dir": str(folder), "recorder": recorder.pid}))
-    time.sleep(1.5)
-    print(f"Recording {folder}")
+    info = {"title": args.title or args.name, "about": args.about, "meta": meta, "app": args.app, "conditions": faked}
+    print(f"Recording {recording.start(args.name, server, password, info, args.fps, args.reduce, run)}")
 
 
-def stop(plain=False, width=None, keep_frames=False, error=None):
-    session = active()
-    if not session:
-        raise Problem("No session is recording.")
-    subprocess.run(["kill", str(session["recorder"])], capture_output=True)
-    folder = Path(session["dir"])
-    for _ in range(50):
-        if subprocess.run(["kill", "-0", str(session["recorder"])], capture_output=True).returncode:
-            break
-        time.sleep(0.1)
-    ACTIVE.unlink()
-    info = json.loads((folder / "session.json").read_text())
-    if info.get("run"):
-        run = vms.Run.current() if vms.CURRENT.exists() else None
-        if run and run["id"] == info["run"]:
-            events = run.guest.harvest(run, folder, info.get("app"), info.get("started", 0))
-        else:
-            events = [{"t": time.time(), "kind": "note", "text": "No crash reports: the run VM stopped or changed."}]
-        with open(folder / "events.jsonl", "a") as out:
-            for event in events:
-                out.write(json.dumps(event) + "\n")
-    if error:
-        (folder / "session.json").write_text(json.dumps({**info, "error": error}))
-    from .render import render
-    verdict, length, real, size = render(folder, framed=not plain, width=width)
-    if not keep_frames:
-        shutil.rmtree(folder / "frames", ignore_errors=True)
-    print(f"{verdict}. {real:.0f} s of screen in a {length:.0f} s video, {size:.1f} MB. Page: {folder / 'index.html'}")
+def stop(**options):
+    verdict, length, real, size, page = recording.stop(**options)
+    print(f"{verdict}. {real:.0f} s of screen in a {length:.0f} s video, {size:.1f} MB. Page: {page}")
 
 
 def check(args, screen, run):
@@ -163,7 +111,7 @@ def run_flow(path, values):
             raise Problem(f"{steps.name} needs condition {', '.join(gaps)}, and the run VM's state {state or '(none)'} "
                           f"has {', '.join(conditions.names(have)) or 'no conditions'}. Make a state with it: proofreel "
                           f"vm build <state> --from <base> {' '.join('--condition ' + g for g in gaps)}.")
-    return flow.run(steps, command, abort=lambda message: stop(error=message) if active() else None)
+    return flow.run(steps, command, abort=lambda message: stop(error=message) if recording.current() else None)
 
 
 class Parser(argparse.ArgumentParser):
@@ -252,7 +200,7 @@ def parser():
     s.add_argument("session")
     s.add_argument("--out", required=True, help="the review folder; keep it the same for every run of this journey")
     s = sub.add_parser("demo")
-    s.add_argument("dir", nargs="?", default=str(SESSIONS / "demo"))
+    s.add_argument("dir", nargs="?", default=str(recording.SESSIONS / "demo"))
     s.add_argument("--broken", action="store_true", help="type the name wrong, so the last check fails")
     s = sub.add_parser("clean")
     s.add_argument("--days", type=float, default=7)
@@ -350,7 +298,7 @@ def command(argv):
     HOME.mkdir(parents=True, exist_ok=True)
     match a.command:
         case "start": return start(a)
-        case "stop": return stop(a.plain, a.width, a.keep_frames)
+        case "stop": return stop(plain=a.plain, width=a.width, keep_frames=a.keep_frames)
         case "step" | "note": return log(a.command, a.text)
         case "event":
             fields = {k: v for k, v in (("x", a.x), ("y", a.y), ("ok", a.ok), ("detail", a.detail)) if v is not None}
@@ -368,7 +316,9 @@ def command(argv):
         case "demo":
             from .demo import demo
             return demo(Path(a.dir), a.broken)
-        case "clean": return clean(a.days)
+        case "clean":
+            for folder in recording.clean(a.days):
+                print(f"Deleted {folder}")
         case "vm": return vm(a)
         case "check" if a.kind == "cmd":
             return run_check(a, None)
@@ -455,15 +405,6 @@ def act(a, screen, run):
             screen.click(x, y)
         case "check":
             return run_check(a, screen, run)
-
-
-def clean(days):
-    cutoff = time.time() - max(days, 1) * 86400
-    recording = (active() or {}).get("dir")
-    for folder in SESSIONS.glob("*/") if SESSIONS.exists() else []:
-        if str(folder.resolve()) != str(Path(recording or "/").resolve()) and folder.stat().st_mtime < cutoff:
-            shutil.rmtree(folder)
-            print(f"Deleted {folder}")
 
 
 if __name__ == "__main__":

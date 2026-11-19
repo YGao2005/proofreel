@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from proofreel import Problem, cli, flow
+from proofreel import Problem, cli, flow, recording
 
 
 def write(tmp_path, text):
@@ -49,9 +49,9 @@ def test_a_failed_check_goes_on_and_any_other_failure_stops_the_recording(tmp_pa
 
 def test_a_check_that_cannot_run_is_a_failed_check_with_the_reason(tmp_path, monkeypatch):
     session = tmp_path / "s"
-    session.mkdir()
-    monkeypatch.setattr(cli, "ACTIVE", tmp_path / "active.json")
-    (tmp_path / "active.json").write_text(json.dumps({"dir": str(session), "recorder": 0}))
+    (session / "frames").mkdir(parents=True)
+    monkeypatch.setattr(recording, "POINTER", tmp_path / "active.json")
+    (tmp_path / "active.json").write_text(json.dumps({"dir": str(session), "pid": 0}))
 
     def broken(*_args, **_kwargs):
         raise Problem("Text recognition needs macOS (swiftc) or tesseract on PATH.")
