@@ -320,7 +320,10 @@ Any tool can write this folder and then run `proofreel render <dir>`:
 
 - A run VM is headless and isolated: no window, no audio device (Tart `--no-audio`, QEMU `-audio none` and no
   sound device), no shared clipboard. Nothing it does shows or plays on the host.
-- One run VM at a time for each `PROOFREEL_VM` name. macOS lets a Mac run at most 2 macOS VMs at once.
+- One run VM and one recording at a time for each `PROOFREEL_VM` name (default `pr-run`). Agents that work at the
+  same time each set their own name, such as `PROOFREEL_VM=pr-a`. macOS lets a Mac run at most 2 macOS VMs at once.
+- Files go to `PROOFREEL_HOME` (default `~/.proofreel`): states, run records, compiled helpers, and `sessions/`
+  (`PROOFREEL_SESSIONS`). The guest password is given to `ssh` in the environment, never written to disk.
 - A VNC server sends keys as keysyms. Some apps read hardware key codes. `hold <key> <seconds>` holds a key down; in
   a Tart macOS guest, `option` is Left Option and `command` is Left Command. Send other keys from in the guest, and
   log them with `proofreel event key ...`.

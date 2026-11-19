@@ -37,13 +37,12 @@ import sys
 import time
 from pathlib import Path
 
-from . import ax, conditions, guest
+from . import HOME, ax, conditions, guest
 from . import vm as vms
 from .screen import Screen, center, find, screen_text, wait_for
 
-HOME = vms.HOME
 SESSIONS = Path(os.environ.get("PROOFREEL_SESSIONS", HOME / "sessions"))
-ACTIVE = HOME / "session.json"
+ACTIVE = HOME / f"{vms.RUN}-session.json"
 
 
 def target(args):
@@ -97,7 +96,7 @@ def start(args):
     print(f"Recording {folder}")
 
 
-def stop(args, error=None):
+def stop(plain=False, width=None, keep_frames=False, error=None):
     session = active()
     if not session:
         sys.exit("No session is recording.")
@@ -116,9 +115,8 @@ def stop(args, error=None):
     if error:
         (folder / "session.json").write_text(json.dumps({**info, "error": error}))
     from .render import render
-    verdict, length, real, size = render(folder, framed=not getattr(args, "plain", False),
-                                         width=getattr(args, "width", None))
-    if not getattr(args, "keep_frames", False):
+    verdict, length, real, size = render(folder, framed=not plain, width=width)
+    if not keep_frames:
         shutil.rmtree(folder / "frames", ignore_errors=True)
     print(f"{verdict}. {real:.0f} s of screen in a {length:.0f} s video, {size:.1f} MB. Page: {folder / 'index.html'}")
 
@@ -180,7 +178,7 @@ def run_flow(path, values):
             if words[0] == "check":
                 continue
             if active():
-                stop(argparse.Namespace(), error=f"{path.name}:{number}: {' '.join(words)}: {stop_flow.code}")
+                stop(error=f"{path.name}:{number}: {' '.join(words)}: {stop_flow.code}")
             raise
 
 
@@ -356,7 +354,7 @@ def command(argv):
     HOME.mkdir(parents=True, exist_ok=True)
     match a.command:
         case "start": return start(a)
-        case "stop": return stop(a)
+        case "stop": return stop(a.plain, a.width, a.keep_frames)
         case "step" | "note": return log(a.command, a.text)
         case "event":
             fields = {k: v for k, v in (("x", a.x), ("y", a.y), ("ok", a.ok), ("detail", a.detail)) if v is not None}
