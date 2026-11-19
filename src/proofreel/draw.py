@@ -1,4 +1,4 @@
-"""What the video draws on the screen: the pointer, click rings, captions, chips, and the frame around the screen.
+"""What the video draws: the pointer, the click rings, and the frame around the screen. Text is the page's.
 
 Shapes are drawn at 4x and scaled down, because Pillow draws polygons and rounded boxes without antialiasing.
 """
@@ -10,9 +10,6 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 ACCENT = (10, 132, 255)
-PASS = (36, 138, 61)
-FAIL = (215, 0, 21)
-INK = (24, 24, 27)
 FONTS = [
     os.environ.get("PROOFREEL_FONT", ""),
     str(Path.home() / "Library/Fonts/Inter-Regular.ttf"),
@@ -87,24 +84,6 @@ def ring(radius, alpha, scale):
 
 
 @lru_cache(maxsize=256)
-def pill(text, size, fill=INK + (215,), color=(255, 255, 255, 255), lead=None):
-    """A rounded label. `lead` is a short dim prefix, such as a step number."""
-    f = font(size * SS // 1)
-    pad_x, pad_y = int(size * 0.75 * SS), int(size * 0.5 * SS)
-    lead_text = f"{lead}  " if lead else ""
-    lead_w = f.getlength(lead_text)
-    text_w = f.getlength(text)
-    ascent, descent = f.getmetrics()
-    w, h = int(lead_w + text_w + 2 * pad_x), int(ascent + descent + 2 * pad_y)
-    image = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(image)
-    draw.rounded_rectangle((0, 0, w - 1, h - 1), radius=h // 2 if h < 70 * SS else 14 * SS, fill=fill)
-    if lead:
-        draw.text((pad_x, pad_y), lead_text, font=f, fill=color[:3] + (150,))
-    draw.text((pad_x + lead_w, pad_y), text, font=f, fill=color)
-    return image.resize((w // SS, h // SS), Image.LANCZOS)
-
-
 def backdrop(size, screen_box, radius):
     """The frame around the screen: a soft gradient, and a shadow under the screen."""
     w, h = size
@@ -128,19 +107,3 @@ def rounded_mask(size, radius):
     big = Image.new("L", (size[0] * 2, size[1] * 2), 0)
     ImageDraw.Draw(big).rounded_rectangle((0, 0, size[0] * 2 - 1, size[1] * 2 - 1), radius * 2, fill=255)
     return big.resize(size, Image.LANCZOS)
-
-
-def clock(seconds):
-    return f"{int(seconds // 60)}:{seconds % 60:04.1f}"
-
-
-def keys_label(text):
-    """`cmd-shift-a` as `Cmd+Shift+A`."""
-    names = {"cmd": "Cmd", "ctrl": "Ctrl", "opt": "Opt", "alt": "Alt", "shift": "Shift", "enter": "Return",
-             "bsp": "Delete", "esc": "Esc", "tab": "Tab", "space": "Space"}
-    out = []
-    for combo in text.split():
-        parts = combo.split("-")
-        out.append("+".join(names.get(p, p.upper() if len(p) == 1 else p.title()) for p in parts))
-    return "  ".join(out)
-

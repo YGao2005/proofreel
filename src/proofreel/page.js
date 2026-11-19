@@ -51,19 +51,26 @@ function render() {
       $("span", { text: `Run ${i + 1}` }), chip(...VERDICTS[x.verdict]), $("span", { class: "when", text: x.when }))));
     app.append(tabs);
   }
-  const source = () => r.base + (r.wide && !zoom ? "session-wide.mp4" : "session.mp4");
-  const video = $("video", { controls: "", playsinline: "", muted: "", preload: "metadata", poster: r.base + "poster.jpg",
-    src: source() });
-  const zoomButton = r.wide ? $("button", { type: "button", class: "btn small", "aria-pressed": String(zoom),
-    text: zoom ? "Zoom on" : "Zoom off", title: "Zoom in on each action", onclick: () => {
+  const video = $("video", { controls: "", controlslist: "nofullscreen", playsinline: "", muted: "", preload: "metadata",
+    poster: r.base + "poster.jpg", src: r.base + "session.mp4" });
+  const overlay = r.overlay ? $("div", { class: "overlay", "aria-hidden": "true" },
+    $("div", { class: "top" }, $("span", { class: "pill clock" }), $("span", { class: "pill speed" })),
+    $("span", { class: "pill now" }), $("span", { class: "pill caption" })) : null;
+  const screen = $("div", { class: "screen" }, video, overlay);
+  const update = () => stage(r, video, overlay);
+  const zoomButton = r.camera && r.camera.length ? $("button", { type: "button", class: "btn small",
+    "aria-pressed": String(zoom), text: zoom ? "Zoom on" : "Zoom off", title: "Zoom in on each action", onclick: () => {
       zoom = !zoom;
       try { localStorage.setItem("proofreel-zoom", zoom ? "1" : "0"); } catch (err) {}
       zoomButton.setAttribute("aria-pressed", String(zoom));
       zoomButton.textContent = zoom ? "Zoom on" : "Zoom off";
-      const at = video.currentTime, playing = !video.paused;
-      video.src = source();
-      video.addEventListener("loadedmetadata", () => { video.currentTime = at; if (playing) video.play().catch(() => {}); }, { once: true });
+      update();
     } }) : null;
+  const fullButton = screen.requestFullscreen ? $("button", { type: "button", class: "btn small", text: "Full screen",
+    onclick: () => screen.requestFullscreen().catch(() => {}) }) : null;
+  const tick = () => { update(); if (!video.paused) requestAnimationFrame(tick); };
+  video.addEventListener("play", () => requestAnimationFrame(tick));
+  for (const name of ["seeked", "loadedmetadata", "timeupdate"]) video.addEventListener(name, update);
   const done = $("div", { class: "done" });
   const bar = $("div", { class: "bar" }, $("div", { class: "track" }), done);
   const shown = r.events;
@@ -78,7 +85,7 @@ function render() {
   });
   const place = () => { if (video.duration) bar.querySelectorAll("i").forEach(m => m.style.left = (m.dataset.t / video.duration * 100) + "%"); };
   video.addEventListener("loadedmetadata", place);
-  const player = $("div", { class: "panel player" }, zoomButton ? $("div", { class: "view" }, zoomButton) : null, video, bar,
+  const player = $("div", { class: "panel player" }, $("div", { class: "view" }, zoomButton, fullButton), screen, bar,
     $("p", { text: `Recorded from the screen as the agent drove it. Blue rings are clicks. The video is sped up to about 30 s; a badge shows the speed (up to ${fastest(r)}x with no change on the screen). The clock is real time. Click a row or a mark to jump to it.` }));
   const side = $("div", { class: "side" }, player, reviewPanel(r), askPanel(r, video));
   const list = $("ol");
@@ -106,6 +113,55 @@ function render() {
   });
   place();
   watchReview(r);
+}
+
+const ease = x => { x = Math.min(Math.max(x, 0), 1); return x * x * (3 - 2 * x); };
+const toReal = (r, video) => along(r.clock, 1, 0, video);
+function speedAt(r, video) {
+  const k = r.clock;
+  let i = 1;
+  while (i < k.length - 1 && k[i][1] <= video) i++;
+  return k.length > 1 && k[i][1] > k[i - 1][1] ? (k[i][0] - k[i - 1][0]) / (k[i][1] - k[i - 1][1]) : 1;
+}
+function cameraAt(camera, video) {
+  let i = 1;
+  while (i < camera.length - 1 && camera[i][0] <= video) i++;
+  const [a, b] = [camera[i - 1], camera[i] || camera[i - 1]];
+  const k = b[0] > a[0] ? Math.min(Math.max((video - a[0]) / (b[0] - a[0]), 0), 1) : 0;
+  return [1, 2, 3].map(j => a[j] + (b[j] - a[j]) * k);
+}
+const keysLabel = text => text.split(/\s+/).map(combo => combo.split("-").map(p => ({ cmd: "Cmd", command: "Cmd",
+  ctrl: "Ctrl", opt: "Opt", option: "Opt", alt: "Alt", shift: "Shift", enter: "Return", bsp: "Delete", esc: "Esc",
+  tab: "Tab", space: "Space", pgdn: "Page Down", pgup: "Page Up" })[p] || (p.length === 1 ? p.toUpperCase() :
+  p[0].toUpperCase() + p.slice(1))).join("+")).join("  ");
+const chipText = e => e.kind === "check" ? (e.ok ? "Pass: " : "Fail: ") + e.text : e.kind === "key" ? keysLabel(e.text) : e.text;
+
+// The page draws on the video what the video does not: where the camera looks, the clock, the speed, the step, and
+// the last action or check. Times come from the run's clock, so they line up with every speed of the video.
+function stage(r, video, overlay) {
+  const at = video.currentTime;
+  if (r.camera && r.camera.length) {
+    const [cx, cy, z] = zoom ? cameraAt(r.camera, at) : [0.5, 0.5, 1];
+    const left = Math.min(Math.max(cx - 0.5 / z, 0), 1 - 1 / z), top = Math.min(Math.max(cy - 0.5 / z, 0), 1 - 1 / z);
+    video.style.transform = z > 1.001 ? `scale(${z}) translate(${-left * 100}%, ${-top * 100}%)` : "";
+  }
+  if (!overlay) return;
+  const real = toReal(r, at), speed = speedAt(r, at);
+  const [clockPill, speedPill] = overlay.querySelectorAll(".top .pill");
+  clockPill.textContent = clock(Math.max(0, real));
+  speedPill.textContent = `${speed >= 2 ? Math.round(speed) : speed.toFixed(1)}x speed`;
+  speedPill.style.opacity = Math.min(1, Math.max(0, (speed - 1.3) / 1.5));
+  const steps = r.events.filter(e => e.kind === "step" && e.t <= real);
+  const caption = overlay.querySelector(".caption");
+  caption.style.opacity = steps.length ? ease((real - steps[steps.length - 1].t) / 0.3) : 0;
+  if (steps.length) caption.replaceChildren($("b", { text: String(steps.length) }), steps[steps.length - 1].text);
+  const recent = r.events.filter(e => e.chip && real - e.t >= 0 && real - e.t < 1.8 + (e.dur || 0));
+  const now = overlay.querySelector(".now"), last = recent[recent.length - 1];
+  now.style.opacity = last ? ease((real - last.t) / 0.15) * (1 - ease((real - last.t - 1.5 - (last.dur || 0)) / 0.3)) : 0;
+  if (last) {
+    now.textContent = chipText(last);
+    now.className = "pill now" + (["check", "wait"].includes(last.kind) ? (last.ok ? " ok" : " bad") : "");
+  }
 }
 
 function row(r, e, seek) {
