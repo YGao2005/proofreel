@@ -21,7 +21,7 @@ import threading
 import time
 from pathlib import Path
 
-from . import HOME, Problem, vm
+from . import HOME, Problem, session, vm
 
 SESSIONS = Path(os.environ.get("PROOFREEL_SESSIONS", HOME / "sessions"))
 POINTER = HOME / f"{vm.RUN}-session.json"
@@ -54,23 +54,21 @@ def recording(folder):
         return False
 
 
-def log(kind, text, t=None, **fields):
+def log(kind, text, t=None, end=None, **fields):
     """Add an event to the current recording. With no recording, do nothing."""
-    session = current()
-    if session:
-        with open(Path(session["dir"]) / "events.jsonl", "a") as out:
-            out.write(json.dumps({"t": t or time.time(), "kind": kind, "text": text, **fields}) + "\n")
+    if active := current():
+        session.Session(active["dir"]).log(kind, text, t, end, **fields)
 
 
 def start(name, server, password, info, fps=30, reduce=0, run=None):
     """Make the session folder, start the recorder, and return the folder once the first frame is on disk."""
-    if session := current():
-        raise Problem(f"A session is recording: {session['dir']}. Stop it first: proofreel stop.")
+    if active := current():
+        raise Problem(f"A session is recording: {active['dir']}. Stop it first: proofreel stop.")
     folder = SESSIONS / f"{name}-{time.strftime('%Y%m%d-%H%M%S')}"
     folder.mkdir(parents=True)
     if run:
         run.guest.mark(run)
-    (folder / "session.json").write_text(json.dumps({**info, "os": run["os"] if run else None,
+    (folder / "session.json").write_text(json.dumps({"version": session.VERSION, **info, "os": run["os"] if run else None,
                                                     "run": run["id"] if run else None, "started": time.time()}))
     with open(folder / "recorder.log", "w") as out:
         recorder = subprocess.Popen([sys.executable, "-m", "proofreel.recording", str(folder), server, str(fps),
@@ -90,13 +88,13 @@ def start(name, server, password, info, fps=30, reduce=0, run=None):
 
 def stop(error=None, plain=False, width=None, keep_frames=False):
     """Stop the recorder, read the guest's crash reports, and render. Returns (verdict, video s, screen s, MB, page)."""
-    session = current()
-    if not session:
+    active = current()
+    if not active:
         raise Problem("No session is recording.")
-    folder = Path(session["dir"])
+    folder = Path(active["dir"])
     for sig, seconds in ((signal.SIGTERM, 10), (signal.SIGKILL, 5)):
         try:
-            os.kill(session["pid"], sig)
+            os.kill(active["pid"], sig)
         except ProcessLookupError:
             pass
         deadline = time.time() + seconds
@@ -187,7 +185,7 @@ def record(folder, server, password, fps, reduce=0):
                     state["size"] = screen.size
                     (folder / "screen.txt").write_text(f"{screen.width} {screen.height}\n")
                 jobs.put((screen, frames / f"{state['index']:06d}.jpg"))
-                times.write(f"{started:.3f}\n")
+                times.write(f"{started:.3f} {time.time():.3f}\n")
                 times.flush()
                 state["index"] += 1
             stop.wait(max(0.0, VNC_STREAMS / fps - (time.time() - started)))

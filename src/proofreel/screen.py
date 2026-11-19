@@ -12,6 +12,7 @@ import time
 from pathlib import Path
 
 from vncdotool import api
+from vncdotool.client import KEYMAP
 
 from . import Problem, swift_tool
 
@@ -32,6 +33,7 @@ class Screen:
 
     def move(self, x, y):
         self.client.mouseMove(x, y)
+        return time.time(), None
 
     def click(self, x, y, button=1, count=1):
         """Approach the target, rest, press, then rest again: some apps need hover before a click, and keys sent at
@@ -40,22 +42,28 @@ class Screen:
         time.sleep(0.15)
         self.client.mouseMove(x, y)
         time.sleep(0.15)
+        pressed = time.time()
         for _ in range(count):
             self.client.mousePress(button)
+        released = time.time()
         time.sleep(0.2)
+        return pressed, released
 
     def drag(self, x1, y1, x2, y2, steps=12):
         self.client.mouseMove(x1, y1)
         self.client.mouseDown(1)
+        pressed = time.time()
         time.sleep(0.2)
         for i in range(1, steps + 1):
             self.client.mouseMove(x1 + (x2 - x1) * i // steps, y1 + (y2 - y1) * i // steps)
             time.sleep(0.03)
         time.sleep(0.2)
         self.client.mouseUp(1)
+        return pressed, time.time()
 
     def type(self, text, delay=0.04):
-        for char in text:
+        first = last = time.time()
+        for index, char in enumerate(text):
             if char == " ":
                 key = "space"
             elif char == "\n":
@@ -66,33 +74,53 @@ class Screen:
                 key = f"shift-{SHIFTED[char]}"
             else:
                 key = char
+            last = time.time()
+            first = last if index == 0 else first
             self.client.keyPress(key)
             time.sleep(delay)
+        return first, last
 
     def name(self, keys):
         """A key or a combo such as command-a, in the names that this screen's VNC server needs."""
-        return "-".join(self.keys.get(part, part) for part in keys.split("-"))
+        parts = [self.keys.get(part, part) for part in keys.split("-")] if keys != "-" else ["-"]
+        if unknown := [part for part in parts if len(part) != 1 and part not in KEYMAP]:
+            names = sorted(k for k in KEYMAP if len(k) > 1 and not k.startswith("k") and not k[1:].isdigit() or
+                           k in [f"f{n}" for n in range(1, 13)])
+            raise Problem(f"Unknown key {unknown[0]!r}. Use a letter, a symbol, or one of: {', '.join(names)}.")
+        return "-".join(parts)
 
     def key(self, *keys):
-        for key in keys:
-            self.client.keyPress(self.name(key))
+        names = [self.name(key) for key in keys]
+        first = last = time.time()
+        for index, name in enumerate(names):
+            last = time.time()
+            first = last if index == 0 else first
+            self.client.keyPress(name)
             time.sleep(0.05)
+        return first, last
 
     def hold(self, key, seconds):
-        self.press(key, True)
+        pressed, _ = self.press(key, True)
         time.sleep(seconds)
-        self.press(key, False)
+        released, _ = self.press(key, False)
+        return pressed, released
 
     def tap(self, key, count, press, gap):
+        first = None
         for index in range(count):
             if index:
                 time.sleep(gap)
-            self.press(key, True)
+            pressed, _ = self.press(key, True)
+            first = first or pressed
             time.sleep(press)
-            self.press(key, False)
+            released, _ = self.press(key, False)
+        return first, released
 
     def press(self, key, down):
-        (self.client.keyDown if down else self.client.keyUp)(self.name(key))
+        name = self.name(key)
+        at = time.time()
+        (self.client.keyDown if down else self.client.keyUp)(name)
+        return at, None
 
     def size(self):
         """The framebuffer size in pixels. pause(0) waits for the connection, which sets it."""

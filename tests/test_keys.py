@@ -54,8 +54,8 @@ def test_hold_takes_seconds_down_or_up(monkeypatch):
     done = []
     monkeypatch.setattr(cli, "log", lambda *a, **k: None)
     system = guest.Guest()
-    monkeypatch.setattr(system, "press", lambda run, screen, key, down: done.append((key, down)))
-    monkeypatch.setattr(system, "hold", lambda run, screen, key, seconds: done.append((key, seconds)))
+    monkeypatch.setattr(system, "press", lambda run, screen, key, down: done.append((key, down)) or (1.0, None))
+    monkeypatch.setattr(system, "hold", lambda run, screen, key, seconds: done.append((key, seconds)) or (1.0, 2.0))
 
     class Run:
         guest = system

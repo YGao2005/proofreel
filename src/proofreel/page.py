@@ -11,6 +11,7 @@ import shutil
 from pathlib import Path
 
 from .motion import FAST
+from .session import HIDDEN, ROW, moment
 
 CAPABILITIES = {"db": {}, "user": {"scopes": ["profile"]}, "sample": {"images": True}}
 
@@ -101,7 +102,6 @@ const $ = (tag, attrs = {}, ...kids) => {
 const clock = s => `${Math.floor(s / 60)}:${(s % 60).toFixed(1).padStart(4, "0")}`;
 const caps = {};
 let run = RUNS.length - 1;
-const KEY_KINDS = ["step", "check", "wait", "note", "error"];
 let zoom = true;
 try { zoom = localStorage.getItem("proofreel-zoom") !== "0"; } catch (err) {}
 const fromHash = () => {
@@ -145,7 +145,7 @@ function render() {
     } }) : null;
   const done = $("div", { class: "done" });
   const bar = $("div", { class: "bar" }, $("div", { class: "track" }), done);
-  const shown = r.events.filter(e => e.kind !== "move");
+  const shown = r.events;
   for (const e of shown.filter(e => ["step", "check", "wait"].includes(e.kind))) {
     const css = e.kind === "step" ? "step" : (e.ok ? "ok" : "bad");
     bar.append($("i", { class: css, "data-t": e.v, title: e.text }));
@@ -163,7 +163,7 @@ function render() {
   const list = $("ol");
   let actions = null, summary = null;
   for (const e of shown) {
-    if (KEY_KINDS.includes(e.kind)) { list.append(row(r, e, seek)); actions = null; continue; }
+    if (e.row === "key") { list.append(row(r, e, seek)); actions = null; continue; }
     if (!actions) {
       actions = $("ol");
       summary = $("summary");
@@ -306,12 +306,25 @@ def run_data(folder, info, events, length, real):
     meta = [f"{k} {v}" if k else str(v) for k, v in (info.get("meta") or {}).items() if v]
     meta += [f"{len(checks) - len(failed)}/{len(checks)} checks pass" if checks else "",
              f"{real:.0f} s of screen in a {length:.0f} s video"]
-    keep = ("t", "v", "kind", "text", "ok", "detail", "shot")
+    keep = ("t", "v", "kind", "text", "ok", "detail", "shot", "row")
     return {"id": folder.name, "title": info.get("title") or folder.name, "about": info.get("about", ""),
             "error": info.get("error", ""), "verdict": label, "verdict_css": css, "meta": [m for m in meta if m],
             "when": (info.get("meta") or {}).get("", ""), "fast": FAST, "base": "",
             "wide": (folder / "session-wide.mp4").exists(),
-            "events": [{k: e[k] for k in keep if k in e} for e in events]}
+            "events": [{k: e[k] for k in keep if k in e} for e in map(shown, events) if e]}
+
+
+def shown(event):
+    """An event as the page lists it: at its moment, as a key row or a folded action; a move is not listed."""
+    if event["kind"] in HIDDEN:
+        return None
+    return {**event, "t": moment(event), "row": "key" if event["kind"] in ROW else "fold"}
+
+
+def upgrade_run(run):
+    """A run that an older proofreel published, as this page reads it."""
+    events = [e if "row" in e else shown(e) for e in run["events"]]
+    return {**run, "events": [e for e in events if e]}
 
 
 def document(runs):
@@ -349,7 +362,8 @@ def publish(session, out):
     for shot in (session / "shots").glob("*.jpg"):
         shutil.copy2(shot, target / "shots" / shot.name)
     manifest = out / "runs.json"
-    runs = [r for r in (json.loads(manifest.read_text()) if manifest.exists() else []) if r["id"] != run["id"]]
+    runs = [upgrade_run(r) for r in (json.loads(manifest.read_text()) if manifest.exists() else [])
+            if r["id"] != run["id"]]
     runs.append({**run, "base": f"runs/{run['id']}/"})
     manifest.write_text(json.dumps(runs))
     page = out / "index.html"

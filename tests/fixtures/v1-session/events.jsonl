@@ -1,0 +1,7 @@
+{"t": 100.0, "kind": "step", "text": "Open"}
+{"t": 101.0, "kind": "click", "text": "click \"Save\"", "x": 10, "y": 20}
+{"t": 102.0, "kind": "type", "text": "type \"hi\"", "dur": 0.5}
+{"t": 104.0, "kind": "drag", "text": "drag", "x": 1, "y": 2, "x2": 3, "y2": 4}
+{"t": 110.0, "kind": "wait", "text": "wait for \"Done\"", "ok": true, "waited": 4.5, "detail": "seen after 4.5 s"}
+{"t": 111.0, "kind": "wait", "text": "wait for \"Old\"", "ok": true, "detail": "seen after 2.0 s"}
+{"t": 105.0, "kind": "check", "text": "app did not crash", "ok": true}
