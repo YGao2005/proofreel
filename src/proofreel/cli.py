@@ -11,6 +11,7 @@
                                                         of every run as one state machine.
   step <text> | note <text>                             Name the next part (a caption in the video), or add a note.
   click <x> <y> [--double|--right] | move <x> <y> | drag <x1> <y1> <x2> <y2> | type <text> | key <keys...>
+                                                        The pointer glides in, as a hand does, so a hover lands.
   hold <key> <seconds|down|up> | tap <key> [count]      Hold a key, or only press or release it; tap it count times.
                                                         A macOS run VM posts modifiers (fn, option, command, control,
                                                         shift; r... for the right key) in the guest.

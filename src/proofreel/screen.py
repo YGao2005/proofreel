@@ -20,6 +20,9 @@ from . import Problem, swift_tool
 SHIFTED = dict(zip('~!@#$%^&*()_+{}|:"<>?', "`1234567890-=[]\\;',./"))
 
 
+GLIDE, GLIDE_STEPS, GLIDE_SECONDS = (40, 24), 10, 0.15
+
+
 class Screen:
     def __init__(self, server, password=None, keys=None):
         """keys: key names that this screen's VNC server needs as other names (see guest.py)."""
@@ -32,17 +35,24 @@ class Screen:
     def __exit__(self, *_):
         self.client.disconnect()
 
+    def approach(self, x, y, rest):
+        """Glide in from a little way off in small steps, then rest, as a hand does. A pointer that jumps into a small
+        target can miss its hover: AppKit tracking areas (SwiftUI onHover) see no mouse-entered."""
+        x0, y0 = max(0, x - GLIDE[0]), max(0, y - GLIDE[1])
+        for i in range(1, GLIDE_STEPS + 1):
+            self.client.mouseMove(x0 + (x - x0) * i // GLIDE_STEPS, y0 + (y - y0) * i // GLIDE_STEPS)
+            time.sleep(GLIDE_SECONDS / GLIDE_STEPS)
+        arrived = time.time()
+        time.sleep(rest)
+        return arrived
+
     def move(self, x, y):
-        self.client.mouseMove(x, y)
-        return time.time(), None
+        return self.approach(x, y, rest=0.3), None
 
     def click(self, x, y, button=1, count=1):
-        """Approach the target, rest, press, then rest again: some apps need hover before a click, and keys sent at
-        once after a click that moves the focus can be lost (Chromium on Linux drops the first one)."""
-        self.client.mouseMove(x - 6, y - 6)
-        time.sleep(0.15)
-        self.client.mouseMove(x, y)
-        time.sleep(0.15)
+        """Approach the target, press, then rest: some apps need hover before a click, and keys sent at once after a
+        click that moves the focus can be lost (Chromium on Linux drops the first one)."""
+        self.approach(x, y, rest=0.15)
         pressed = time.time()
         for _ in range(count):
             self.client.mousePress(button)
