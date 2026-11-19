@@ -109,5 +109,4 @@ def demo(folder, broken=False):
         "version": VERSION, "title": "Sign-up demo",
         "about": "A new user makes an account in a made-up app, drawn frame by frame to show what proofreel makes. The wait for the server plays fast.",
         "meta": {"": "proofreel demo, run with a typo" if broken else "proofreel demo"}}))
-    verdict, length, real, size = render(folder)
-    print(f"{verdict}. {real:.0f} s of screen in a {length:.0f} s video, {size:.1f} MB. Page: {folder / 'index.html'}")
+    print(render(folder))

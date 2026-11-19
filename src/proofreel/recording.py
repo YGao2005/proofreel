@@ -87,7 +87,7 @@ def start(name, server, password, info, fps=30, reduce=0, run=None):
 
 
 def stop(error=None, plain=False, width=None, keep_frames=False):
-    """Stop the recorder, read the guest's crash reports, and render. Returns (verdict, video s, screen s, MB, page)."""
+    """Stop the recorder, read the guest's crash reports, and render. Returns render's one-line summary."""
     active = current()
     if not active:
         raise Problem("No session is recording.")
@@ -118,10 +118,10 @@ def stop(error=None, plain=False, width=None, keep_frames=False):
     if error:
         (folder / "session.json").write_text(json.dumps({**info, "error": error}))
     from .render import render
-    verdict, length, real, size = render(folder, framed=not plain, width=width)
+    summary = render(folder, framed=not plain, width=width)
     if not keep_frames:
         shutil.rmtree(folder / "frames", ignore_errors=True)
-    return verdict, length, real, size, folder / "index.html"
+    return summary
 
 
 def clean(days):

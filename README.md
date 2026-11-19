@@ -51,13 +51,17 @@ one journey, so the link in a pull request never changes. It prints the files of
 capabilities. Claude then publishes the page as a claude.ai Artifact (the same file path or URL each time). On
 claude.ai the page also has:
 
-- **Comment** on any step: the comment pins to that step.
-- **Send to Claude** on any step: the note goes to the Claude session that published the page, which can fix the
-  problem, run the flow again, and publish the next run to the same page.
+- **Comments** on any step or moment, through the artifact's own comments, which can go to the Claude session that
+  published the page.
 - **Review**: Approve or Needs work for each run, kept in the page's database, so Claude can read the verdict.
 - **Ask about this moment**: Claude answers a question from the current video frame and the run's log.
 
 Opened as a plain file, the page is a static review page.
+
+The review folder keeps `runs.json` (`{"version": 2, "runs": [...]}`). It is the only copy of old runs, because
+`clean` deletes sessions after 7 days. A folder that an older proofreel wrote is upgraded when you publish to it, and
+its old file is kept as `runs.v1.json`. Publishing locks the folder and writes each file whole, so two agents can
+publish to one folder at once.
 
 ### Flows
 

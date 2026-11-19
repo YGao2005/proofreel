@@ -9,6 +9,18 @@ const $ = (tag, attrs = {}, ...kids) => {
   return el;
 };
 const clock = s => `${Math.floor(s / 60)}:${(s % 60).toFixed(1).padStart(4, "0")}`;
+const VERDICTS = { works: ["Works", "ok"], problem: ["Problem", "bad"], shown: ["Shown", "info"] };
+// The run's clock: [real, video] points joined by straight lines. along() maps one column to the other.
+function along(knots, x, y, value) {
+  if (knots.length < 2) return value;
+  let i = 1;
+  while (i < knots.length - 1 && knots[i][x] <= value) i++;
+  const [a, b] = [knots[i - 1], knots[i]];
+  return b[x] > a[x] ? a[y] + (b[y] - a[y]) * (value - a[x]) / (b[x] - a[x]) : a[y];
+}
+const toVideo = (r, real) => along(r.clock, 0, 1, real);
+const fastest = r => Math.round(Math.max(1, ...r.clock.slice(1).map((k, i) =>
+  k[1] > r.clock[i][1] ? (k[0] - r.clock[i][0]) / (k[1] - r.clock[i][1]) : 1)));
 const caps = {};
 let run = RUNS.length - 1;
 let zoom = true;
@@ -26,7 +38,7 @@ function render() {
   app.replaceChildren();
   document.title = r.title;
   const header = $("header", {},
-    $("div", {}, chip(r.verdict, r.verdict_css)),
+    $("div", {}, chip(...VERDICTS[r.verdict])),
     $("h1", { text: r.title }),
     r.about ? $("p", { class: "lede", text: r.about }) : null,
     r.error ? $("p", { class: "lede" }, chip("Stopped", "bad"), document.createTextNode(" " + r.error)) : null,
@@ -36,7 +48,7 @@ function render() {
     const tabs = $("div", { class: "runs", role: "group", "aria-label": "Runs" });
     RUNS.forEach((x, i) => tabs.append($("button", { type: "button", "aria-pressed": String(i === run),
       onclick: () => { location.hash = `run-${i + 1}`; } },
-      $("span", { text: `Run ${i + 1}` }), chip(x.verdict, x.verdict_css), $("span", { class: "when", text: x.when }))));
+      $("span", { text: `Run ${i + 1}` }), chip(...VERDICTS[x.verdict]), $("span", { class: "when", text: x.when }))));
     app.append(tabs);
   }
   const source = () => r.base + (r.wide && !zoom ? "session-wide.mp4" : "session.mp4");
@@ -57,7 +69,7 @@ function render() {
   const shown = r.events;
   for (const e of shown.filter(e => ["step", "check", "wait"].includes(e.kind))) {
     const css = e.kind === "step" ? "step" : (e.ok ? "ok" : "bad");
-    bar.append($("i", { class: css, "data-t": e.v, title: e.text }));
+    bar.append($("i", { class: css, "data-t": toVideo(r, e.t), title: e.text }));
   }
   const seek = t => { video.currentTime = Math.max(0, t); video.play().catch(() => {}); };
   bar.addEventListener("click", ev => {
@@ -67,7 +79,7 @@ function render() {
   const place = () => { if (video.duration) bar.querySelectorAll("i").forEach(m => m.style.left = (m.dataset.t / video.duration * 100) + "%"); };
   video.addEventListener("loadedmetadata", place);
   const player = $("div", { class: "panel player" }, zoomButton ? $("div", { class: "view" }, zoomButton) : null, video, bar,
-    $("p", { text: `Recorded from the screen as the agent drove it. Blue rings are clicks. The video is sped up to about 30 s; a badge shows the speed (up to ${r.fast}x with no change on the screen). The clock is real time. Click a row or a mark to jump to it.` }));
+    $("p", { text: `Recorded from the screen as the agent drove it. Blue rings are clicks. The video is sped up to about 30 s; a badge shows the speed (up to ${fastest(r)}x with no change on the screen). The clock is real time. Click a row or a mark to jump to it.` }));
   const side = $("div", { class: "side" }, player, reviewPanel(r), askPanel(r, video));
   const list = $("ol");
   let actions = null, summary = null;
@@ -104,8 +116,8 @@ function row(r, e, seek) {
     document.createTextNode(e.text + " "), status, e.detail ? $("span", { class: "detail", text: e.detail }) : null);
   const body = $("div", { class: "row", tabindex: "0", role: "button", "aria-label": `Jump to ${clock(e.t)}: ${e.text}` },
     $("span", { class: "t", text: clock(e.t) }), text, e.shot ? $("img", { src: r.base + e.shot, alt: "", loading: "lazy" }) : $("span"));
-  const li = $("li", { class: e.kind, "data-t": e.v }, body);
-  const go = () => seek(e.v - 0.4);
+  const li = $("li", { class: e.kind, "data-t": toVideo(r, e.t) }, body);
+  const go = () => seek(toVideo(r, e.t) - 0.4);
   body.addEventListener("click", go);
   body.addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); go(); } });
   return li;
@@ -165,7 +177,7 @@ function askPanel(r, video) {
     controller = new AbortController();
     answer.textContent = "Thinking...";
     const at = video.currentTime;
-    const log = r.events.filter(e => e.kind !== "move").map(e => `${clock(e.t)} (video ${e.v.toFixed(1)} s) ${e.kind}: ${e.text}${e.kind === "check" || e.kind === "wait" ? (e.ok ? " [pass]" : " [FAIL]") : ""}${e.detail ? " - " + e.detail : ""}`).join("\n");
+    const log = r.events.filter(e => e.kind !== "move").map(e => `${clock(e.t)} (video ${toVideo(r, e.t).toFixed(1)} s) ${e.kind}: ${e.text}${e.kind === "check" || e.kind === "wait" ? (e.ok ? " [pass]" : " [FAIL]") : ""}${e.detail ? " - " + e.detail : ""}`).join("\n");
     const prompt = `You review a recorded test run of an app. Answer the question in plain words, in at most 5 sentences. Say what the frame shows and what the log shows; do not guess beyond them.\n\nRun: ${r.title}\nAbout: ${r.about || ""}\nResult: ${r.verdict}${r.error ? " (stopped: " + r.error + ")" : ""}\nThe attached image is the video frame at ${at.toFixed(1)} s.\n\nLog:\n${log}\n\nQuestion: ${question}`;
     const images = [];
     try {
