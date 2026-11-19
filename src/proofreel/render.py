@@ -23,6 +23,7 @@ from . import draw, page
 from .motion import FAST, FPS, Camera, Pointer, ease, fit, spans
 
 CHANGED = 1.5
+INSET = 0.88
 CHIP_KINDS = {"click", "double", "right", "drag", "type", "key", "open", "scroll", "wait", "check"}
 SHOT_KINDS = CHIP_KINDS - {"scroll"}
 
@@ -78,7 +79,7 @@ class Scene:
         self.events = events
         self.out = out_size
         self.ui = out_size[0] / 1440
-        inset = 0.88 if framed else 1.0
+        inset = INSET if framed else 1.0
         self.k = inset * min(out_size[0] / size[0], out_size[1] / size[1])
         self.screen = (int(size[0] * self.k) // 2 * 2, int(size[1] * self.k) // 2 * 2)
         self.offset = ((out_size[0] - self.screen[0]) // 2, (out_size[1] - self.screen[1]) // 2)
@@ -199,7 +200,8 @@ def encoder(path, size, crf):
 def video(folder, events, frames, times, start, end, framed, width, crf, target):
     """Writes session.mp4, which zooms in on each action, and session-wide.mp4, which shows the whole screen."""
     first = Image.open(frames[-1])
-    out_w = even(width or min(1920, max(1280, first.width)))
+    screen_w = first.width / INSET if framed else first.width
+    out_w = even(width or min(1920, max(1280, screen_w)))
     out_size = (out_w, even(out_w * first.height / first.width))
     plan = fit(spans(screen_changes(frames, times, start), events), end, target)
     scene = Scene(first.size, out_size, events, framed)
