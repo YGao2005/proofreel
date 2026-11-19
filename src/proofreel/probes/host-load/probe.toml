@@ -1,0 +1,29 @@
+name = "host-load"
+version = "1"
+os = ["macos", "linux", "windows"]
+where = "host"
+default = true
+fidelity = "CPU comes from each process's CPU time, read once a second, as a share of all cores. The VM's own share is known for QEMU VMs only: a Tart VM runs in a macOS service that is not tied to one VM."
+privacy = "Reads the CPU time of host processes and the load average. No process names or command lines leave it."
+
+[tracks."host/cpu"]
+label = "Host CPU"
+unit = "%"
+better = "lower"
+max = 100
+
+[tracks."host/vm-cpu"]
+label = "This VM's CPU"
+unit = "%"
+better = "lower"
+max = 100
+
+[tracks."host/other-cpu"]
+label = "Other host CPU"
+unit = "%"
+better = "lower"
+max = 100
+
+[tracks."host/load"]
+label = "Host load (1 min)"
+better = "lower"

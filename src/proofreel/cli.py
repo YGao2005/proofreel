@@ -1,7 +1,9 @@
 """proofreel: record an agent driving a screen as a review video and page.
 
-  start <name> [--title T] [--about A] [--meta K=V] [--app NAME]   Start recording. Every later action and check is
-                                                        logged. --app names the app under test: its crash fails the run.
+  start <name> [--title T] [--about A] [--meta K=V] [--app NAME] [--probe NAME[:K=V,...]]   Start recording. Every
+                                                        later action and check is logged. --app names the app under
+                                                        test: its crash fails the run. --probe adds a probe (none: no
+                                                        default probes). A flow line `probe <name>` does the same.
   stop [--keep-frames] [--plain] [--width W]            Stop, then make session.mp4, index.html, and shots/. In a macOS
                                                         run VM, new crash and hang reports go to reports/ and the log.
   state <name>                                          Say where the app should be now. The waits and checks after
@@ -20,6 +22,12 @@
   check cmd|sh "<command>" [seconds] [--label L]        A command on the host (cmd) or in the run VM (sh) exits 0;
                                                         it runs again until it does or the seconds pass.
   check running <process>                               A process with this exact name runs in the run VM.
+  check metric <series glob> <stat> --below N|--above N [--last S|--step] [--wait S]
+                                                        A budget on what a probe measured: stat is mean, min, max,
+                                                        p50, p90, p95, p99, last, count, or failed. The window is the
+                                                        run, the last S seconds, or the part since the last step.
+  stats [session] [--json] [--all]                      What the probes measured, in a few lines.
+  probes                                                The probes, where they run, and what they can see.
   event <kind> <text> [--x X --y Y] [--ok|--fail] [--detail D] [--t T --end E]   Log what another tool did.
   shot <png>                                            Save the screen.
   run <flow> [--set NAME=VALUE]                         Run a flow file: one proofreel command per line. A line
@@ -43,7 +51,7 @@ import sys
 import time
 from pathlib import Path
 
-from . import HOME, Problem, ax, conditions, flow, guest, plugins, recording
+from . import HOME, Problem, ax, conditions, flow, guest, metrics, plugins, probes, recording
 from .recording import log
 from . import vm as vms
 from .screen import Screen, center, find, screen_text, wait_for
@@ -68,7 +76,8 @@ def start(args):
     faked = run["conditions"] if run else []
     if run:
         meta.setdefault("from state", run["state"])
-    info = {"title": args.title or args.name, "about": args.about, "meta": meta, "app": args.app, "conditions": faked}
+    info = {"title": args.title or args.name, "about": args.about, "meta": meta, "app": args.app, "conditions": faked,
+            "probes": probes.select(args.probe, run)}
     print(f"Recording {recording.start(args.name, server, password, info, args.fps, args.reduce, run)}")
 
 
@@ -105,7 +114,36 @@ def check(args, screen, run):
     if args.kind == "running":
         name = args.args[0]
         return run.guest.running(run, name), args.label or f"{name} is running", ""
+    if args.kind == "metric":
+        return metric(args)
     raise Problem(f"Unknown check {args.kind!r}.")
+
+
+def metric(args):
+    active = recording.current()
+    if not active:
+        raise Problem("check metric needs a recording: its probes measure while it records.")
+    folder = Path(active["dir"])
+    if args.last:
+        since, window = time.time() - args.last, f"the last {args.last:g} s"
+    elif args.step:
+        from .session import Session
+        steps = [e["t"] for e in Session(folder).events() if e["kind"] in ("step", "state")]
+        since, window = (steps[-1] if steps else None), "this step"
+    else:
+        since, window = None, "the run"
+    return metrics.check(folder, args.args[0], args.args[1], args.below, args.above, since, window, args.wait)
+
+
+def parse(words):
+    """The command's arguments, checked as far as they can be before it runs: a flow parses every line first."""
+    a = parser().parse_args(words)
+    if a.command == "check" and a.kind == "metric":
+        if len(a.args) != 2 or a.args[1] not in metrics.STATS:
+            raise Problem(f"Write: check metric <series glob> <stat> --below N. A stat is one of {', '.join(metrics.STATS)}.")
+        if (a.below is None) == (a.above is None):
+            raise Problem("check metric takes one of --below N or --above N.")
+    return a
 
 
 def run_check(args, screen, run=None):
@@ -121,7 +159,7 @@ def run_check(args, screen, run=None):
 
 
 def run_flow(path, values):
-    steps = flow.load(path, values, parse=lambda words: parser().parse_args(words))
+    steps = flow.load(path, values, parse=parse)
     if steps.conditions:
         run = vms.Run.current() if vms.CURRENT.exists() else {}
         state, have = run.get("state"), run.get("conditions", [])
@@ -129,7 +167,8 @@ def run_flow(path, values):
             raise Problem(f"{steps.name} needs condition {', '.join(gaps)}, and the run VM's state {state or '(none)'} "
                           f"has {', '.join(conditions.names(have)) or 'no conditions'}. Make a state with it: proofreel "
                           f"vm build <state> --from <base> {' '.join('--condition ' + g for g in gaps)}.")
-    return flow.run(steps, command, abort=lambda message: stop(error=message) if recording.current() else None)
+    execute = lambda words: command(words + [f"--probe={p}" for p in steps.probes] if words[0] == "start" else words)
+    return flow.run(steps, execute, abort=lambda message: stop(error=message) if recording.current() else None)
 
 
 class Parser(argparse.ArgumentParser):
@@ -150,6 +189,7 @@ def parser():
     s.add_argument("--app", help="the app under test (process name or bundle ID): its crash or hang fails the run")
     s.add_argument("--fps", type=float, default=30)
     s.add_argument("--reduce", type=int, default=0, help="keep 1/N of the pixels per side (0 = at most 1920 px wide)")
+    s.add_argument("--probe", action="append", default=[])
     s = sub.add_parser("stop")
     s.add_argument("--keep-frames", action="store_true")
     s.add_argument("--plain", action="store_true")
@@ -194,9 +234,14 @@ def parser():
     s.add_argument("key")
     s.add_argument("count", type=int, nargs="?", default=1)
     s = sub.add_parser("check")
-    s.add_argument("kind", choices=["text", "no-text", "ax", "no-ax", "cmd", "sh", "running"])
+    s.add_argument("kind", choices=["text", "no-text", "ax", "no-ax", "cmd", "sh", "running", "metric"])
     s.add_argument("args", nargs="+")
     s.add_argument("--label")
+    s.add_argument("--below", type=float)
+    s.add_argument("--above", type=float)
+    s.add_argument("--last", type=float)
+    s.add_argument("--step", action="store_true")
+    s.add_argument("--wait", type=float, default=2.0)
     s.add_argument("--app")
     s.add_argument("--role")
     s = sub.add_parser("event")
@@ -222,6 +267,11 @@ def parser():
     s = sub.add_parser("demo")
     s.add_argument("dir", nargs="?", default=str(recording.SESSIONS / "demo"))
     s.add_argument("--broken", action="store_true", help="type the name wrong, so the last check fails")
+    s = sub.add_parser("stats")
+    s.add_argument("session", nargs="?")
+    s.add_argument("--json", action="store_true")
+    s.add_argument("--all", action="store_true")
+    sub.add_parser("probes")
     s = sub.add_parser("clean")
     s.add_argument("--days", type=float, default=7)
     s = sub.add_parser("vm")
@@ -265,6 +315,30 @@ def parser():
     v.add_argument("guest")
     v.add_argument("host")
     return p
+
+
+def stats(a):
+    folder = Path(a.session) if a.session else Path((recording.current() or {}).get("dir") or newest())
+    found = metrics.load(folder)
+    if a.json:
+        return print(json.dumps({"series": {m: {stat: found.stat(m, stat) for stat in metrics.STATS}
+                                            for m in found.series()}, "probes": found.status}, indent=1))
+    lines = found.summary(limit=10_000 if a.all else 12)
+    print("\n".join(lines) if lines else f"No metrics in {folder}.")
+
+
+def newest():
+    folders = sorted(recording.SESSIONS.glob("*/session.json"), key=lambda p: p.stat().st_mtime)
+    if not folders:
+        raise Problem("No sessions. Name one: proofreel stats <session folder>.")
+    return folders[-1].parent
+
+
+def list_probes():
+    for name, source in plugins.known("probe").items():
+        info = probes.manifest(name)
+        print(f"{name}  ({info['where']}{', on by default' if info.get('default') else ''}; {', '.join(info['os'])}"
+              f"{'; ' + source if source else ''})\n  sees: {info['privacy']}\n  fidelity: {info['fidelity']}")
 
 
 def vm(a):
@@ -314,7 +388,7 @@ def main(argv=None):
 
 def command(argv):
     """Run one command. Returns 1 for a failed check or a query that found nothing."""
-    a = parser().parse_args(argv)
+    a = parse(argv)
     HOME.mkdir(parents=True, exist_ok=True)
     match a.command:
         case "start": return start(a)
@@ -339,7 +413,9 @@ def command(argv):
             for folder in recording.clean(a.days):
                 print(f"Deleted {folder}")
         case "vm": return vm(a)
-        case "check" if a.kind in ("cmd", "sh", "running"):
+        case "stats": return stats(a)
+        case "probes": return list_probes()
+        case "check" if a.kind in ("cmd", "sh", "running", "metric"):
             return run_check(a, None)
     server, password, run = target(a)
     if (a.command in ("ax", "click-ax") or a.command == "check" and a.kind.endswith("ax")) and not (run and run.guest.ax):
