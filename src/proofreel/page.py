@@ -1,7 +1,7 @@
 """The review page. One template for a single run and for a run history published to one URL.
 
-The page draws itself from embedded run data. The list shows the steps and checks; the actions between them fold
-under one line. On claude.ai, the artifact's own comments work on any row, and the page adds a shared
+The page draws itself from embedded run data. The timeline shows the states, steps, and checks; the actions between
+them fold under one line. When the runs have states, the state machine view (machine.js) joins them into one graph. On claude.ai, the artifact's own comments work on any row, and the page adds a shared
 Approve / Needs work review and questions about the current frame. Opened as a plain file, it is a static page.
 """
 
@@ -14,13 +14,14 @@ from importlib import resources
 from pathlib import Path
 
 from . import Problem
-from .session import CHIP, HIDDEN, ROW, VERDICT, moment
+from .session import CHIP, HIDDEN, ROW, VERDICT, moment, visits
 
 VERSION = 2
 
 CAPABILITIES = {"db": {}, "user": {"scopes": ["profile"]}, "sample": {"images": True}}
 
 ASSETS = resources.files("proofreel")
+SCRIPTS = ("machine.js", "page.js")
 
 
 def verdict(info, events):
@@ -46,6 +47,7 @@ def run_data(folder, info, events, length, real, clock, camera):
             "overlay": True, "camera": camera,
             "when": time.strftime("%Y-%m-%d %H:%M", time.localtime(started)) if started else
             (info.get("meta") or {}).get("", ""), "clock": clock.knots,
+            "states": visits(events, info.get("error", ""), round(real, 2)),
             "events": [{k: e[k] for k in keep if k in e} for e in map(shown, events) if e]}
 
 
@@ -99,15 +101,16 @@ def document(runs):
 <style>{ASSETS.joinpath('page.css').read_text()}</style>
 <div class="wrap"><main id="app"></main><footer>Made with <a href="https://github.com/YGao2005/proofreel">proofreel</a>.</footer></div>
 <script type="application/json" id="runs">{data}</script>
-<script>{ASSETS.joinpath('page.js').read_text()}</script>
+<script>{''.join(ASSETS.joinpath(name).read_text() for name in SCRIPTS)}</script>
 """
 
 
 def write(folder, info, events, length, real, clock, camera):
+    """Write run.json and index.html, and return the run data."""
     run = run_data(folder, info, events, length, real, clock, camera)
     (folder / "run.json").write_text(json.dumps(run))
     (folder / "index.html").write_text(document([run]))
-    return run["verdict"]
+    return run
 
 
 def publish(session, out):

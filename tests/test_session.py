@@ -66,3 +66,26 @@ def test_an_unknown_key_name_is_a_problem_that_lists_the_names():
     assert screen.name("shift-a") == "shift-a" and screen.name("pgdn") == "pgdn"
     with pytest.raises(Problem, match="Unknown key 'Page_Down'.*pgdn"):
         screen.name("Page_Down")
+
+
+def test_a_state_passes_fails_or_is_not_checked_by_the_waits_and_checks_in_it():
+    events = [
+        {"t": 0, "kind": "state", "text": "Home"},
+        {"t": 1, "end": 2, "kind": "wait", "text": "w", "ok": True},
+        {"t": 3, "kind": "click", "text": "c"},
+        {"t": 4, "kind": "state", "text": "Sign in"},
+        {"t": 5, "kind": "click", "text": "c"},
+        {"t": 6, "kind": "state", "text": "Welcome"},
+        {"t": 7, "kind": "check", "text": "k", "ok": True},
+        {"t": 8, "kind": "check", "text": "k", "ok": False},
+    ]
+    path = session.visits(events, end=9)
+    assert [(v["name"], v["t"], v["end"], v["ok"]) for v in path] == [
+        ("Home", 0, 4, True), ("Sign in", 4, 6, None), ("Welcome", 6, 9, False)]
+    assert session.path_line(path) == "States: Home ok → Sign in not checked → Welcome FAIL"
+
+
+def test_the_state_a_run_stopped_in_fails():
+    events = [{"t": 0, "kind": "state", "text": "Home"}, {"t": 1, "kind": "check", "text": "k", "ok": True}]
+    assert session.visits(events, error="flow.flow:3: exit 2")[0]["ok"] is False
+    assert session.visits([], error="stopped") == []
