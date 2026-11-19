@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from proofreel import guest, qemu, vm
+from proofreel import Problem, guest, qemu, vm
 
 
 def test_states_tree_survives_a_parent_cycle(tmp_path, monkeypatch, capsys):
@@ -33,7 +33,7 @@ def test_saving_over_the_run_state_keeps_its_parent(tmp_path, monkeypatch):
 def test_a_state_must_say_its_backend_and_system(tmp_path, monkeypatch):
     monkeypatch.setattr(vm, "STATES", tmp_path)
     vm.write_state("old", parent="x", user="u", password="p")
-    with pytest.raises(SystemExit, match="does not say its backend or os"):
+    with pytest.raises(Problem, match="does not say its backend or os"):
         vm.state_info("old")
 
 
@@ -55,7 +55,7 @@ def test_qemu_display_comes_from_up_then_the_state_then_the_default(tmp_path, mo
     assert qemu.up("s", {"machine": {"display": "1280x800"}}) == "1280x800"
     assert qemu.up("s", {"machine": {"display": "1280x800"}}, display="1920x1080") == "1920x1080"
     assert qemu.up("s", {"warm": True, "machine": {"display": "1280x800"}}, display="1920x1080") == "1280x800"
-    with pytest.raises(SystemExit):
+    with pytest.raises(Problem):
         qemu.up("s", {}, display="big")
 
 

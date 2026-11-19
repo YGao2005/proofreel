@@ -62,8 +62,13 @@ Opened as a plain file, the page is a static review page.
 ### Flows
 
 A flow is a text file with one proofreel command on each line. Use `#` for comments, and `${NAME}` or
-`${NAME:-default}` for values that you set with `--set NAME=value`. A failed `check` is recorded, and the flow
-continues. Any other failure stops the flow, and the page shows where it stopped.
+`${NAME:-default}` for values that you set with `--set NAME=value`. proofreel reads and parses every line before the
+first one runs, so a typo or a missing value stops the flow before it changes anything. A failed `check` is recorded,
+and the flow continues. A check that cannot run (no text recognition, no accessibility tree) is a failed check, and
+the page says why. Any other failure stops the flow and the recording, and the page shows where it stopped.
+
+Every command exits 0 when it is done, 1 for a failed check (or a `find` that finds nothing), and 2 for a problem.
+A problem prints one line that says what to do.
 
 ```bash
 proofreel run flows/sign-up.flow --set EMAIL=sam@example.com

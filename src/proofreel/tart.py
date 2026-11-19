@@ -4,8 +4,8 @@ import json
 import re
 import shutil
 import subprocess
-import sys
 
+from . import Problem
 from .vm import HOME, RUN, ssh, wait
 
 PREFIX = "pr-"
@@ -54,7 +54,7 @@ def save(name, run, warm):
     if exists(name):
         tart("delete", PREFIX + name)
     if warm and not run.get("suspendable"):
-        sys.exit("This run VM cannot keep its memory. Start it with: proofreel vm up <state> --warmable.")
+        raise Problem("This run VM cannot keep its memory. Start it with: proofreel vm up <state> --warmable.")
     if warm:
         tart("suspend", RUN)
     else:

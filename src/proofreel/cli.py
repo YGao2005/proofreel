@@ -31,7 +31,6 @@ The screen is the run VM of `proofreel vm up`, or --vnc host::port with --passwo
 import argparse
 import json
 import os
-import re
 import shlex
 import shutil
 import subprocess
@@ -39,7 +38,7 @@ import sys
 import time
 from pathlib import Path
 
-from . import HOME, ax, conditions, guest
+from . import HOME, Problem, ax, conditions, flow, guest
 from . import vm as vms
 from .screen import Screen, center, find, screen_text, wait_for
 
@@ -56,7 +55,7 @@ def target(args):
     if vms.CURRENT.exists():
         run = vms.current()
         return run["vnc"], run["vnc_password"], guest.of(run)
-    sys.exit("No screen. Use --vnc host::port, PROOFREEL_VNC, or proofreel vm up <state>.")
+    raise Problem("No screen. Use --vnc host::port, PROOFREEL_VNC, or proofreel vm up <state>.")
 
 
 def active():
@@ -72,7 +71,7 @@ def log(kind, text, t=None, **fields):
 
 def start(args):
     if active():
-        sys.exit(f"A session is recording: {active()['dir']}. Stop it first.")
+        raise Problem(f"A session is recording: {active()['dir']}. Stop it first.")
     server, password, system = target(args)
     folder = SESSIONS / f"{args.name}-{time.strftime('%Y%m%d-%H%M%S')}"
     folder.mkdir(parents=True)
@@ -101,7 +100,7 @@ def start(args):
 def stop(plain=False, width=None, keep_frames=False, error=None):
     session = active()
     if not session:
-        sys.exit("No session is recording.")
+        raise Problem("No session is recording.")
     subprocess.run(["kill", str(session["recorder"])], capture_output=True)
     folder = Path(session["dir"])
     for _ in range(50):
@@ -137,55 +136,39 @@ def check(args, screen):
         result = subprocess.run(command, shell=True, capture_output=True, text=True)
         detail = (result.stdout + result.stderr).strip()[-400:]
         return result.returncode == 0, args.label or command, detail
-    sys.exit(f"Unknown check {args.kind!r}.")
+    raise Problem(f"Unknown check {args.kind!r}.")
 
 
-def expand(line, values):
-    def value(match):
-        name, default = match["name"], match["default"]
-        if name in values:
-            return values[name]
-        if default is not None:
-            return default
-        raise SystemExit(f"No value for ${{{name}}}. Pass --set {name}=...")
-    return re.sub(r"\$\{(?P<name>\w+)(?::-(?P<default>[^}]*))?\}", value, line)
-
-
-def needed(text):
-    """The conditions a flow declares with `condition <name>` lines."""
-    return [words[1] for words in map(lambda line: shlex.split(line, comments=True), text.splitlines())
-            if len(words) > 1 and words[0] == "condition"]
+def run_check(args, screen):
+    """Record the check and return 1 when it fails. A check that cannot run is a failed check, with the reason."""
+    try:
+        ok, label, detail = check(args, screen)
+    except Problem as problem:
+        ok, label, detail = False, f"check {args.kind} {' '.join(args.args)}", f"The check could not run: {problem}"
+    log("check", label, ok=ok, detail=detail)
+    print(("Pass: " if ok else "Fail: ") + label + (f" ({detail})" if detail and not ok else ""))
+    return 0 if ok else 1
 
 
 def run_flow(path, values):
-    path = Path(path)
-    text = path.read_text()
-    if wanted := needed(text):
+    steps = flow.load(path, values, parse=lambda words: parser().parse_args(words))
+    if steps.conditions:
         run = vms.current() if vms.CURRENT.exists() else {}
         state, have = run.get("state"), run.get("conditions", [])
-        if gaps := conditions.missing(wanted, have):
-            sys.exit(f"{path.name} needs condition {', '.join(gaps)}, and the run VM's state {state or '(none)'} has "
-                     f"{', '.join(conditions.names(have)) or 'no conditions'}. Make a state with it: proofreel vm "
-                     f"build <state> --from <base> {' '.join('--condition ' + g for g in gaps)}.")
-    for number, raw in enumerate(text.splitlines(), 1):
-        words = shlex.split(expand(raw, values), comments=True)
-        if not words or words[0] == "condition":
-            continue
-        print(f"{path.name}:{number}: {' '.join(words)}")
-        try:
-            main(words)
-        except SystemExit as stop_flow:
-            if stop_flow.code in (0, None):
-                continue
-            if words[0] == "check":
-                continue
-            if active():
-                stop(error=f"{path.name}:{number}: {' '.join(words)}: {stop_flow.code}")
-            raise
+        if gaps := conditions.missing(steps.conditions, have):
+            raise Problem(f"{steps.name} needs condition {', '.join(gaps)}, and the run VM's state {state or '(none)'} "
+                          f"has {', '.join(conditions.names(have)) or 'no conditions'}. Make a state with it: proofreel "
+                          f"vm build <state> --from <base> {' '.join('--condition ' + g for g in gaps)}.")
+    flow.run(steps, command, abort=lambda message: stop(error=message) if active() else None)
+
+
+class Parser(argparse.ArgumentParser):
+    def error(self, message):
+        raise Problem(f"{self.prog}: {message}")
 
 
 def parser():
-    p = argparse.ArgumentParser(prog="proofreel", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p = Parser(prog="proofreel", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--vnc")
     p.add_argument("--password")
     sub = p.add_subparsers(dest="command", required=True)
@@ -314,12 +297,12 @@ def parser():
 
 def vm(a):
     match a.action:
-        case "base": vms.base(a.name, a.image, a.backend, a.os, a.user, a.guest_password)
-        case "up": vms.up(a.state, a.display, a.memory, a.cpu, a.warmable)
+        case "base": return vms.base(a.name, a.image, a.backend, a.os, a.user, a.guest_password)
+        case "up": return vms.up(a.state, a.display, a.memory, a.cpu, a.warmable)
         case "save": vms.save(a.state, a.warm, a.note)
         case "build":
             if not (a.flow or a.condition):
-                sys.exit("Give --flow, --condition, or both.")
+                raise Problem("Give --flow, --condition, or both.")
             values = dict(v.split("=", 1) for v in a.set)
             for name in a.condition:
                 conditions.resolve(conditions.fits(name, vms.state_info(a.parent)["os"]), values)
@@ -338,23 +321,27 @@ def vm(a):
                       f"  Not faked: {info['fidelity']}")
         case "drop": vms.drop(a.state)
         case "down": vms.down()
-        case "sh": sys.exit(vms.ssh(shlex.join(a.cmd) if len(a.cmd) > 1 else a.cmd[0], check=False,
-                                    capture=False).returncode)
+        case "sh": return vms.ssh(shlex.join(a.cmd) if len(a.cmd) > 1 else a.cmd[0], check=False,
+                                  capture=False).returncode
         case "put": vms.put(a.host, a.guest)
         case "get": vms.get(a.guest, a.host)
 
 
 def main(argv=None):
-    if argv is not None:
-        return command(argv)
+    """The only exit: 0 done, 1 a failed check (or nothing found), 2 a problem, with its message."""
     try:
-        return command(None)
+        code = command(argv)
+    except Problem as problem:
+        print(f"proofreel: {problem}", file=sys.stderr)
+        code = 2
     finally:
         from vncdotool import api
         api.shutdown()
+    sys.exit(code or 0)
 
 
 def command(argv):
+    """Run one command. Returns 1 for a failed check or a query that found nothing."""
     a = parser().parse_args(argv)
     HOME.mkdir(parents=True, exist_ok=True)
     match a.command:
@@ -380,15 +367,16 @@ def command(argv):
         case "clean": return clean(a.days)
         case "vm": return vm(a)
         case "check" if a.kind == "cmd":
-            ok, label, detail = check(a, None)
-            log("check", label, ok=ok, detail=detail)
-            print(("Pass: " if ok else "Fail: ") + label)
-            return sys.exit(0 if ok else 1)
+            return run_check(a, None)
     server, password, system = target(a)
     if (a.command in ("ax", "click-ax") or a.command == "check" and a.kind.endswith("ax")) and not (system and system.ax):
-        sys.exit("AX reads a macOS run VM over SSH (proofreel vm up <state>), not a --vnc screen or another system.")
+        problem = "AX reads a macOS run VM over SSH (proofreel vm up <state>), not a --vnc screen or another system."
+        if a.command == "check":
+            log("check", f"check {a.kind} {' '.join(a.args)}", ok=False, detail=f"The check could not run: {problem}")
+            return 1
+        raise Problem(problem)
     with Screen(server, password, system.keys if system else None) as screen:
-        act(a, screen, system or guest.Guest())
+        return act(a, screen, system or guest.Guest())
 
 
 def act(a, screen, system):
@@ -418,7 +406,7 @@ def act(a, screen, system):
             try:
                 seconds = float(a.seconds)
             except ValueError:
-                sys.exit(f"hold takes seconds, down, or up, not {a.seconds!r}.")
+                raise Problem(f"hold takes seconds, down, or up, not {a.seconds!r}.")
             log("hold", f"hold {a.key} for {seconds:g} s", dur=seconds)
             system.hold(screen, a.key, seconds)
         case "tap":
@@ -429,21 +417,20 @@ def act(a, screen, system):
             lines = find(screen, a.text) if a.text else screen_text(screen)
             for line in lines:
                 print(f"{center(line)[0]:5} {center(line)[1]:5}  {line['text']}")
-            if a.text and not lines:
-                sys.exit(1)
+            return 1 if a.text and not lines else 0
         case "wait-text":
             started = time.time()
             ok = bool(wait_for(screen, a.text, a.seconds))
             log("wait", f'wait for "{a.text}"', ok=ok, waited=round(time.time() - started, 1),
                 detail=f"seen after {time.time() - started:.1f} s" if ok else f"not seen in {a.seconds:.0f} s")
             if not ok:
-                sys.exit(f'"{a.text}" did not show in {a.seconds:.0f} s.')
+                raise Problem(f'"{a.text}" did not show in {a.seconds:.0f} s.')
         case "click-text":
             lines = wait_for(screen, a.text, a.timeout)
             if len(lines) < a.nth:
                 if a.if_shown:
                     return
-                sys.exit(f'"{a.text}" is not on the screen.')
+                raise Problem(f'"{a.text}" is not on the screen.')
             x, y = center(lines[a.nth - 1])
             log("click", f'click "{a.text}"', x=x, y=y)
             screen.click(x, y)
@@ -453,21 +440,16 @@ def act(a, screen, system):
             found = ax.matches(ax.elements(screen, a.app), a.find) if a.find else ax.elements(screen, a.app)
             for element in found:
                 print(ax.describe(element, indent=not a.find))
-            if a.find and not found:
-                sys.exit(1)
+            return 1 if a.find and not found else 0
         case "click-ax":
             found = ax.wait_for(screen, a.label, a.timeout, app=a.app, role=a.role)
             if len(found) < a.nth:
-                sys.exit(f'"{a.label}" is not in the accessibility tree.')
+                raise Problem(f'"{a.label}" is not in the accessibility tree.')
             x, y = found[a.nth - 1]["x"], found[a.nth - 1]["y"]
             log("click", f'click "{a.label}"', x=x, y=y)
             screen.click(x, y)
         case "check":
-            ok, label, detail = check(a, screen)
-            log("check", label, ok=ok, detail=detail)
-            print(("Pass: " if ok else "Fail: ") + label + (f" ({detail})" if detail and not ok else ""))
-            if not ok:
-                sys.exit(1)
+            return run_check(a, screen)
 
 
 def clean(days):

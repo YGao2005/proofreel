@@ -7,9 +7,8 @@ job for one, is a change in this file only.
 """
 
 import shlex
-import sys
 
-from . import crash, swift_tool, vm
+from . import Problem, crash, swift_tool, vm
 
 TAP_PRESS, TAP_GAP = 0.07, 0.11
 
@@ -71,7 +70,7 @@ class MacOS(Guest):
     def keys_helper(self, *args, timeout=30):
         result = self.helper("keys.swift", *args, timeout=timeout)
         if result.returncode:
-            sys.exit(f"Keys: {result.stderr.strip() or f'the helper failed ({result.returncode})'}")
+            raise Problem(f"Keys: {result.stderr.strip() or f'the helper failed ({result.returncode})'}")
 
     def hold(self, screen, key, seconds):
         if key not in self.modifiers:
@@ -110,5 +109,5 @@ GUESTS = {guest.name: guest for guest in (MacOS(), Linux(), Windows())}
 def of(info):
     """The guest of a state or a run VM record."""
     if info.get("os") not in GUESTS:
-        sys.exit(f"Unknown guest system {info.get('os')!r}. Use one of: {', '.join(GUESTS)}.")
+        raise Problem(f"Unknown guest system {info.get('os')!r}. Use one of: {', '.join(GUESTS)}.")
     return GUESTS[info["os"]]

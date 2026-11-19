@@ -16,10 +16,9 @@ shows or plays on the host.
 import json
 import os
 import subprocess
-import sys
 import time
 
-from . import HOME, guest
+from . import HOME, Problem, guest
 
 STATES = HOME / "states"
 RUN = os.environ.get("PROOFREEL_VM", "pr-run")
@@ -35,17 +34,17 @@ def backend(name):
 
 def current():
     if not CURRENT.exists():
-        sys.exit("No run VM. Start one: proofreel vm up <state>.")
+        raise Problem("No run VM. Start one: proofreel vm up <state>.")
     return json.loads(CURRENT.read_text())
 
 
 def state_info(name):
     path = STATES / f"{name}.json"
     if not path.exists():
-        sys.exit(f"No state {name!r}. See: proofreel vm states.")
+        raise Problem(f"No state {name!r}. See: proofreel vm states.")
     info = json.loads(path.read_text())
     if missing := [key for key in ("backend", "os") if key not in info]:
-        sys.exit(f"State {name} does not say its {' or '.join(missing)}. Add them to {path}, for example "
+        raise Problem(f"State {name} does not say its {' or '.join(missing)}. Add them to {path}, for example "
                  f'"backend": "tart", "os": "macos".')
     return info
 
@@ -65,7 +64,7 @@ def wait(test, seconds, error):
         except subprocess.TimeoutExpired:
             pass
         time.sleep(2)
-    sys.exit(error)
+    raise Problem(error)
 
 
 def askpass(password):
@@ -117,7 +116,7 @@ def start(info, name, run):
 def base(name, image, kind, system, user, password):
     """Make a state from an image: for tart an OCI image or a local VM, for qemu a disk file."""
     if backend(kind).exists(name):
-        sys.exit(f"State {name!r} exists. Drop it first: proofreel vm drop {name}.")
+        raise Problem(f"State {name!r} exists. Drop it first: proofreel vm drop {name}.")
     guest.of({"os": system})
     backend(kind).base(name, image)
     write_state(name, parent=str(image), backend=kind, os=system, user=user, password=password, warm=False)

@@ -1,6 +1,6 @@
 import pytest
 
-from proofreel import cli, guest
+from proofreel import Problem, cli, guest
 from proofreel.screen import Screen
 
 
@@ -59,5 +59,5 @@ def test_hold_takes_seconds_down_or_up(monkeypatch):
     for argv in (["hold", "fn", "down"], ["hold", "fn", "up"], ["hold", "fn", "0.5"]):
         cli.act(cli.parser().parse_args(argv), None, system)
     assert done == [("fn", True), ("fn", False), ("fn", 0.5)]
-    with pytest.raises(SystemExit, match="seconds, down, or up"):
+    with pytest.raises(Problem, match="seconds, down, or up"):
         cli.act(cli.parser().parse_args(["hold", "fn", "long"]), None, system)

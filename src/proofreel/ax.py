@@ -5,10 +5,9 @@ starts (/usr/libexec/sshd-keygen-wrapper), so the app under test needs no permis
 """
 
 import json
-import sys
 import time
 
-from . import guest
+from . import Problem, guest
 
 
 def tree(app=None):
@@ -16,7 +15,7 @@ def tree(app=None):
     is compiled on the host and copied to the guest the first time."""
     result = guest.GUESTS["macos"].helper("ax.swift", *(["--app", app] if app else []))
     if result.returncode:
-        sys.exit(f"AX: {result.stderr.strip() or f'the helper failed ({result.returncode})'}")
+        raise Problem(f"AX: {result.stderr.strip() or f'the helper failed ({result.returncode})'}")
     return json.loads(result.stdout)
 
 
