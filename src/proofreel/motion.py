@@ -11,6 +11,7 @@ from .session import CAMERA, POINTER, VERDICT
 
 FPS = 30
 FAST = 8
+MOST = 96
 ZOOM = 1.25
 LEAD, HOLD, BRIDGE = 1.0, 1.6, 1.6
 FAR = 0.45
@@ -47,11 +48,20 @@ def _any(spans_, a, b):
 
 
 def fit(spans_, end, target=None, fps=FPS):
-    """The plan of `timeline`, with busy time played up to 2.5x faster when that brings the video near `target` s."""
+    """The plan of `timeline`. Past `target` s, busy time plays up to 2.5x faster, then idle time plays faster than
+    FAST (up to MOST) until the video fits: a long stall costs seconds of video, not minutes."""
     plan = timeline(spans_, end, fps=fps)
-    if target and len(plan) / fps > target:
-        base = min(2.5, len(plan) / fps / target)
-        plan = timeline(spans_, end, fps=fps, base=base)
+    if not target or len(plan) / fps <= target:
+        return plan
+    base, fast = min(2.5, len(plan) / fps / target), FAST
+    plan = timeline(spans_, end, fps=fps, base=base)
+    for _ in range(4):
+        over = len(plan) / fps - target
+        idle = sum(speed > 0.9 * fast for _, speed in plan) / fps
+        if over <= 1 or fast >= MOST or idle <= 1:
+            break
+        fast = min(MOST, fast * idle / max(1.0, idle - over))
+        plan = timeline(spans_, end, fps=fps, fast=fast, base=base)
     return plan
 
 
