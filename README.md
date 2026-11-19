@@ -41,6 +41,19 @@ proofreel check cmd "curl -sf localhost:8080/health" --label "The server is up"
 proofreel stop                               # makes session.mp4, index.html, poster.jpg, shots/
 ```
 
+Checks:
+
+| Check | Passes when |
+|---|---|
+| `check text <text> [seconds]` | the words show on the screen in the seconds (default 10) |
+| `check no-text <text> [seconds]` | the words are gone from the screen in the seconds (default 0) |
+| `check cmd "<command>" [seconds]` | a shell command on the host exits 0. It runs again each second until it does or the seconds pass |
+| `check sh "<command>" [seconds]` | the same, but in the run VM over SSH (PowerShell on Windows) |
+| `check running <process>` | a process with this exact name runs in the run VM |
+
+Give `--label` to say what a command check proves. The page shows the label, and the end of the command's output as
+the detail.
+
 Each command is one action, so an agent can drive the screen with the commands alone. To find words on the screen,
 proofreel uses Apple Vision on macOS hosts and Tesseract on other hosts.
 

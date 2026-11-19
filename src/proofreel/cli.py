@@ -13,7 +13,10 @@
   ax [--app NAME] [--find TEXT] [--json] | click-ax <label> [--role R] [--app NAME] [--nth N] [--timeout S]
                                                         Read the accessibility tree of a run VM, or click by label.
   wait-text <text> [seconds] | find [text]              Wait for words, or print the words on the screen.
-  check text|no-text|ax|no-ax <text> [seconds] | check cmd <shell command> --label L   A pass or fail on the page.
+  check text|no-text|ax|no-ax <text> [seconds]          A pass or fail on the page. Text checks wait up to seconds.
+  check cmd|sh "<command>" [seconds] [--label L]        A command on the host (cmd) or in the run VM (sh) exits 0;
+                                                        it runs again until it does or the seconds pass.
+  check running <process>                               A process with this exact name runs in the run VM.
   event <kind> <text> [--x X --y Y] [--ok|--fail] [--detail D] [--t T --end E]   Log what another tool did.
   shot <png>                                            Save the screen.
   run <flow> [--set NAME=VALUE]                         Run a flow file: one proofreel command per line. A line
@@ -83,11 +86,26 @@ def check(args, screen, run):
             return bool(found) == present, f'"{text}" is {"" if present else "not "}in the accessibility tree', ""
         found = wait_for(screen, text, seconds, present=present)
         return bool(found) == present, f'"{text}" is {"" if present else "not "}on the screen', ""
-    if args.kind == "cmd":
-        command = " ".join(args.args)
-        result = subprocess.run(command, shell=True, capture_output=True, text=True)
+    if args.kind in ("sh", "running"):
+        run = run or vms.Run.current()
+    if args.kind in ("cmd", "sh"):
+        if len(args.args) > 2:
+            raise Problem(f'check {args.kind} takes one command and seconds. Quote the command: check {args.kind} "a b c" 10.')
+        command, seconds = args.args[0], float(args.args[1]) if len(args.args) > 1 else 0
+        end = time.time() + seconds
+        while True:
+            if args.kind == "cmd":
+                result = subprocess.run(command, shell=True, capture_output=True, text=True)
+            else:
+                result = run.ssh(command, check=False)
+            if result.returncode == 0 or time.time() >= end:
+                break
+            time.sleep(1)
         detail = (result.stdout + result.stderr).strip()[-400:]
         return result.returncode == 0, args.label or command, detail
+    if args.kind == "running":
+        name = args.args[0]
+        return run.guest.running(run, name), args.label or f"{name} is running", ""
     raise Problem(f"Unknown check {args.kind!r}.")
 
 
@@ -177,7 +195,7 @@ def parser():
     s.add_argument("key")
     s.add_argument("count", type=int, nargs="?", default=1)
     s = sub.add_parser("check")
-    s.add_argument("kind", choices=["text", "no-text", "ax", "no-ax", "cmd"])
+    s.add_argument("kind", choices=["text", "no-text", "ax", "no-ax", "cmd", "sh", "running"])
     s.add_argument("args", nargs="+")
     s.add_argument("--label")
     s.add_argument("--app")
@@ -323,7 +341,7 @@ def command(argv):
             for folder in recording.clean(a.days):
                 print(f"Deleted {folder}")
         case "vm": return vm(a)
-        case "check" if a.kind == "cmd":
+        case "check" if a.kind in ("cmd", "sh", "running"):
             return run_check(a, None)
     server, password, run = target(a)
     if (a.command in ("ax", "click-ax") or a.command == "check" and a.kind.endswith("ax")) and not (run and run.guest.ax):

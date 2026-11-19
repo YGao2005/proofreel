@@ -1,8 +1,8 @@
 """What differs between guest systems. Each state names its system (`os`): macos, linux, or windows.
 
-A guest owns the jobs that only some systems have: crash reports, a step before a cold save, modifier keys that its
-VNC server sends differently or cannot send, the accessibility tree, helpers that run in the guest, and the guest
-folder for conditions. A new system, or a new
+A guest owns the jobs that only some systems have, or that each system does in its own way: crash reports, a step
+before a cold save, modifier keys that its VNC server sends differently or cannot send, the accessibility tree,
+helpers that run in the guest, how to find a running process, and the guest folder for conditions. A new system, or a new
 job for one, is a change in this file only.
 """
 
@@ -42,6 +42,10 @@ class Guest:
     def press(self, run, screen, key, down):
         """Only press the key down, or only release it."""
         return screen.press(key, down)
+
+    def running(self, run, process):
+        """A process with this exact name runs in the run VM."""
+        return run.ssh(f"pgrep -x {shlex.quote(process)}", check=False, timeout=30).returncode == 0
 
 
 class MacOS(Guest):
@@ -106,6 +110,11 @@ class Linux(Guest):
 class Windows(Guest):
     name = "windows"
     desktop = 'powershell -NoProfile -Command "if (Get-Process explorer -ErrorAction SilentlyContinue) { exit 0 } exit 1"'
+
+    def running(self, run, process):
+        name = process.removesuffix(".exe").replace("'", "''")
+        return run.ssh(f"if (Get-Process -Name '{name}' -ErrorAction SilentlyContinue) {{ exit 0 }} else {{ exit 1 }}",
+                      check=False, timeout=30).returncode == 0
 
     def before_save(self, run):
         # WHY: Windows keeps the last screen size and scales it to a new one. With none saved, it fills the screen.
