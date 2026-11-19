@@ -14,7 +14,7 @@ from importlib import resources
 from pathlib import Path
 
 from . import Problem
-from .session import HIDDEN, ROW, moment
+from .session import CHIP, HIDDEN, ROW, VERDICT, moment
 
 VERSION = 2
 
@@ -31,7 +31,7 @@ def verdict(info, events):
     return "works" if checks else "shown"
 
 
-def run_data(folder, info, events, length, real, clock):
+def run_data(folder, info, events, length, real, clock, camera):
     """The page's data for one run (version 2). Times are seconds from the first frame."""
     checks = [e for e in events if e["kind"] == "check"]
     passed = sum(1 for e in checks if e.get("ok"))
@@ -39,11 +39,11 @@ def run_data(folder, info, events, length, real, clock):
     meta += [f"conditions {', '.join(c['name'] for c in info['conditions'])}" if info.get("conditions") else "",
              f"{passed}/{len(checks)} checks pass" if checks else "", f"{real:.0f} s of screen in a {length:.0f} s video"]
     started = info.get("started")
-    keep = ("t", "kind", "text", "ok", "detail", "shot", "row")
+    keep = ("t", "dur", "kind", "text", "ok", "detail", "shot", "row", "chip")
     return {"version": VERSION, "id": folder.name, "title": info.get("title") or folder.name,
             "about": info.get("about", ""), "error": info.get("error", ""), "verdict": verdict(info, events),
             "meta": [m for m in meta if m], "base": "", "length": round(length, 2), "real": round(real, 2),
-            "wide": (folder / "session-wide.mp4").exists(),
+            "overlay": True, "camera": camera,
             "when": time.strftime("%Y-%m-%d %H:%M", time.localtime(started)) if started else
             (info.get("meta") or {}).get("", ""), "clock": clock.knots,
             "events": [{k: e[k] for k in keep if k in e} for e in map(shown, events) if e]}
@@ -53,7 +53,12 @@ def shown(event):
     """An event as the page lists it: at its moment, as a key row or a folded action; a move is not listed."""
     if event["kind"] in HIDDEN:
         return None
-    return {**event, "t": moment(event), "row": "key" if event["kind"] in ROW else "fold"}
+    page = {**event, "t": moment(event), "row": "key" if event["kind"] in ROW else "fold"}
+    if event["kind"] in CHIP:
+        page["chip"] = True
+        if event["kind"] not in VERDICT and event.get("end", event["t"]) - event["t"] >= 0.05:
+            page["dur"] = round(event["end"] - event["t"], 2)
+    return page
 
 
 def upgrade(run):
@@ -98,8 +103,8 @@ def document(runs):
 """
 
 
-def write(folder, info, events, length, real, clock):
-    run = run_data(folder, info, events, length, real, clock)
+def write(folder, info, events, length, real, clock, camera):
+    run = run_data(folder, info, events, length, real, clock, camera)
     (folder / "run.json").write_text(json.dumps(run))
     (folder / "index.html").write_text(document([run]))
     return run["verdict"]
@@ -114,7 +119,7 @@ def publish(session, out):
     if target.exists():
         shutil.rmtree(target)
     (target / "shots").mkdir(parents=True)
-    for name in ("session.mp4", "session-wide.mp4", "poster.jpg"):
+    for name in ("session.mp4", "poster.jpg"):
         if (session / name).exists():
             shutil.copy2(session / name, target / name)
     for shot in (session / "shots").glob("*.jpg"):

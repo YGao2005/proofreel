@@ -51,3 +51,15 @@ def test_the_page_assets_ship_with_the_package():
     from proofreel import page
     assert "function render()" in page.ASSETS.joinpath("page.js").read_text()
     assert "--accent" in page.ASSETS.joinpath("page.css").read_text()
+
+
+def test_the_video_is_one_file_and_the_page_gets_the_camera_and_the_chips(tmp_path):
+    import json
+    from proofreel.demo import demo
+    demo(tmp_path / "d")
+    run = json.loads((tmp_path / "d" / "run.json").read_text())
+    assert not (tmp_path / "d" / "session-wide.mp4").exists() and run["overlay"]
+    assert max(view[3] for view in run["camera"]) > 1.2 and all(0 <= v[1] <= 1 and 0 <= v[2] <= 1 for v in run["camera"])
+    typed = next(e for e in run["events"] if e["kind"] == "type")
+    assert typed["chip"] and typed["dur"] > 1
+    assert next(e for e in run["events"] if e["kind"] == "check").get("dur") is None

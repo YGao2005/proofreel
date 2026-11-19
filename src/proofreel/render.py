@@ -17,7 +17,7 @@ from PIL import Image, ImageChops, ImageStat
 
 from . import Problem, draw, page
 from .motion import FPS, Camera, Clock, Pointer, ease, fit, spans
-from .session import CHIP, RING, VERDICT, Session, moment
+from .session import CHIP, RING, VERDICT, Session
 
 CHANGED = 1.5
 INSET = 0.88
@@ -45,21 +45,9 @@ def relative(events, start, scale):
     return out
 
 
-def length(e):
-    """How long an action's chip stays: the action's own length. A verdict shows at its moment."""
-    return 0 if e["kind"] in VERDICT else e.get("end", e["t"]) - e["t"]
-
-
-def chip_text(e):
-    if e["kind"] == "check":
-        return ("Pass: " if e.get("ok") else "Fail: ") + e["text"]
-    if e["kind"] == "key":
-        return draw.keys_label(e["text"].removeprefix("key "))
-    return e["text"]
-
-
 class Scene:
-    """Draws one video frame: the screen in its frame, the camera view, the pointer, rings, and labels."""
+    """Draws one video frame: the screen in its frame, the pointer, and the click rings. It also moves the camera,
+    whose view the page applies as a zoom."""
 
     def __init__(self, size, out_size, events, framed):
         self.events = events
@@ -78,8 +66,6 @@ class Scene:
         canvas_events = [self._event_to_canvas(e) for e in events]
         self.pointer = Pointer(canvas_events, out_size)
         self.camera = Camera(canvas_events, self.pointer, out_size)
-        self.steps = [e for e in events if e["kind"] == "step"]
-        self.chips = [e for e in events if e["kind"] in CHIP]
         self.clicks = [e for e in canvas_events if e["kind"] in RING]
 
     def _event_to_canvas(self, e):
@@ -98,58 +84,20 @@ class Scene:
         canvas.paste(screen, self.offset, self.mask)
         return canvas
 
-    def render(self, canvas, now, speed, box):
-        left, top, w, h = box
-        z = self.out[0] / w
-        if z > 1.001:
-            view = canvas.resize(self.out, Image.BICUBIC, box=(left, top, left + w, top + h))
-        else:
-            view = canvas.copy()
-        to_view = lambda x, y: ((x - left) * z, (y - top) * z)
-        self._rings(view, now, z, to_view)
-        self._pointer(view, now, z, to_view)
-        self._labels(view, now, speed)
-        return view.convert("RGB")
-
-    def _rings(self, view, now, z, to_view):
+    def render(self, canvas, now):
+        """The frame at `now`: the screen, the click rings, and the pointer. Text and zoom are the page's."""
+        view = canvas.copy()
         for e in self.clicks:
             age = now - e["t"]
             if 0 <= age < 0.55:
                 k = ease(age / 0.55)
-                sprite, half = draw.ring((6 + 30 * k) * self.ui * z ** 0.5, 1 - k, self.ui)
-                x, y = to_view(e["x"], e["y"])
-                draw.paste(view, sprite, x - half, y - half)
-
-    def _pointer(self, view, now, z, to_view):
+                sprite, half = draw.ring((6 + 30 * k) * self.ui, 1 - k, self.ui)
+                draw.paste(view, sprite, e["x"] - half, e["y"] - half)
         pressed = any(0 <= now - e["t"] < 0.16 for e in self.clicks)
-        x, y = to_view(*self.pointer.at(now))
-        scale = round(1.25 * self.ui * z ** 0.6, 2)
-        sprite, pad = draw.pointer(scale, pressed)
+        sprite, pad = draw.pointer(round(1.25 * self.ui, 2), pressed)
+        x, y = self.pointer.at(now)
         draw.paste(view, sprite, x - pad, y - pad)
-
-    def _labels(self, view, now, speed):
-        ui = self.ui
-        margin = int(24 * ui)
-        step_index = bisect_right([s["t"] for s in self.steps], now) - 1
-        if step_index >= 0:
-            step = self.steps[step_index]
-            alpha = ease((now - step["t"]) / 0.3)
-            sprite = draw.pill(step["text"], int(22 * ui), lead=str(step_index + 1))
-            draw.paste(view, sprite, (self.out[0] - sprite.width) / 2, self.out[1] - sprite.height - margin, alpha)
-        recent = [e for e in self.chips if 0 <= now - moment(e) < 1.8 + length(e)]
-        if recent:
-            e = recent[-1]
-            age = now - moment(e)
-            alpha = ease(age / 0.15) * (1 - ease((age - 1.5 - length(e)) / 0.3))
-            color = {True: draw.PASS + (235,), False: draw.FAIL + (235,)}.get(e.get("ok") if e["kind"] in ("check", "wait") else None,
-                                                                                draw.INK + (215,))
-            sprite = draw.pill(chip_text(e), int(18 * ui), fill=color)
-            draw.paste(view, sprite, self.out[0] - sprite.width - margin, margin, alpha)
-        clock = draw.pill(draw.clock(now), int(15 * ui), fill=draw.INK + (150,))
-        draw.paste(view, clock, margin, margin, 0.9)
-        if speed > 1.3:
-            badge = draw.pill(f"{speed:.0f}x speed" if speed >= 2 else f"{speed:.1f}x speed", int(15 * ui), fill=draw.INK + (190,))
-            draw.paste(view, badge, margin + clock.width + int(8 * ui), margin, min(1.0, (speed - 1.3) / 1.5))
+        return view.convert("RGB")
 
 
 def even(n):
@@ -164,7 +112,7 @@ def _init(frames, size, out_size, events, framed):
 
 
 def _frame(job):
-    index, now, speed, box = job
+    index, now = job
     scene = _worker["scene"]
     if _worker["cached"][0] != index:
         image = Image.open(_worker["frames"][index]).convert("RGB")
@@ -172,8 +120,7 @@ def _frame(job):
             image = image.resize(_worker["size"])
         _worker["cached"] = (index, scene.compose(image))
     canvas = _worker["cached"][1]
-    return (scene.render(canvas, now, speed, box).tobytes(),
-            scene.render(canvas, now, speed, (0, 0, *scene.out)).tobytes())
+    return scene.render(canvas, now).tobytes()
 
 
 def encoder(path, size, crf):
@@ -184,7 +131,8 @@ def encoder(path, size, crf):
 
 
 def video(folder, events, frames, times, start, end, framed, width, crf, target):
-    """Writes session.mp4, which zooms in on each action, and session-wide.mp4, which shows the whole screen."""
+    """Writes session.mp4. Returns its length, its clock, and the camera: [video s, center x, center y, zoom] about
+    10 times a second, with the center as a fraction of the frame, for the page to zoom with."""
     first = Image.open(frames[-1])
     screen_w = first.width / INSET if framed else first.width
     out_w = even(width or min(1920, max(1280, screen_w)))
@@ -192,21 +140,28 @@ def video(folder, events, frames, times, start, end, framed, width, crf, target)
     plan = fit(spans(screen_changes(frames, times, start), events), end, target)
     scene = Scene(first.size, out_size, events, framed)
     real = [t - start for t in times]
-    jobs = [(max(0, bisect_right(real, now) - 1), now, speed, scene.camera.step(now, 1 / FPS)) for now, speed in plan]
-    zoomed, wide = encoder(folder / "session.mp4", out_size, crf), encoder(folder / "session-wide.mp4", out_size, crf)
+    camera = []
+    for n, (now, _) in enumerate(plan):
+        left, top, w, h = scene.camera.step(now, 1 / FPS)
+        if n % 3 == 0:
+            view = [round(n / FPS, 2), round((left + w / 2) / out_size[0], 4), round((top + h / 2) / out_size[1], 4),
+                    round(out_size[0] / w, 3)]
+            if not camera or view[1:] != camera[-1][1:] or n + 3 >= len(plan):
+                camera.append(view)
+    jobs = [(max(0, bisect_right(real, now) - 1), now) for now, _ in plan]
+    ffmpeg = encoder(folder / "session.mp4", out_size, crf)
     workers = max(1, min(8, (os.cpu_count() or 2) - 1))
     with multiprocessing.get_context("spawn").Pool(workers, _init, (frames, first.size, out_size, events, framed)) as pool:
-        for near, far in pool.imap(_frame, jobs, chunksize=12):
-            zoomed.stdin.write(near)
-            wide.stdin.write(far)
-    for ffmpeg in (zoomed, wide):
-        ffmpeg.stdin.close()
-        if ffmpeg.wait():
-            raise Problem("ffmpeg failed")
+        for frame in pool.imap(_frame, jobs, chunksize=12):
+            ffmpeg.stdin.write(frame)
+    ffmpeg.stdin.close()
+    if ffmpeg.wait():
+        raise Problem("ffmpeg failed")
+    (folder / "session-wide.mp4").unlink(missing_ok=True)
     poster = Image.open(frames[len(frames) // 2]).convert("RGB")
     poster.thumbnail((1280, 1280))
     poster.save(folder / "poster.jpg", quality=82)
-    return len(plan) / FPS, Clock.of(plan)
+    return len(plan) / FPS, Clock.of(plan), camera
 
 
 def shots(folder, events, frames, times, start):
@@ -232,9 +187,9 @@ def render(folder, framed=True, width=None, crf=20, target=30):
     scale = Image.open(frames[-1]).width / (session.screen_width() or Image.open(frames[-1]).width)
     rel = relative(events, start, scale)
     end = max(times[-1] - start, max((e.get("end", e["t"]) for e in rel), default=0) + 2.0)
-    length, clock = video(folder, rel, frames, times, start, end, framed, width, crf, target)
+    length, clock, camera = video(folder, rel, frames, times, start, end, framed, width, crf, target)
     shots(folder, rel, frames, times, start)
-    verdict = page.write(folder, info, rel, length, end, clock)
+    verdict = page.write(folder, info, rel, length, end, clock, camera)
     size = (folder / "session.mp4").stat().st_size / 1e6
     return (f"{verdict.capitalize()}. {end:.0f} s of screen in a {length:.0f} s video, {size:.1f} MB. "
             f"Page: {folder / 'index.html'}")
