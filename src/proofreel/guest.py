@@ -7,6 +7,7 @@ job for one, is a change in this file only.
 """
 
 import shlex
+import time
 
 from . import Problem, crash, swift_tool
 
@@ -31,15 +32,16 @@ class Guest:
         """Make the guest ready to stop for a cold save."""
 
     def hold(self, run, screen, key, seconds):
-        screen.hold(key, seconds)
+        """Hold the key. This and tap and press return (first press, last release) in host time."""
+        return screen.hold(key, seconds)
 
     def tap(self, run, screen, key, count):
         """Press and release the key count times, TAP_PRESS seconds down and TAP_GAP seconds apart."""
-        screen.tap(key, count, TAP_PRESS, TAP_GAP)
+        return screen.tap(key, count, TAP_PRESS, TAP_GAP)
 
     def press(self, run, screen, key, down):
         """Only press the key down, or only release it."""
-        screen.press(key, down)
+        return screen.press(key, down)
 
 
 class MacOS(Guest):
@@ -71,25 +73,28 @@ class MacOS(Guest):
         return result
 
     def keys_helper(self, run, *args, timeout=30):
+        """Returns the host times around the helper: the keys happen in between, within the SSH round trip."""
+        started = time.time()
         result = self.helper(run, "keys.swift", *args, timeout=timeout)
         if result.returncode:
             raise Problem(f"Keys: {result.stderr.strip() or f'the helper failed ({result.returncode})'}")
+        return started, time.time()
 
     def hold(self, run, screen, key, seconds):
         if key not in self.modifiers:
             return super().hold(run, screen, key, seconds)
-        self.keys_helper(run, "hold", key, f"{seconds:g}", timeout=seconds + 30)
+        return self.keys_helper(run, "hold", key, f"{seconds:g}", timeout=seconds + 30)
 
     def tap(self, run, screen, key, count):
         if key not in self.modifiers:
             return super().tap(run, screen, key, count)
-        self.keys_helper(run, "tap", key, str(count), f"{TAP_PRESS * 1000:g}", f"{TAP_GAP * 1000:g}",
+        return self.keys_helper(run, "tap", key, str(count), f"{TAP_PRESS * 1000:g}", f"{TAP_GAP * 1000:g}",
                          timeout=count * (TAP_PRESS + TAP_GAP) + 30)
 
     def press(self, run, screen, key, down):
         if key not in self.modifiers:
             return super().press(run, screen, key, down)
-        self.keys_helper(run, "down" if down else "up", key)
+        return self.keys_helper(run, "down" if down else "up", key)
 
 
 class Linux(Guest):

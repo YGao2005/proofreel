@@ -7,10 +7,10 @@ import math
 from bisect import bisect_right
 from dataclasses import dataclass
 
+from .session import CAMERA, POINTER, VERDICT
+
 FPS = 30
 FAST = 8
-POINTED = {"click", "double", "right", "move", "drag"}
-FOCUSED = {"click", "double", "right", "drag", "type"}
 ZOOM = 1.25
 LEAD, HOLD, BRIDGE = 1.0, 1.6, 1.6
 FAR = 0.45
@@ -27,12 +27,18 @@ WAITING = 3
 def spans(changes, events):
     """Real time by how fast it plays: 1x around each action; WAITING while the agent waits for the screen (model
     output, animations); 1x around other screen changes; FAST for the rest."""
-    actions = sorted((e["t"] - 1.2, e["t"] + e.get("dur", 0) + 2.0) for e in events
-                     if e["kind"] not in ("move", "note", "wait"))
-    waits = sorted((e["t"] - e["waited"] + 0.6, e["t"] - 0.4) for e in events if e.get("waited", 0) > 1.5)
-    shown = sorted([(t - 0.4, t + 1.0) for t in changes] +
-                   [(e["t"] - 0.4, e["t"] + 1.6) for e in events if e["kind"] == "wait"])
-    return actions, waits, shown
+    actions, waits, shown = [], [], [(t - 0.4, t + 1.0) for t in changes]
+    for e in events:
+        end = e.get("end", e["t"])
+        if e["kind"] in VERDICT and end - e["t"] > 1.5:
+            waits.append((e["t"] + 0.6, end - 0.4))
+        if e["kind"] == "wait":
+            shown.append((end - 0.4, end + 1.6))
+        elif e["kind"] == "check":
+            actions.append((end - 1.2, end + 2.0))
+        elif e["kind"] not in ("move", "note"):
+            actions.append((e["t"] - 1.2, end + 2.0))
+    return sorted(actions), sorted(waits), sorted(shown)
 
 
 def _any(spans_, a, b):
@@ -83,10 +89,10 @@ class Pointer:
         self.width = size[0]
         self.points = [Point(-1.0, size[0] / 2, size[1] / 2)]
         for e in events:
-            if e["kind"] in POINTED:
+            if e["kind"] in POINTER:
                 self.points.append(Point(e["t"], e["x"], e["y"]))
             if e["kind"] == "drag":
-                self.points.append(Point(e["t"] + e.get("hold", 0.6), e["x2"], e["y2"]))
+                self.points.append(Point(e.get("end", e["t"] + 0.6), e["x2"], e["y2"]))
         self.times = [p.t for p in self.points]
 
     def at(self, now):
@@ -114,11 +120,11 @@ class Camera:
         self.groups = []
         diagonal = math.hypot(*size)
         for e in events:
-            if e["kind"] not in FOCUSED:
+            if e["kind"] not in CAMERA:
                 continue
             x, y = pointer.at(e["t"]) if e["kind"] == "type" else (e["x"], e["y"])
             last = self.groups[-1] if self.groups else None
-            end = e["t"] + e.get("dur", 0)
+            end = e.get("end", e["t"])
             if last and e["t"] - LEAD - last[-1][3] - HOLD < BRIDGE and \
                     math.hypot(x - last[-1][1], y - last[-1][2]) < FAR * diagonal:
                 last.append((e["t"], x, y, end))

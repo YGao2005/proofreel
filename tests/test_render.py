@@ -42,6 +42,6 @@ def test_demo_renders_a_page_and_video(tmp_path):
 
 def test_a_long_wait_plays_faster_than_real_time_even_while_the_screen_changes():
     changes = [10 + i * 0.25 for i in range(40)]
-    plan = timeline(spans(changes, [{"t": 21.0, "kind": "wait", "waited": 11.0}]), 24)
+    plan = timeline(spans(changes, [{"t": 10.0, "end": 21.0, "kind": "wait"}]), 24)
     during = [speed for now, speed in plan if 12.5 <= now <= 19.5]
     assert min(during) > 2.5

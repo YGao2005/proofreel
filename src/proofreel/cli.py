@@ -14,7 +14,7 @@
                                                         Read the accessibility tree of a run VM, or click by label.
   wait-text <text> [seconds] | find [text]              Wait for words, or print the words on the screen.
   check text|no-text|ax|no-ax <text> [seconds] | check cmd <shell command> --label L   A pass or fail on the page.
-  event <kind> <text> [--x X --y Y] [--ok|--fail] [--detail D]   Log an action that another tool did.
+  event <kind> <text> [--x X --y Y] [--ok|--fail] [--detail D] [--t T --end E]   Log what another tool did.
   shot <png>                                            Save the screen.
   run <flow> [--set NAME=VALUE]                         Run a flow file: one proofreel command per line. A line
                                                         `condition <name>` refuses a run VM whose state lacks it.
@@ -93,11 +93,12 @@ def check(args, screen, run):
 
 def run_check(args, screen, run=None):
     """Record the check and return 1 when it fails. A check that cannot run is a failed check, with the reason."""
+    started = time.time()
     try:
         ok, label, detail = check(args, screen, run)
     except Problem as problem:
         ok, label, detail = False, f"check {args.kind} {' '.join(args.args)}", f"The check could not run: {problem}"
-    log("check", label, ok=ok, detail=detail)
+    log("check", label, t=started, end=time.time(), ok=ok, detail=detail)
     print(("Pass: " if ok else "Fail: ") + label + (f" ({detail})" if detail and not ok else ""))
     return 0 if ok else 1
 
@@ -189,6 +190,8 @@ def parser():
     s.add_argument("--ok", action="store_const", const=True, dest="ok")
     s.add_argument("--fail", action="store_const", const=False, dest="ok")
     s.add_argument("--detail")
+    s.add_argument("--t", type=float, help="when it happened (unix seconds); default now")
+    s.add_argument("--end", type=float, help="when it ended, for an action that takes time")
     s = sub.add_parser("run")
     s.add_argument("flow")
     s.add_argument("--set", action="append", default=[])
@@ -302,7 +305,7 @@ def command(argv):
         case "step" | "note": return log(a.command, a.text)
         case "event":
             fields = {k: v for k, v in (("x", a.x), ("y", a.y), ("ok", a.ok), ("detail", a.detail)) if v is not None}
-            return log(a.kind, a.text, **fields)
+            return log(a.kind, a.text, a.t, a.end, **fields)
         case "run": return run_flow(a.flow, dict(v.split("=", 1) for v in a.set))
         case "render":
             from .render import render
@@ -339,34 +342,29 @@ def act(a, screen, run):
         case "click":
             label = a.label or f"click {a.x}, {a.y}"
             kind = "double" if a.double else "right" if a.right else "click"
-            log(kind, label, x=a.x, y=a.y)
-            screen.click(a.x, a.y, button=3 if a.right else 1, count=2 if a.double else 1)
+            log(kind, label, *screen.click(a.x, a.y, button=3 if a.right else 1, count=2 if a.double else 1),
+                x=a.x, y=a.y)
         case "move":
-            log("move", f"move {a.x}, {a.y}", x=a.x, y=a.y)
-            screen.move(a.x, a.y)
+            log("move", f"move {a.x}, {a.y}", *screen.move(a.x, a.y), x=a.x, y=a.y)
         case "drag":
-            log("drag", f"drag {a.x1}, {a.y1} to {a.x2}, {a.y2}", x=a.x1, y=a.y1, x2=a.x2, y2=a.y2)
-            screen.drag(a.x1, a.y1, a.x2, a.y2)
+            log("drag", f"drag {a.x1}, {a.y1} to {a.x2}, {a.y2}", *screen.drag(a.x1, a.y1, a.x2, a.y2),
+                x=a.x1, y=a.y1, x2=a.x2, y2=a.y2)
         case "type":
-            started = time.time()
-            screen.type(a.text)
-            log("type", f'type "{a.text}"', t=started, dur=round(time.time() - started, 2))
+            log("type", f'type "{a.text}"', *screen.type(a.text))
         case "key":
-            log("key", " ".join(a.keys))
-            screen.key(*a.keys)
+            log("key", " ".join(a.keys), *screen.key(*a.keys))
         case "hold" if a.seconds in ("down", "up"):
-            log("hold", f"{'press' if a.seconds == 'down' else 'release'} {a.key}")
-            system.press(run, screen, a.key, a.seconds == "down")
+            log("hold", f"{'press' if a.seconds == 'down' else 'release'} {a.key}",
+                *system.press(run, screen, a.key, a.seconds == "down"))
         case "hold":
             try:
                 seconds = float(a.seconds)
             except ValueError:
                 raise Problem(f"hold takes seconds, down, or up, not {a.seconds!r}.")
-            log("hold", f"hold {a.key} for {seconds:g} s", dur=seconds)
-            system.hold(run, screen, a.key, seconds)
+            log("hold", f"hold {a.key} for {seconds:g} s", *system.hold(run, screen, a.key, seconds))
         case "tap":
-            log("tap", f"tap {a.key}" + (f" {a.count} times" if a.count > 1 else ""))
-            system.tap(run, screen, a.key, a.count)
+            log("tap", f"tap {a.key}" + (f" {a.count} times" if a.count > 1 else ""),
+                *system.tap(run, screen, a.key, a.count))
         case "shot": screen.capture(a.text)
         case "find":
             lines = find(screen, a.text) if a.text else screen_text(screen)
@@ -376,7 +374,7 @@ def act(a, screen, run):
         case "wait-text":
             started = time.time()
             ok = bool(wait_for(screen, a.text, a.seconds))
-            log("wait", f'wait for "{a.text}"', ok=ok, waited=round(time.time() - started, 1),
+            log("wait", f'wait for "{a.text}"', t=started, end=time.time(), ok=ok,
                 detail=f"seen after {time.time() - started:.1f} s" if ok else f"not seen in {a.seconds:.0f} s")
             if not ok:
                 raise Problem(f'"{a.text}" did not show in {a.seconds:.0f} s.')
@@ -387,8 +385,7 @@ def act(a, screen, run):
                     return
                 raise Problem(f'"{a.text}" is not on the screen.')
             x, y = center(lines[a.nth - 1])
-            log("click", f'click "{a.text}"', x=x, y=y)
-            screen.click(x, y)
+            log("click", f'click "{a.text}"', *screen.click(x, y), x=x, y=y)
         case "ax":
             if a.json:
                 return print(json.dumps(ax.tree(run, a.app), indent=1, ensure_ascii=False))
@@ -401,8 +398,7 @@ def act(a, screen, run):
             if len(found) < a.nth:
                 raise Problem(f'"{a.label}" is not in the accessibility tree.')
             x, y = found[a.nth - 1]["x"], found[a.nth - 1]["y"]
-            log("click", f'click "{a.label}"', x=x, y=y)
-            screen.click(x, y)
+            log("click", f'click "{a.label}"', *screen.click(x, y), x=x, y=y)
         case "check":
             return run_check(a, screen, run)
 

@@ -317,16 +317,19 @@ To make the `linux` state again:
 
 ## The session folder
 
-Any tool can write this folder and then run `proofreel render <dir>`:
+Any tool can write this folder and then run `proofreel render <dir>`. `src/proofreel/session.py` owns the format:
 
 | File | Content |
 |---|---|
-| `session.json` | `{"title", "about", "meta": {label: value}, "error", "app", "conditions", "started"}` |
-| `events.jsonl` | one action on each line: `{"t": unix seconds, "kind", "text", "x", "y", "ok", "detail"}`. The kinds are `step`, `note`, `click`, `double`, `right`, `move`, `drag` (`x2`, `y2`), `type`, `key`, `hold`, `tap`, `open`, `wait`, and `check` |
+| `session.json` | `{"version": 2, "title", "about", "meta": {label: value}, "error", "app", "conditions", "os", "run", "started"}` |
+| `events.jsonl` | one event on each line: `{"t", "end", "kind", "text", "x", "y", "x2", "y2", "ok", "detail"}`, in unix seconds. `[t, end]` is when the action affected the screen: a click's press, the first and last key of `type`, `key`, `hold`, and `tap`, a drag's press and release, and a `wait`'s or `check`'s first look and its verdict. `end` is left out when the event has no length. The kinds are `step`, `note`, `click`, `double`, `right`, `move`, `drag`, `type`, `key`, `hold`, `tap`, `open`, `wait`, and `check` |
 | `reports/` | the crash and hang reports of a macOS run VM |
 | `frames/*.jpg` | the screen, in name order |
-| `times.txt` | the unix time of each frame, one on each line |
+| `times.txt` | `<request> <arrival>`: when each frame was asked for and when it came, one frame on each line |
 | `screen.txt` | `<width> <height>`: the pixel space of the event coordinates (the frames can be smaller) |
+
+A folder that an older proofreel wrote (no `version`) is read as version 2 and never written back. A folder from a
+newer proofreel is refused. Another tool logs with times: `proofreel event click "Save" --x 10 --y 20 --t <unix s>`.
 
 ## How it works
 

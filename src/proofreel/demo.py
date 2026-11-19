@@ -8,6 +8,7 @@ from PIL import Image, ImageDraw
 
 from .draw import font
 from .render import render
+from .session import VERSION
 
 W, H = 1440, 900
 EMAIL, NAME = "sam@example.com", "Sam"
@@ -70,14 +71,14 @@ def demo(folder, broken=False):
     at(2.2, "click", 'click "Email"', x=mid(FIELD_EMAIL)[0], y=mid(FIELD_EMAIL)[1])
     hold(1.5, 2.3)
     state["focus"] = "Email"
-    at(2.6, "type", f'type "{EMAIL}"')
+    at(2.6, "type", f'type "{EMAIL}"', end=t0 + 2.6 + len(EMAIL) * 0.08)
     for i in range(len(EMAIL) + 1):
         state["email"] = EMAIL[:i]
         hold(2.6 + i * 0.08, 2.6 + (i + 1) * 0.08, 25)
     at(4.4, "click", 'click "First name"', x=mid(FIELD_NAME)[0], y=mid(FIELD_NAME)[1])
     hold(2.6 + (len(EMAIL) + 1) * 0.08, 4.5)
     state["focus"] = "First name"
-    at(4.8, "type", f'type "{name}"')
+    at(4.8, "type", f'type "{name}"', end=t0 + 4.8 + len(name) * 0.1)
     for i in range(len(name) + 1):
         state["name"] = name[:i]
         hold(4.8 + i * 0.1, 4.8 + (i + 1) * 0.1, 25)
@@ -90,7 +91,7 @@ def demo(folder, broken=False):
         frames.append((float(t) + 0.2, dict(state)))
     state["busy"], state["done"] = False, True
     hold(14.0, 15.5)
-    at(14.6, "wait", 'wait for "Welcome"', ok=True, detail="seen after 8.6 s")
+    at(6.0, "wait", 'wait for "Welcome"', end=t0 + 14.6, ok=True, detail="seen after 8.6 s")
     at(15.0, "check", '"Welcome, Sam" is on the screen', ok=not broken)
     hold(15.5, 17.0)
 
@@ -101,11 +102,11 @@ def demo(folder, broken=False):
             if key not in cache:
                 cache[key] = screen(s)
             cache[key].save(folder / "frames" / f"{n:06d}.jpg", quality=88)
-            times.write(f"{t0 + t:.3f}\n")
+            times.write(f"{t0 + t:.3f} {t0 + t + 0.03:.3f}\n")
     (folder / "screen.txt").write_text(f"{W} {H}\n")
     (folder / "events.jsonl").write_text("".join(json.dumps(e) + "\n" for e in events))
     (folder / "session.json").write_text(json.dumps({
-        "title": "Sign-up demo",
+        "version": VERSION, "title": "Sign-up demo",
         "about": "A new user makes an account in a made-up app, drawn frame by frame to show what proofreel makes. The wait for the server plays fast.",
         "meta": {"": "proofreel demo, run with a typo" if broken else "proofreel demo"}}))
     verdict, length, real, size = render(folder)

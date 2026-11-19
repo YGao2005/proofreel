@@ -8,36 +8,19 @@ A session folder holds:
   screen.txt     "<width> <height>": the pixel space of event x and y (frames may be smaller)
 """
 
-import json
 import multiprocessing
-import re
 import os
 import subprocess
 from bisect import bisect_right
-from pathlib import Path
 
 from PIL import Image, ImageChops, ImageStat
 
 from . import Problem, draw, page
 from .motion import FPS, Camera, Pointer, ease, fit, spans
+from .session import CHIP, RING, VERDICT, Session, moment
 
 CHANGED = 1.5
 INSET = 0.88
-CHIP_KINDS = {"click", "double", "right", "drag", "type", "key", "hold", "tap", "open", "scroll", "wait", "check"}
-SHOT_KINDS = CHIP_KINDS - {"scroll"}
-
-
-def load(folder):
-    info = json.loads((folder / "session.json").read_text()) if (folder / "session.json").exists() else {}
-    log = folder / "events.jsonl"
-    events = [json.loads(line) for line in log.read_text().splitlines() if line.strip()] if log.exists() else []
-    frames = sorted((folder / "frames").glob("*.jpg"))
-    times = [float(t) for t in (folder / "times.txt").read_text().split()][: len(frames)]
-    pairs = sorted(zip(times, frames[: len(times)]))
-    times, frames = [t for t, _ in pairs], [f for _, f in pairs]
-    if not frames:
-        raise Problem(f"No frames in {folder / 'frames'}")
-    return info, events, frames, times
 
 
 def screen_changes(frames, times, start):
@@ -51,16 +34,20 @@ def screen_changes(frames, times, start):
 
 
 def relative(events, start, scale):
+    """Times in seconds from the first frame, and positions in frame pixels."""
     out = []
     for e in events:
-        e = dict(e, t=e["t"] - start)
-        if e["kind"] == "wait" and "waited" not in e and (m := re.search(r"after ([\d.]+) s", e.get("detail", ""))):
-            e["waited"] = float(m[1])
+        e = dict(e, t=e["t"] - start, **({"end": e["end"] - start} if "end" in e else {}))
         for key in ("x", "y", "x2", "y2"):
             if key in e:
                 e[key] = e[key] * scale
         out.append(e)
     return out
+
+
+def length(e):
+    """How long an action's chip stays: the action's own length. A verdict shows at its moment."""
+    return 0 if e["kind"] in VERDICT else e.get("end", e["t"]) - e["t"]
 
 
 def chip_text(e):
@@ -92,8 +79,8 @@ class Scene:
         self.pointer = Pointer(canvas_events, out_size)
         self.camera = Camera(canvas_events, self.pointer, out_size)
         self.steps = [e for e in events if e["kind"] == "step"]
-        self.chips = [e for e in events if e["kind"] in CHIP_KINDS]
-        self.clicks = [e for e in canvas_events if e["kind"] in ("click", "double", "right", "drag")]
+        self.chips = [e for e in events if e["kind"] in CHIP]
+        self.clicks = [e for e in canvas_events if e["kind"] in RING]
 
     def _event_to_canvas(self, e):
         e = dict(e)
@@ -149,11 +136,11 @@ class Scene:
             alpha = ease((now - step["t"]) / 0.3)
             sprite = draw.pill(step["text"], int(22 * ui), lead=str(step_index + 1))
             draw.paste(view, sprite, (self.out[0] - sprite.width) / 2, self.out[1] - sprite.height - margin, alpha)
-        recent = [e for e in self.chips if 0 <= now - e["t"] < 1.8 + e.get("dur", 0)]
+        recent = [e for e in self.chips if 0 <= now - moment(e) < 1.8 + length(e)]
         if recent:
             e = recent[-1]
-            age = now - e["t"]
-            alpha = ease(age / 0.15) * (1 - ease((age - 1.5 - e.get("dur", 0)) / 0.3))
+            age = now - moment(e)
+            alpha = ease(age / 0.15) * (1 - ease((age - 1.5 - length(e)) / 0.3))
             color = {True: draw.PASS + (235,), False: draw.FAIL + (235,)}.get(e.get("ok") if e["kind"] in ("check", "wait") else None,
                                                                                 draw.INK + (215,))
             sprite = draw.pill(chip_text(e), int(18 * ui), fill=color)
@@ -218,7 +205,7 @@ def video(folder, events, frames, times, start, end, framed, width, crf, target)
             raise Problem("ffmpeg failed")
     starts = [now for now, _ in plan]
     for e in events:
-        e["v"] = min(bisect_right(starts, e["t"]), len(starts)) / FPS
+        e["v"] = min(bisect_right(starts, moment(e)), len(starts)) / FPS
     poster = Image.open(frames[len(frames) // 2]).convert("RGB")
     poster.thumbnail((1280, 1280))
     poster.save(folder / "poster.jpg", quality=82)
@@ -230,9 +217,9 @@ def shots(folder, events, frames, times, start):
     out.mkdir(exist_ok=True)
     real = [t - start for t in times]
     for n, e in enumerate(events):
-        if e["kind"] not in SHOT_KINDS:
+        if e["kind"] not in CHIP:
             continue
-        after = e["t"] + (0.2 if e["kind"] == "check" else 1.0)
+        after = e.get("end", e["t"]) + (0.2 if e["kind"] in VERDICT else 1.0)
         index = max(0, min(len(frames) - 1, bisect_right(real, after) - 1))
         image = Image.open(frames[index]).convert("RGB")
         image.thumbnail((640, 640))
@@ -241,14 +228,13 @@ def shots(folder, events, frames, times, start):
 
 
 def render(folder, framed=True, width=None, crf=20, target=30):
-    folder = Path(folder)
-    info, events, frames, times = load(folder)
+    session = Session(folder)
+    folder, info, events = session.folder, session.info, session.events()
+    frames, times, _ = session.frames()
     start = times[0]
-    screen_file = folder / "screen.txt"
-    screen_w = int(screen_file.read_text().split()[0]) if screen_file.exists() else Image.open(frames[-1]).width
-    scale = Image.open(frames[-1]).width / screen_w
+    scale = Image.open(frames[-1]).width / (session.screen_width() or Image.open(frames[-1]).width)
     rel = relative(events, start, scale)
-    end = max(times[-1] - start, max((e["t"] for e in rel), default=0) + 2.0)
+    end = max(times[-1] - start, max((e.get("end", e["t"]) for e in rel), default=0) + 2.0)
     length = video(folder, rel, frames, times, start, end, framed, width, crf, target)
     shots(folder, rel, frames, times, start)
     verdict = page.write(folder, info, rel, length, end)
