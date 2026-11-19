@@ -1,0 +1,9 @@
+name = "quarantined-download"
+version = 1
+fakes = "A user who downloads the app with a browser and opens it from ~/Downloads without moving it to /Applications."
+applies = "host.sh copies the DMG (--set DMG=<host path>) into the guest. Apply copies the app from it to ~/Downloads and gives the app the quarantine flag and the download record that Safari makes (a made-up example.com URL). At the first open, macOS asks \"downloaded from the Internet. Are you sure you want to open it?\" and runs the app from a random read-only path (App Translocation)."
+checks = "The app is in ~/Downloads with a quarantine flag that the user has not approved yet, and the flag has a download record. The check prints both."
+fidelity = "The check proves the flag, not the translocation itself: macOS translocates at the first open. A flow can check it: the app's path has AppTranslocation in it."
+
+[values]
+DMG = ""

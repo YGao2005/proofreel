@@ -1,0 +1,9 @@
+name = "run-from-dmg"
+version = 1
+fakes = "A user who opens the app from its mounted disk image and never copies it to /Applications."
+applies = "host.sh copies the DMG (--set DMG=<host path>) into the guest. Apply mounts it in /Volumes as a user does (shown in Finder), and a LaunchDaemon mounts it again at each boot. The flow opens the app from /Volumes."
+checks = "The DMG is mounted, and an app is at the top of its volume. The check prints the app's path."
+fidelity = "The DMG has no quarantine flag, so there is no Gatekeeper prompt and no translocation; for those, use quarantined-download. The volume is read-only, as a real one is."
+
+[values]
+DMG = ""

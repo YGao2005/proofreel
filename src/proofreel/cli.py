@@ -1,9 +1,12 @@
 """proofreel: record an agent driving a screen as a review video and page.
 
-  start <name> [--title T] [--about A] [--meta K=V]   Start recording. Every later action and check is logged.
-  stop [--keep-frames] [--plain] [--width W]            Stop, then make session.mp4, index.html, and shots/.
+  start <name> [--title T] [--about A] [--meta K=V] [--app NAME]   Start recording. Every later action and check is
+                                                        logged. --app names the app under test: its crash fails the run.
+  stop [--keep-frames] [--plain] [--width W]            Stop, then make session.mp4, index.html, and shots/. In a macOS
+                                                        run VM, new crash and hang reports go to reports/ and the log.
   step <text> | note <text>                             Name the next part (a caption in the video), or add a note.
   click <x> <y> [--double|--right] | move <x> <y> | drag <x1> <y1> <x2> <y2> | type <text> | key <keys...>
+  hold <key> <seconds>                                  Hold a key down, such as option (Left Option in a macOS VM).
   click-text <text> [--nth N] [--timeout S] [--if-shown]   Find the words on the screen, then click them.
   ax [--app NAME] [--find TEXT] [--json] | click-ax <label> [--role R] [--app NAME] [--nth N] [--timeout S]
                                                         Read the accessibility tree of a run VM, or click by label.
@@ -11,12 +14,14 @@
   check text|no-text|ax|no-ax <text> [seconds] | check cmd <shell command> --label L   A pass or fail on the page.
   event <kind> <text> [--x X --y Y] [--ok|--fail] [--detail D]   Log an action that another tool did.
   shot <png>                                            Save the screen.
-  run <flow> [--set NAME=VALUE]                         Run a flow file: one proofreel command per line.
+  run <flow> [--set NAME=VALUE]                         Run a flow file: one proofreel command per line. A line
+                                                        `condition <name>` refuses a run VM whose state lacks it.
   render <dir> [--plain] [--width W]                    Make the video and page of a session folder again.
   publish <session> --out <dir>                         Add a run to a review folder: one page, every run, one URL.
   demo [dir]                                            Render a made-up session (no VNC needed).
   clean [--days 7]                                      Delete sessions older than this.
-  vm base|up|save|build|states|drop|down|sh|put|get     VMs (Tart or QEMU) and their saved states (see: proofreel vm -h).
+  vm base|up|save|build|states|conditions|drop|down|sh|put|get   VMs (Tart or QEMU), their saved states, and the
+                                                        conditions a state can fake (see: proofreel vm -h).
 
 The screen is the run VM of `proofreel vm up`, or --vnc host::port with --password, or PROOFREEL_VNC.
 """
@@ -32,7 +37,7 @@ import sys
 import time
 from pathlib import Path
 
-from . import ax, tart
+from . import ax, conditions, crash, tart
 from . import vm as vms
 from .screen import Screen, center, find, screen_text, wait_for
 
@@ -70,11 +75,19 @@ def start(args):
     folder = SESSIONS / f"{args.name}-{time.strftime('%Y%m%d-%H%M%S')}"
     folder.mkdir(parents=True)
     meta = dict(item.split("=", 1) for item in args.meta)
+    faked = []
     if vms.CURRENT.exists():
-        meta.setdefault("from state", vms.current().get("state", ""))
+        state = vms.current().get("state", "")
+        meta.setdefault("from state", state)
+        faked = vms.state_info(state).get("conditions", []) if (vms.STATES / f"{state}.json").exists() else []
+        if faked:
+            meta.setdefault("conditions", ", ".join(conditions.names(faked)))
+        if harvests():
+            crash.mark()
     meta.setdefault("", time.strftime("%Y-%m-%d %H:%M"))
     (folder / "session.json").write_text(json.dumps({"title": args.title or args.name, "about": args.about,
-                                                    "meta": meta}))
+                                                    "meta": meta, "app": args.app, "conditions": faked,
+                                                    "started": time.time()}))
     recorder = subprocess.Popen([sys.executable, "-m", "proofreel.capture", str(folder), server, password or "",
                                  str(args.fps), str(args.reduce)], stdout=open(folder / "recorder.log", "w"),
                                 stderr=subprocess.STDOUT, start_new_session=True)
@@ -94,8 +107,12 @@ def stop(args, error=None):
             break
         time.sleep(0.1)
     ACTIVE.unlink()
+    info = json.loads((folder / "session.json").read_text())
+    if harvests():
+        with open(folder / "events.jsonl", "a") as out:
+            for event in crash.harvest(folder, info.get("app"), info.get("started", 0)):
+                out.write(json.dumps(event) + "\n")
     if error:
-        info = json.loads((folder / "session.json").read_text())
         (folder / "session.json").write_text(json.dumps({**info, "error": error}))
     from .render import render
     verdict, length, real, size = render(folder, framed=not getattr(args, "plain", False),
@@ -103,6 +120,11 @@ def stop(args, error=None):
     if not getattr(args, "keep_frames", False):
         shutil.rmtree(folder / "frames", ignore_errors=True)
     print(f"{verdict}. {real:.0f} s of screen in a {length:.0f} s video, {size:.1f} MB. Page: {folder / 'index.html'}")
+
+
+def harvests():
+    """Crash reports come from a macOS run VM (Tart)."""
+    return vms.CURRENT.exists() and vms.current().get("backend", "tart") == "tart"
 
 
 def check(args, screen):
@@ -133,11 +155,25 @@ def expand(line, values):
     return re.sub(r"\$\{(?P<name>\w+)(?::-(?P<default>[^}]*))?\}", value, line)
 
 
+def needed(text):
+    """The conditions a flow declares with `condition <name>` lines."""
+    return [words[1] for words in map(lambda line: shlex.split(line, comments=True), text.splitlines())
+            if len(words) > 1 and words[0] == "condition"]
+
+
 def run_flow(path, values):
     path = Path(path)
-    for number, raw in enumerate(path.read_text().splitlines(), 1):
+    text = path.read_text()
+    if wanted := needed(text):
+        state = vms.current()["state"] if vms.CURRENT.exists() else None
+        have = vms.state_info(state).get("conditions", []) if state else []
+        if gaps := conditions.missing(wanted, have):
+            sys.exit(f"{path.name} needs condition {', '.join(gaps)}, and the run VM's state {state or '(none)'} has "
+                     f"{', '.join(conditions.names(have)) or 'no conditions'}. Make a state with it: proofreel vm "
+                     f"build <state> --from <base> {' '.join('--condition ' + g for g in gaps)}.")
+    for number, raw in enumerate(text.splitlines(), 1):
         words = shlex.split(expand(raw, values), comments=True)
-        if not words:
+        if not words or words[0] == "condition":
             continue
         print(f"{path.name}:{number}: {' '.join(words)}")
         try:
@@ -162,6 +198,7 @@ def parser():
     s.add_argument("--title")
     s.add_argument("--about", default="")
     s.add_argument("--meta", action="append", default=[])
+    s.add_argument("--app", help="the app under test (process name or bundle ID): its crash or hang fails the run")
     s.add_argument("--fps", type=float, default=30)
     s.add_argument("--reduce", type=int, default=0, help="keep 1/N of the pixels per side (0 = at most 1920 px wide)")
     s = sub.add_parser("stop")
@@ -201,6 +238,9 @@ def parser():
         s.add_argument(name, type=int)
     s = sub.add_parser("key")
     s.add_argument("keys", nargs="+")
+    s = sub.add_parser("hold")
+    s.add_argument("key")
+    s.add_argument("seconds", type=float)
     s = sub.add_parser("check")
     s.add_argument("kind", choices=["text", "no-text", "ax", "no-ax", "cmd"])
     s.add_argument("args", nargs="+")
@@ -248,14 +288,16 @@ def parser():
     v.add_argument("state")
     v.add_argument("--warm", action="store_true", help="keep memory: apps stay open")
     v.add_argument("--note", default="")
-    v = vm.add_parser("build", help="start from a state, run a flow, save the result as a state")
+    v = vm.add_parser("build", help="start from a state, apply conditions, run a flow, save the result as a state")
     v.add_argument("state")
     v.add_argument("--from", dest="parent", required=True)
-    v.add_argument("--flow", required=True)
+    v.add_argument("--flow")
+    v.add_argument("--condition", action="append", default=[], help="a condition to fake (see: proofreel vm conditions)")
     v.add_argument("--set", action="append", default=[])
     v.add_argument("--warm", action="store_true")
     v.add_argument("--note", default="")
     vm.add_parser("states", help="list the states as a tree")
+    vm.add_parser("conditions", help="list the conditions a state can fake")
     v = vm.add_parser("drop", help="delete a state")
     v.add_argument("state")
     vm.add_parser("down", help="stop and delete the run VM")
@@ -276,11 +318,21 @@ def vm(a):
         case "up": vms.up(a.state, a.display, a.memory, a.cpu, a.warmable)
         case "save": vms.save(a.state, a.warm, a.note)
         case "build":
+            if not (a.flow or a.condition):
+                sys.exit("Give --flow, --condition, or both.")
             values = dict(v.split("=", 1) for v in a.set)
             vms.up(a.parent, warmable=a.warm)
-            run_flow(a.flow, values)
-            vms.save(a.state, a.warm, a.note, flow=str(Path(a.flow).resolve()), values=values)
+            applied = [conditions.apply(name, values) for name in a.condition]
+            if a.flow:
+                run_flow(a.flow, values)
+            vms.save(a.state, a.warm, a.note, flow=str(Path(a.flow).resolve()) if a.flow else None, values=values,
+                     conditions=applied)
         case "states": vms.states()
+        case "conditions":
+            for name in conditions.known():
+                info = conditions.manifest(conditions.folder(name))
+                values = " ".join(f"{k}={v or '...'}" for k, v in info["values"].items())
+                print(f"{name}{'  ' + values if values else ''}\n  {info['fakes']}\n  Not faked: {info['fidelity']}")
         case "drop": vms.drop(a.state)
         case "down": vms.down()
         case "sh": sys.exit(vms.ssh(shlex.join(a.cmd) if len(a.cmd) > 1 else a.cmd[0], check=False,
@@ -355,6 +407,9 @@ def act(a, screen):
         case "key":
             log("key", " ".join(a.keys))
             screen.key(*a.keys)
+        case "hold":
+            log("hold", f"hold {a.key} for {a.seconds:g} s", dur=a.seconds)
+            screen.hold(a.key, a.seconds)
         case "shot": screen.capture(a.text)
         case "find":
             lines = find(screen, a.text) if a.text else screen_text(screen)

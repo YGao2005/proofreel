@@ -81,7 +81,7 @@ def ssh(command, check=True, capture=True, timeout=None, run=None):
 def scp(source, target, run=None):
     run = run or current()
     port = ["-P", str(run["port"])] if run.get("port") else []
-    subprocess.run(["scp", *SSH_OPTS, *port, "-q", source, target], env=askpass(run["password"]), check=True,
+    subprocess.run(["scp", *SSH_OPTS, *port, "-q", "-r", source, target], env=askpass(run["password"]), check=True,
                    stdin=subprocess.DEVNULL)
 
 
@@ -121,16 +121,22 @@ def up(name, display=None, memory=None, cpu=None, warmable=False):
     run = start(info, name, backend(info.get("backend", "tart")).up(name, info, display, memory, cpu, warmable))
     print(f"{RUN} is up from {name}{' (warm)' if info.get('warm') else ''}: vnc {run['vnc']}, ip {run['ip']}"
           f"{':' + str(run['port']) if run.get('port') else ''}.")
+    from . import conditions
+    for record in info.get("conditions", []):
+        conditions.check(record)
 
 
-def save(name, warm=False, note="", flow=None, values=None):
-    """Save the run VM as a state, then keep it running. Warm keeps memory: apps stay open."""
+def save(name, warm=False, note="", flow=None, values=None, conditions=None):
+    """Save the run VM as a state, then keep it running. Warm keeps memory: apps stay open. The state keeps the
+    conditions of the state the run VM came from, and the ones given."""
     run = current()
     kind = run.get("backend", "tart")
     parent = state_info(name).get("parent") if run["state"] == name else run["state"]
+    kept = {c["name"]: c for c in [*state_info(run["state"]).get("conditions", []), *(conditions or [])]}
     machine = backend(kind).save(name, run, warm)
     write_state(name, parent=parent, user=run["user"], password=run["password"], warm=warm, note=note,
-                flow=flow, values=values or {}, **({"backend": kind, "machine": machine} if kind != "tart" else {}))
+                flow=flow, values=values or {}, conditions=list(kept.values()),
+                **({"backend": kind, "machine": machine} if kind != "tart" else {}))
     start(state_info(name), name, backend(kind).resume(name, run, warm))
     print(f"Saved state {name}{' (warm)' if warm else ''} from {run['state']}. {RUN} runs on.")
 
@@ -169,6 +175,7 @@ def states():
     def show(name, depth):
         info = infos[name]
         tags = [t for t in ("warm" if info.get("warm") else "", f"flow {info['flow']}" if info.get("flow") else "",
+                            ", ".join(c["name"] for c in info.get("conditions", [])),
                             info.get("backend", "") if info.get("backend", "tart") != "tart" else "") if t]
         print(f"{'  ' * depth}{name}  {info['created']}{'  [' + ', '.join(tags) + ']' if tags else ''}"
               f"{'  ' + info['note'] if info.get('note') else ''}")
