@@ -14,7 +14,7 @@
   publish <session> --out <dir>                         Add a run to a review folder: one page, every run, one URL.
   demo [dir]                                            Render a made-up session (no VNC needed).
   clean [--days 7]                                      Delete sessions older than this.
-  vm base|up|save|build|states|drop|down|sh|put|get     Tart VMs and their saved states (see: proofreel vm -h).
+  vm base|up|save|build|states|drop|down|sh|put|get     VMs (Tart or QEMU) and their saved states (see: proofreel vm -h).
 
 The screen is the run VM of `proofreel vm up`, or --vnc host::port with --password, or PROOFREEL_VNC.
 """
@@ -30,10 +30,10 @@ import sys
 import time
 from pathlib import Path
 
-from . import tart
+from . import vm as vms
 from .screen import Screen, center, find, screen_text, wait_for
 
-HOME = tart.HOME
+HOME = vms.HOME
 SESSIONS = Path(os.environ.get("PROOFREEL_SESSIONS", HOME / "sessions"))
 ACTIVE = HOME / "session.json"
 
@@ -43,8 +43,8 @@ def target(args):
         return args.vnc, args.password
     if os.environ.get("PROOFREEL_VNC"):
         return os.environ["PROOFREEL_VNC"], os.environ.get("PROOFREEL_PASSWORD")
-    if tart.CURRENT.exists():
-        run = tart.current()
+    if vms.CURRENT.exists():
+        run = vms.current()
         return run["vnc"], run["vnc_password"]
     sys.exit("No screen. Use --vnc host::port, PROOFREEL_VNC, or proofreel vm up <state>.")
 
@@ -67,8 +67,8 @@ def start(args):
     folder = SESSIONS / f"{args.name}-{time.strftime('%Y%m%d-%H%M%S')}"
     folder.mkdir(parents=True)
     meta = dict(item.split("=", 1) for item in args.meta)
-    if tart.CURRENT.exists():
-        meta.setdefault("from state", tart.current().get("state", ""))
+    if vms.CURRENT.exists():
+        meta.setdefault("from state", vms.current().get("state", ""))
     meta.setdefault("", time.strftime("%Y-%m-%d %H:%M"))
     (folder / "session.json").write_text(json.dumps({"title": args.title or args.name, "about": args.about,
                                                     "meta": meta}))
@@ -215,9 +215,10 @@ def parser():
     s.add_argument("--days", type=float, default=7)
     s = sub.add_parser("vm")
     vm = s.add_subparsers(dest="action", required=True)
-    v = vm.add_parser("base", help="make a state from a Tart image")
+    v = vm.add_parser("base", help="make a state from a Tart image or a QEMU disk (qcow2)")
     v.add_argument("name")
     v.add_argument("image")
+    v.add_argument("--backend", choices=["tart", "qemu"], default="tart")
     v.add_argument("--user", default="admin")
     v.add_argument("--guest-password", default="admin")
     v = vm.add_parser("up", help="start the run VM from a state")
@@ -225,7 +226,7 @@ def parser():
     v.add_argument("--display")
     v.add_argument("--memory", type=int)
     v.add_argument("--cpu", type=int)
-    v.add_argument("--warmable", action="store_true", help="allow save --warm later (turns off audio)")
+    v.add_argument("--warmable", action="store_true", help="allow save --warm later (Tart: turns off audio)")
     v = vm.add_parser("save", help="save the run VM as a state")
     v.add_argument("state")
     v.add_argument("--warm", action="store_true", help="keep memory: apps stay open")
@@ -254,21 +255,21 @@ def parser():
 
 def vm(a):
     match a.action:
-        case "base": tart.base(a.name, a.image, a.user, a.guest_password)
-        case "up": tart.up(a.state, a.display, a.memory, a.cpu, a.warmable)
-        case "save": tart.save(a.state, a.warm, a.note)
+        case "base": vms.base(a.name, a.image, a.backend, a.user, a.guest_password)
+        case "up": vms.up(a.state, a.display, a.memory, a.cpu, a.warmable)
+        case "save": vms.save(a.state, a.warm, a.note)
         case "build":
             values = dict(v.split("=", 1) for v in a.set)
-            tart.up(a.parent, warmable=a.warm)
+            vms.up(a.parent, warmable=a.warm)
             run_flow(a.flow, values)
-            tart.save(a.state, a.warm, a.note, flow=str(Path(a.flow).resolve()), values=values)
-        case "states": tart.states()
-        case "drop": tart.drop(a.state)
-        case "down": tart.down()
-        case "sh": sys.exit(tart.ssh(shlex.join(a.cmd) if len(a.cmd) > 1 else a.cmd[0], check=False,
-                                     capture=False).returncode)
-        case "put": tart.scp(a.host, f"{tart.current()['user']}@{tart.current()['ip']}:{a.guest}")
-        case "get": tart.scp(f"{tart.current()['user']}@{tart.current()['ip']}:{a.guest}", a.host)
+            vms.save(a.state, a.warm, a.note, flow=str(Path(a.flow).resolve()), values=values)
+        case "states": vms.states()
+        case "drop": vms.drop(a.state)
+        case "down": vms.down()
+        case "sh": sys.exit(vms.ssh(shlex.join(a.cmd) if len(a.cmd) > 1 else a.cmd[0], check=False,
+                                    capture=False).returncode)
+        case "put": vms.put(a.host, a.guest)
+        case "get": vms.get(a.guest, a.host)
 
 
 def main(argv=None):

@@ -14,7 +14,7 @@ review video and a page that a person can check in a minute.
 - **Saved states for VMs.** Save a VM as a named state, such as `clean-os`, `app-installed`, or
   `signed-in-mid-onboarding`. Then start each test from that state in seconds. A warm state keeps the memory, so the
   test starts with the apps already open. A state that a flow makes records the flow, so you can make it again when
-  the app changes.
+  the app changes. macOS and Linux guests run in Tart; Windows 11 ARM and Linux guests run in QEMU.
 - **Any VNC screen.** This includes macOS and Linux VMs in Tart or UTM, QEMU, and Docker desktops with x11vnc.
   Another tool can also make the frames: give proofreel a folder of timestamped screenshots and an event log.
 
@@ -78,7 +78,9 @@ proofreel event click 'click "Save"' --x 640 --y 410
 proofreel event check "The file is saved" --ok
 ```
 
-## VM states (Tart)
+## VM states
+
+### macOS and Linux (Tart)
 
 ```bash
 proofreel vm base macos-26 ghcr.io/cirruslabs/macos-tahoe-vanilla:26.0   # once: a clean OS
@@ -102,6 +104,42 @@ macOS 26 guest: `up` from a cold state takes about 18 s to SSH ready, a warm `up
 were, and `save --warm` about 60 s. A warm state needs a run VM
 that was started with `--warmable`. Tart then turns off the VM's audio devices, so do not test a microphone in a
 warm VM.
+
+### Windows 11 ARM and Linux (QEMU)
+
+```bash
+brew install qemu
+proofreel vm base win11 win11.qcow2 --backend qemu      # once: a disk that boots Windows (see below)
+proofreel vm up win11                                   # PowerShell over SSH, the screen over VNC
+proofreel vm sh 'Get-ComputerInfo -Property OsName'
+proofreel vm sh 'schtasks /create /tn open /tr notepad.exe /sc once /st 00:00 /it /f; schtasks /run /tn open'
+proofreel vm save notepad-open --warm                   # the memory too: Notepad stays open
+proofreel vm up notepad-open
+```
+
+`base` takes a disk file: a qcow2 (cloned, copy on write) or any format that `qemu-img` reads (converted). All the
+other `vm` commands work as they do for Tart, and `--warmable` is not necessary. A Windows disk must have:
+
+- Windows 11 ARM64 that starts from UEFI on an NVMe disk (the Windows boot manager on the EFI partition).
+- The virtio network driver (NetKVM, ARM64, from [virtio-win](https://github.com/virtio-win/virtio-win-pkg-scripts)).
+- OpenSSH Server that starts automatically, with password login and PowerShell as its default shell
+  (`HKLM\SOFTWARE\OpenSSH\DefaultShell`).
+- Automatic sign-in for the user that you give to `base` (`--user`, `--guest-password`; the default is admin/admin),
+  hibernation off (`powercfg /hibernate off`), and no sleep or lock screen.
+
+UTM's Windows VMs meet these when you install OpenSSH: use the `.qcow2` in the bundle's `Data` folder.
+
+proofreel runs `qemu-system-aarch64` with HVF, headless (`-display none`, `-audio none`, no sound device, no
+clipboard), QEMU's own VNC server on 127.0.0.1, user networking with SSH forwarded from a free 127.0.0.1 port, an
+NVMe disk, a USB keyboard and tablet, and a `ramfb` screen. A state is a folder in `~/.proofreel/qemu`: `disk.qcow2`,
+`vars.fd` (the UEFI variables), and for a warm state `memory.bin`. A cold save shuts the guest down with the ACPI
+power button. A warm save pauses the VM and writes its memory and device state to `memory.bin` (a QEMU migration
+to a file); `up` loads it with `-incoming`. This works with the UEFI variables as a raw flash file. QEMU's own
+`savevm` does not: with raw variables it stops with "Device 'pflash1' is writable but does not support snapshots".
+With the variables as a qcow2, `savevm` works but writes the memory into the variables file, `-loadvm` at start
+works, and `loadvm` in a running VM stops QEMU 11.1 with an assertion.
+
+WINDOWS_TIMES
 
 ## The session folder
 
@@ -132,8 +170,8 @@ Any tool can write this folder and then run `proofreel render <dir>`:
 
 ## Limits
 
-- A run VM is headless and isolated: no window, no audio device (`--no-audio`), no shared clipboard. Nothing it
-  does shows or plays on the host.
+- A run VM is headless and isolated: no window, no audio device (Tart `--no-audio`, QEMU `-audio none` and no
+  sound device), no shared clipboard. Nothing it does shows or plays on the host.
 - One run VM at a time for each `PROOFREEL_VM` name. macOS lets a Mac run at most 2 macOS VMs at once.
 - A VNC server sends keys as keysyms. Some apps read hardware key codes or modifier-only keys, such as a key that
   you hold down. Send those keys from in the guest instead, and log them with `proofreel event key ...`.
