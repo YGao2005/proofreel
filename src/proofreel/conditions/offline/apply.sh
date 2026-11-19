@@ -17,6 +17,4 @@ sudo tee /Library/LaunchDaemons/dev.proofreel.offline.plist >/dev/null <<'PLIST'
 </dict>
 </plist>
 PLIST
-sudo launchctl bootout system/dev.proofreel.offline 2>/dev/null || true
-sudo launchctl bootstrap system /Library/LaunchDaemons/dev.proofreel.offline.plist
-sleep 2
+sudo pfctl -e -f /etc/proofreel-offline.conf 2>/dev/null || sudo pfctl -f /etc/proofreel-offline.conf 2>/dev/null

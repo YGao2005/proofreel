@@ -20,7 +20,7 @@ MARK = "/tmp/proofreel-session-start"
 FOLDERS = "~/Library/Logs/DiagnosticReports /Library/Logs/DiagnosticReports"
 KINDS = (".ips", ".hang", ".spin")
 TOP = 8
-LATE = 30
+LATE = 120
 
 
 def mark():

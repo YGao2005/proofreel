@@ -69,6 +69,16 @@ continues. Any other failure stops the flow, and the page shows where it stopped
 proofreel run flows/sign-up.flow --set EMAIL=sam@example.com
 ```
 
+### Crash and hang reports (macOS guests)
+
+`start` marks the time in the guest. `stop` copies each new `.ips`, `.hang`, and `.spin` report from
+`~/Library/Logs/DiagnosticReports` and `/Library/Logs/DiagnosticReports` to `reports/` in the session folder. Name
+the app under test with `start <name> --app <process name or bundle ID>`. A crash or hang of that app is a failed
+check, with the process, the exception type, and the top frames of the crashed thread and of the last exception.
+With no crash, the page shows the check "<app> did not crash or hang" as a pass. Reports from other processes are
+notes. Without `--app`, a crash of any process is a failed check. macOS can write a report about a minute after the
+crash, so if the app is gone at `stop`, proofreel waits up to 2 minutes for it.
+
 ### When another tool drives the screen
 
 Log what the other tool does, and proofreel records and renders it in the same way:
@@ -147,6 +157,38 @@ macOS 26 guest: `up` from a cold state takes about 18 s to SSH ready, a warm `up
 were, and `save --warm` about 60 s. A warm state needs a run VM
 that was started with `--warmable`. Tart then turns off the VM's audio devices, so do not test a microphone in a
 warm VM.
+
+### Conditions: fake hardware and setups (macOS guests)
+
+A condition makes the guest look like a setup that you do not have, such as a Bluetooth headset or a Mac with no
+microphone. It is a folder in `src/proofreel/conditions/` (or any folder path): `condition.toml` says what it fakes,
+how it applies, how it checks, and what it does not reproduce. `apply.sh` and `check.sh` run in the guest. An
+optional `host.sh` runs on the host first, for example to build a driver.
+
+```bash
+proofreel vm conditions                                   # the list, with what each does not fake
+proofreel vm build headset --from macos-26 --condition bluetooth-headset-call-mode
+proofreel vm build offline-dmg --from macos-26 --condition offline --condition run-from-dmg --set DMG=MyApp.dmg
+```
+
+`build` applies each condition, then runs its check. A check that fails stops the build. The state keeps its
+conditions, and a state built from it keeps them too. `vm up` runs the checks again, so a condition that no longer
+holds stops the run. A flow line `condition <name>` makes `proofreel run` refuse a run VM whose state does not have
+it. The page lists the conditions of the run in its header.
+
+| Condition | Fakes | Check |
+|---|---|---|
+| `bluetooth-headset-call-mode` | the only microphone is a Bluetooth headset; when input starts, its rate drops from 48 kHz to `RATE` (24000 or 16000) | the default input is Bluetooth at 48 kHz, is `RATE` while input runs, and is 48 kHz again after |
+| `no-microphone` | no input device at all | Core Audio lists no device with input |
+| `offline` | no internet (pf refuses all traffic but SSH from the host) | pf is on; a TCP connection and DNS fail |
+| `run-from-dmg` | the app runs from its mounted DMG (`DMG=<host path>`) | the DMG is mounted with an app at its top |
+| `quarantined-download` | the app is in `~/Downloads` with a browser's quarantine flag, so the first open shows Gatekeeper and translocates it | the flag is set and not yet approved |
+
+The headset is a small Core Audio driver (`headset.c`, an AudioServerPlugIn), built on the host with clang. It
+reports Bluetooth transport. When input starts, it asks Core Audio for a configuration change to the call rate, as a
+real Bluetooth driver does. proofreel does not use BlackHole: it is GPL-3.0, and its device cannot report Bluetooth.
+A condition fakes the signals that macOS gives an app. It does not fake a radio, a codec, or hardware timing, so test
+on real hardware before a release.
 
 ### Windows 11 ARM and Linux (QEMU)
 
@@ -248,8 +290,9 @@ Any tool can write this folder and then run `proofreel render <dir>`:
 
 | File | Content |
 |---|---|
-| `session.json` | `{"title", "about", "meta": {label: value}, "error"}` |
-| `events.jsonl` | one action on each line: `{"t": unix seconds, "kind", "text", "x", "y", "ok", "detail"}`. The kinds are `step`, `note`, `click`, `double`, `right`, `move`, `drag` (`x2`, `y2`), `type`, `key`, `open`, `wait`, and `check` |
+| `session.json` | `{"title", "about", "meta": {label: value}, "error", "app", "conditions", "started"}` |
+| `events.jsonl` | one action on each line: `{"t": unix seconds, "kind", "text", "x", "y", "ok", "detail"}`. The kinds are `step`, `note`, `click`, `double`, `right`, `move`, `drag` (`x2`, `y2`), `type`, `key`, `hold`, `open`, `wait`, and `check` |
+| `reports/` | the crash and hang reports of a macOS run VM |
 | `frames/*.jpg` | the screen, in name order |
 | `times.txt` | the unix time of each frame, one on each line |
 | `screen.txt` | `<width> <height>`: the pixel space of the event coordinates (the frames can be smaller) |
@@ -274,8 +317,9 @@ Any tool can write this folder and then run `proofreel render <dir>`:
 - A run VM is headless and isolated: no window, no audio device (Tart `--no-audio`, QEMU `-audio none` and no
   sound device), no shared clipboard. Nothing it does shows or plays on the host.
 - One run VM at a time for each `PROOFREEL_VM` name. macOS lets a Mac run at most 2 macOS VMs at once.
-- A VNC server sends keys as keysyms. Some apps read hardware key codes or modifier-only keys, such as a key that
-  you hold down. Send those keys from in the guest instead, and log them with `proofreel event key ...`.
+- A VNC server sends keys as keysyms. Some apps read hardware key codes. `hold <key> <seconds>` holds a key down; in
+  a Tart macOS guest, `option` is Left Option and `command` is Left Command. Send other keys from in the guest, and
+  log them with `proofreel event key ...`.
 
 ## License
 

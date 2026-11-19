@@ -18,4 +18,7 @@ description: "Use to test an app as a real user on a clean VM or VNC screen and 
 6. To share: `proofreel publish <session> --out <scratchpad>/review-<journey>` (the same folder for every run of a journey). Publish its `index.html` with the Artifact tool: `files` = the `files` it prints, `capabilities` = the `capabilities` it prints, and the same file path (or the artifact `url`) on each later run. Comments on the page that people send to Claude reach you; read verdicts with ArtifactData (`reviews`).
 7. To save a place to start later tests from: `proofreel vm save <state>` (disk) or `--warm` (memory too; a Tart run VM needs `vm up --warmable`). Name states by what is true: `app-installed-no-permissions`, `signed-in-empty`.
 
+8. For a bug that needs a setup you do not have (a Bluetooth headset, no microphone, offline, an app run from its DMG or from Downloads), build a state with conditions: `proofreel vm build <state> --from <base> --condition <name>` (list: `proofreel vm conditions`). Put `condition <name>` at the top of the flow. Read the fidelity notes before you trust a pass.
+9. Start each recording of a macOS app with `--app <name>`. A crash of the app then fails the run and the page shows its stack. Never call a run good when the app window went away: read `reports/`.
+
 Write repeat journeys as flow files (one proofreel command per line, `${NAME:-default}` values) and run them with `proofreel run`. Use made-up data only.

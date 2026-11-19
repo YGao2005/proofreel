@@ -79,7 +79,7 @@ def start(args):
     if vms.CURRENT.exists():
         state = vms.current().get("state", "")
         meta.setdefault("from state", state)
-        faked = vms.state_info(state).get("conditions", [])
+        faked = vms.state_info(state).get("conditions", []) if (vms.STATES / f"{state}.json").exists() else []
         if faked:
             meta.setdefault("conditions", ", ".join(conditions.names(faked)))
         if harvests():
