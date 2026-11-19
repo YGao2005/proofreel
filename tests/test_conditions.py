@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from proofreel import cli, conditions, crash, vm
+from proofreel import Problem, cli, conditions, crash, flow, vm
 
 
 def write_condition(folder, folder_name="fake-thing", **fields):
@@ -42,7 +42,7 @@ def test_a_condition_refuses_a_run_vm_of_another_system(tmp_path, monkeypatch):
     monkeypatch.setattr(vm, "CURRENT", tmp_path / "run.json")
     (tmp_path / "run.json").write_text(json.dumps({"state": "s", "os": "linux", "conditions": []}))
     monkeypatch.setattr(vm, "ssh", lambda *a, **k: pytest.fail("nothing runs in the guest"))
-    with pytest.raises(SystemExit, match="works on macos, and the VM is linux"):
+    with pytest.raises(Problem, match="works on macos, and the VM is linux"):
         conditions.apply("offline", {})
     with pytest.raises(ValueError, match="unknown systems"):
         conditions.manifest(write_condition(tmp_path, os=["beos"]))
@@ -51,13 +51,14 @@ def test_a_condition_refuses_a_run_vm_of_another_system(tmp_path, monkeypatch):
 def test_values_take_the_default_and_a_value_with_no_default_is_required(tmp_path):
     info = conditions.manifest(write_condition(tmp_path, values={"RATE": "24000", "DMG": ""}))
     assert conditions.resolve(info, {"DMG": "/x.dmg", "OTHER": "1"}) == {"RATE": "24000", "DMG": "/x.dmg"}
-    with pytest.raises(SystemExit, match="DMG"):
+    with pytest.raises(Problem, match="DMG"):
         conditions.resolve(info, {})
 
 
-def test_a_flow_names_its_conditions_and_a_state_must_have_them():
-    flow = "# a flow\ncondition offline\nstart x --title 'condition offline'\ncondition no-microphone # why\n"
-    assert cli.needed(flow) == ["offline", "no-microphone"]
+def test_a_flow_names_its_conditions_and_a_state_must_have_them(tmp_path):
+    path = tmp_path / "f.flow"
+    path.write_text("# a flow\ncondition offline\nstart x --title 'condition offline'\ncondition no-microphone # why\n")
+    assert flow.load(path, {}, parse=lambda words: None).conditions == ["offline", "no-microphone"]
     state = [{"name": "offline", "version": 1}]
     assert conditions.missing(["offline", "no-microphone"], state) == ["no-microphone"]
 
@@ -67,14 +68,14 @@ def test_run_refuses_a_state_without_the_flow_condition(tmp_path, monkeypatch):
     monkeypatch.setattr(vm, "CURRENT", tmp_path / "run.json")
     (tmp_path / "run.json").write_text(json.dumps({"state": "plain", "conditions": [{"name": "offline", "version": 1}]}))
     ran = []
-    monkeypatch.setattr(cli, "main", lambda words: ran.append(words))
-    flow = tmp_path / "f.flow"
-    flow.write_text("condition bluetooth-headset-call-mode\nnote hello\n")
-    with pytest.raises(SystemExit, match="needs condition bluetooth-headset-call-mode.*has offline"):
-        cli.run_flow(flow, {})
+    monkeypatch.setattr(cli, "command", lambda words: ran.append(words))
+    path = tmp_path / "f.flow"
+    path.write_text("condition bluetooth-headset-call-mode\nnote hello\n")
+    with pytest.raises(Problem, match="needs condition bluetooth-headset-call-mode.*has offline"):
+        cli.run_flow(path, {})
     assert ran == []
-    flow.write_text("condition offline\nnote hello\n")
-    cli.run_flow(flow, {})
+    path.write_text("condition offline\nnote hello\n")
+    cli.run_flow(path, {})
     assert ran == [["note", "hello"]]
 
 

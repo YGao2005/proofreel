@@ -17,6 +17,7 @@ import sys
 import time
 from pathlib import Path
 
+from . import Problem
 from .vm import HOME, RUN, wait
 
 FOLDER = HOME / "qemu"
@@ -40,7 +41,7 @@ def clone(source, target):
 def firmware():
     binary = shutil.which("qemu-system-aarch64")
     if not binary:
-        sys.exit("The qemu backend needs qemu-system-aarch64 on PATH: brew install qemu.")
+        raise Problem("The qemu backend needs qemu-system-aarch64 on PATH: brew install qemu.")
     share = Path(binary).resolve().parent.parent / "share" / "qemu"
     code = CUSTOM_FIRMWARE if CUSTOM_FIRMWARE.exists() else share / "edk2-aarch64-code.fd"
     return code, share / "edk2-arm-vars.fd"
@@ -66,7 +67,7 @@ def free_port(first=0):
                 return s.getsockname()[1]
             except OSError:
                 continue
-    sys.exit("No free local port.")
+    raise Problem("No free local port.")
 
 
 def up(name, info, display=None, memory=None, cpu=None, warmable=False):
@@ -79,7 +80,7 @@ def up(name, info, display=None, memory=None, cpu=None, warmable=False):
     if not info.get("warm"):
         machine.update({k: v for k, v in (("memory", memory), ("cpu", cpu), ("display", display)) if v})
     if not re.fullmatch(r"\d{3,4}x\d{3,4}", machine["display"]):
-        sys.exit(f"--display must be WIDTHxHEIGHT, for example 1440x900, not {machine['display']!r}.")
+        raise Problem(f"--display must be WIDTHxHEIGHT, for example 1440x900, not {machine['display']!r}.")
     if not CUSTOM_FIRMWARE.exists():
         print(f"The screen is at most 1024x768, not {machine['display']}: the stock UEFI firmware has no other "
               f"modes. To get it, run firmware/build.sh from the proofreel repo.", file=sys.stderr)
@@ -111,7 +112,7 @@ def boot(machine, memory_file=None):
 
     def running():
         if not alive(proc.pid):
-            sys.exit(f"QEMU stopped. See {run / 'qemu.log'}.")
+            raise Problem(f"QEMU stopped. See {run / 'qemu.log'}.")
         try:
             status = qmp(record, "query-status")["status"]
         except OSError:
@@ -136,7 +137,7 @@ def qmp(run, command, **arguments):
             while "event" in (reply := json.loads(stream.readline())):
                 pass
     if "error" in reply:
-        sys.exit(f"QEMU {command}: {reply['error']['desc']}")
+        raise Problem(f"QEMU {command}: {reply['error']['desc']}")
     return reply["return"]
 
 
@@ -162,7 +163,7 @@ def save(name, run, warm):
         done = wait(lambda: (m := qmp(run, "query-migrate")).get("status") in ("completed", "failed") and m, 600,
                     "The memory did not save.")
         if done["status"] != "completed":
-            sys.exit(f"The memory did not save: {done.get('error-desc', 'the migration failed')}.")
+            raise Problem(f"The memory did not save: {done.get('error-desc', 'the migration failed')}.")
     else:
         qmp(run, "system_powerdown")
         wait(lambda: not alive(run["pid"]), 180, "The VM did not shut down.")

@@ -13,13 +13,12 @@ import multiprocessing
 import re
 import os
 import subprocess
-import sys
 from bisect import bisect_right
 from pathlib import Path
 
 from PIL import Image, ImageChops, ImageStat
 
-from . import draw, page
+from . import Problem, draw, page
 from .motion import FPS, Camera, Pointer, ease, fit, spans
 
 CHANGED = 1.5
@@ -37,7 +36,7 @@ def load(folder):
     pairs = sorted(zip(times, frames[: len(times)]))
     times, frames = [t for t, _ in pairs], [f for _, f in pairs]
     if not frames:
-        sys.exit(f"No frames in {folder / 'frames'}")
+        raise Problem(f"No frames in {folder / 'frames'}")
     return info, events, frames, times
 
 
@@ -216,7 +215,7 @@ def video(folder, events, frames, times, start, end, framed, width, crf, target)
     for ffmpeg in (zoomed, wide):
         ffmpeg.stdin.close()
         if ffmpeg.wait():
-            sys.exit("ffmpeg failed")
+            raise Problem("ffmpeg failed")
     starts = [now for now, _ in plan]
     for e in events:
         e["v"] = min(bisect_right(starts, e["t"]), len(starts)) / FPS

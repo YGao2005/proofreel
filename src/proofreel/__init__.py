@@ -4,7 +4,6 @@ import hashlib
 import os
 import shutil
 import subprocess
-import sys
 import tempfile
 from importlib import resources
 from pathlib import Path
@@ -12,6 +11,10 @@ from pathlib import Path
 __version__ = "0.1.0"
 
 HOME = Path(os.environ.get("PROOFREEL_HOME", Path.home() / ".proofreel"))
+
+
+class Problem(Exception):
+    """A failure that a person or agent can fix. The message says what happened and how to fix it."""
 
 
 def swift_tool(source, *flags):
@@ -23,7 +26,7 @@ def swift_tool(source, *flags):
     if binary.exists():
         return binary
     if not shutil.which("swiftc"):
-        sys.exit(f"{source} is built with swiftc, so it needs a macOS host with Xcode or the Command Line Tools.")
+        raise Problem(f"{source} is built with swiftc, so it needs a macOS host with Xcode or the Command Line Tools.")
     binary.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=binary.parent) as temp, \
             resources.as_file(resources.files(__name__).joinpath(source)) as path:

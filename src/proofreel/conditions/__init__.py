@@ -16,12 +16,11 @@ import os
 import shlex
 import shutil
 import subprocess
-import sys
 import tempfile
 import tomllib
 from pathlib import Path
 
-from .. import guest as guests, vm
+from .. import Problem, guest as guests, vm
 
 HERE = Path(__file__).parent
 FIELDS = ("name", "version", "os", "fakes", "applies", "checks", "fidelity")
@@ -34,7 +33,7 @@ def known():
 def folder(name):
     path = Path(name) if "/" in name else HERE / name
     if not (path / "condition.toml").exists():
-        sys.exit(f"No condition {name!r}. Known: {', '.join(known())}.")
+        raise Problem(f"No condition {name!r}. Known: {', '.join(known())}.")
     return path
 
 
@@ -56,7 +55,7 @@ def resolve(info, given):
     """The condition's values: the given ones, else the defaults. A value with no default must be given."""
     values = {name: given.get(name, default) for name, default in info["values"].items()}
     if missing := [name for name, value in values.items() if value == ""]:
-        sys.exit(f"Condition {info['name']} needs --set {'=... --set '.join(missing)}=...")
+        raise Problem(f"Condition {info['name']} needs --set {'=... --set '.join(missing)}=...")
     return values
 
 
@@ -83,7 +82,7 @@ def fits(name, system):
     """The condition's manifest. A condition that does not work on the guest system stops everything."""
     info = manifest(folder(name))
     if system not in info["os"]:
-        sys.exit(f"Condition {name} works on {', '.join(info['os'])}, and the VM is {system}.")
+        raise Problem(f"Condition {name} works on {', '.join(info['os'])}, and the VM is {system}.")
     return info
 
 
@@ -100,12 +99,12 @@ def apply(name, given):
             done = subprocess.run(["sh", "host.sh"], cwd=stage, env={**os.environ, **record["values"], "OUT": str(stage)},
                                   capture_output=True, text=True)
             if done.returncode:
-                sys.exit(f"Condition {name}: host.sh failed: {(done.stdout + done.stderr).strip()[-800:]}")
+                raise Problem(f"Condition {name}: host.sh failed: {(done.stdout + done.stderr).strip()[-800:]}")
         vm.ssh(f"mkdir -p {system.conditions} && rm -rf {system.conditions}/{info['name']}", timeout=30)
         vm.put(str(stage), system.conditions)
     code, output = guest(record, "apply.sh")
     if code:
-        sys.exit(f"Condition {name} did not apply: {output[-800:]}")
+        raise Problem(f"Condition {name} did not apply: {output[-800:]}")
     check(record)
     return record
 
@@ -114,5 +113,5 @@ def check(record):
     """Run the condition's check in the run VM. A failed check stops everything."""
     code, output = guest(record, "check.sh")
     if code:
-        sys.exit(f"Condition {record['name']} does not hold: {output[-800:] or f'check.sh exit {code}'}")
+        raise Problem(f"Condition {record['name']} does not hold: {output[-800:] or f'check.sh exit {code}'}")
     print(f"Condition {record['name']}: {output.splitlines()[-1] if output else 'holds'}")

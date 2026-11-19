@@ -13,7 +13,7 @@ from pathlib import Path
 
 from vncdotool import api
 
-from . import swift_tool
+from . import Problem, swift_tool
 
 SHIFTED = dict(zip('~!@#$%^&*()_+{}|:"<>?', "`1234567890-=[]\\;',./"))
 
@@ -111,7 +111,7 @@ def ocr_helper():
         return [str(swift_tool("ocr.swift"))]
     if shutil.which("tesseract"):
         return None
-    raise SystemExit("Text recognition needs macOS (swiftc) or tesseract on PATH.")
+    raise Problem("Text recognition needs macOS (swiftc) or tesseract on PATH.")
 
 
 def read_text(png):
