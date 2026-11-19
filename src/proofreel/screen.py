@@ -75,6 +75,11 @@ class Screen:
             self.client.keyPress(key)
             time.sleep(0.05)
 
+    def size(self):
+        """The framebuffer size in pixels. pause(0) waits for the connection, which sets it."""
+        self.client.pause(0)
+        return self.client.protocol.width, self.client.protocol.height
+
     def capture(self, path):
         """A full frame. captureScreen waits for an update, and some servers send none on a still screen."""
         self.client.refreshScreen(incremental=False)
