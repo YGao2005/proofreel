@@ -11,3 +11,4 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y ffmpeg fonts-dejavu-core
       - run: pip install -e . pytest
       - run: pytest -q
+      - run: node --check src/proofreel/page.js
