@@ -62,16 +62,12 @@ def start(args):
     faked = run["conditions"] if run else []
     if run:
         meta.setdefault("from state", run["state"])
-        if faked:
-            meta.setdefault("conditions", ", ".join(conditions.names(faked)))
-    meta.setdefault("", time.strftime("%Y-%m-%d %H:%M"))
     info = {"title": args.title or args.name, "about": args.about, "meta": meta, "app": args.app, "conditions": faked}
     print(f"Recording {recording.start(args.name, server, password, info, args.fps, args.reduce, run)}")
 
 
 def stop(**options):
-    verdict, length, real, size, page = recording.stop(**options)
-    print(f"{verdict}. {real:.0f} s of screen in a {length:.0f} s video, {size:.1f} MB. Page: {page}")
+    print(recording.stop(**options))
 
 
 def check(args, screen, run):
@@ -309,8 +305,7 @@ def command(argv):
         case "run": return run_flow(a.flow, dict(v.split("=", 1) for v in a.set))
         case "render":
             from .render import render
-            verdict, length, real, size = render(a.dir, framed=not a.plain, width=a.width)
-            return print(f"{verdict}. {real:.0f} s in a {length:.0f} s video, {size:.1f} MB. Page: {Path(a.dir) / 'index.html'}")
+            return print(render(a.dir, framed=not a.plain, width=a.width))
         case "publish":
             from .page import CAPABILITIES, publish
             page, files, runs = publish(a.session, a.out)

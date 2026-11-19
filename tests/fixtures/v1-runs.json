@@ -1,0 +1,7 @@
+[{"id": "sign-up-20261118-200000", "title": "Sign up", "about": "", "error": "", "verdict": "Works", "verdict_css": "ok",
+  "meta": ["from state macos-26", "1/1 checks pass", "20 s of screen in a 12 s video"], "when": "2026-11-18 20:00",
+  "fast": 8, "base": "runs/sign-up-20261118-200000/", "wide": true,
+  "events": [{"t": 0.5, "v": 0.5, "kind": "step", "text": "Open"},
+             {"t": 2.0, "v": 2.0, "kind": "click", "text": "click \"Email\""},
+             {"t": 3.0, "v": 2.4, "kind": "move", "text": "move 1, 2"},
+             {"t": 14.0, "v": 6.0, "kind": "check", "text": "\"Welcome\" is on the screen", "ok": true}]}]

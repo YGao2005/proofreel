@@ -75,6 +75,46 @@ def timeline(spans_, end, fps=FPS, fast=FAST, base=1.0):
     return frames
 
 
+class Clock:
+    """Real time and video time, as the points where the playback speed changes, joined by straight lines."""
+
+    def __init__(self, knots):
+        self.knots = knots
+
+    @classmethod
+    def of(cls, plan, fps=FPS):
+        """The clock of a plan (the real time of each video frame), within half a frame of it."""
+        points = [(now, n / fps) for n, (now, _) in enumerate(plan)]
+        keep, stack = {0, len(points) - 1}, [(0, len(points) - 1)] if len(points) > 1 else []
+        while stack:
+            a, b = stack.pop()
+            (ra, va), (rb, vb) = points[a], points[b]
+            far, worst = None, 0.5 / fps
+            for i in range(a + 1, b):
+                video = va + (vb - va) * (points[i][0] - ra) / (rb - ra) if rb > ra else va
+                if abs(video - points[i][1]) > worst:
+                    far, worst = i, abs(video - points[i][1])
+            if far is not None:
+                keep.add(far)
+                stack += [(a, far), (far, b)]
+        return cls([[round(points[i][0], 3), round(points[i][1], 3)] for i in sorted(keep)])
+
+    def video(self, real):
+        return _along(self.knots, 0, 1, real)
+
+    def real(self, video):
+        return _along(self.knots, 1, 0, video)
+
+
+def _along(knots, x, y, value):
+    """Interpolate along the knots from column x to column y; past either end, keep the end's slope (or 1)."""
+    if len(knots) < 2:
+        return value - (knots[0][x] - knots[0][y] if knots else 0)
+    i = min(max(bisect_right([k[x] for k in knots], value), 1), len(knots) - 1)
+    (x0, y0), (x1, y1) = (knots[i - 1][x], knots[i - 1][y]), (knots[i][x], knots[i][y])
+    return y0 + (y1 - y0) * (value - x0) / (x1 - x0) if x1 > x0 else y0
+
+
 @dataclass
 class Point:
     t: float

@@ -16,7 +16,7 @@ from bisect import bisect_right
 from PIL import Image, ImageChops, ImageStat
 
 from . import Problem, draw, page
-from .motion import FPS, Camera, Pointer, ease, fit, spans
+from .motion import FPS, Camera, Clock, Pointer, ease, fit, spans
 from .session import CHIP, RING, VERDICT, Session, moment
 
 CHANGED = 1.5
@@ -203,13 +203,10 @@ def video(folder, events, frames, times, start, end, framed, width, crf, target)
         ffmpeg.stdin.close()
         if ffmpeg.wait():
             raise Problem("ffmpeg failed")
-    starts = [now for now, _ in plan]
-    for e in events:
-        e["v"] = min(bisect_right(starts, moment(e)), len(starts)) / FPS
     poster = Image.open(frames[len(frames) // 2]).convert("RGB")
     poster.thumbnail((1280, 1280))
     poster.save(folder / "poster.jpg", quality=82)
-    return len(plan) / FPS
+    return len(plan) / FPS, Clock.of(plan)
 
 
 def shots(folder, events, frames, times, start):
@@ -235,8 +232,9 @@ def render(folder, framed=True, width=None, crf=20, target=30):
     scale = Image.open(frames[-1]).width / (session.screen_width() or Image.open(frames[-1]).width)
     rel = relative(events, start, scale)
     end = max(times[-1] - start, max((e.get("end", e["t"]) for e in rel), default=0) + 2.0)
-    length = video(folder, rel, frames, times, start, end, framed, width, crf, target)
+    length, clock = video(folder, rel, frames, times, start, end, framed, width, crf, target)
     shots(folder, rel, frames, times, start)
-    verdict = page.write(folder, info, rel, length, end)
+    verdict = page.write(folder, info, rel, length, end, clock)
     size = (folder / "session.mp4").stat().st_size / 1e6
-    return verdict, length, end, size
+    return (f"{verdict.capitalize()}. {end:.0f} s of screen in a {length:.0f} s video, {size:.1f} MB. "
+            f"Page: {folder / 'index.html'}")
