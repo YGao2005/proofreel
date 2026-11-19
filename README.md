@@ -80,7 +80,12 @@ proofreel event check "The file is saved" --ok
 
 ## VM states
 
-Use a macOS VM only when the test needs a native Mac app. Use a Linux VM for a web page, a server flow, or anything that a browser shows, or a Windows VM when the target is Windows: a Mac can run only 2 macOS VMs at the same time, and QEMU VMs are limited only by memory.
+Send each test to the right VM:
+
+- A test that any browser can run goes to the `linux` state (QEMU).
+- A test of a Windows app goes to a Windows state (QEMU).
+- Use a macOS VM only for a native Mac app. A Mac runs at most 2 macOS VMs at the same time. QEMU VMs are limited
+  only by memory.
 
 ### macOS and Linux (Tart)
 
@@ -172,6 +177,34 @@ Limits that are particular to QEMU:
   scheduled task with `/it`, as in the example above.
 - After a warm `up`, the guest clock shows the time of the save until Windows syncs it again.
 - QEMU's VNC server types the keysym that it gets, so proofreel sends the upper-case keysym for a capital letter.
+
+### Linux with a browser (QEMU)
+
+The `linux` state is Debian 13 arm64 with Xfce and Chromium at 1440x900. It signs in by itself as `tester`
+(password `tester`). SSH uses the same user and password.
+
+```bash
+proofreel vm up linux                                   # about 11 s to SSH; the desktop is ready at the same time
+proofreel vm sh 'browse http://10.0.2.2:8000/'          # open a page in Chromium on the screen
+proofreel vm sh 'setsid -f xfce4-terminal'              # any app: SSH sessions have DISPLAY=:0
+```
+
+- The guest reaches the host at `10.0.2.2`. A server on the host's 127.0.0.1 is enough.
+- `browse` starts Chromium maximized, or opens a new tab when Chromium runs. The page shows about 1.5 s later.
+- Chromium shows no first-run pages. Policies turn off the password, autofill, translate, and sign-in prompts.
+- The guest has no screen lock, no screensaver, no screen blank, and no automatic updates.
+- The screen size is the `--display` size: the kernel takes the largest firmware mode (`video=efifb:auto`).
+- The state disk is about 2.1 GB. The state is cold only: a cold `up` is already fast.
+
+To make the `linux` state again:
+
+1. Get `debian-13-generic-arm64.qcow2` from `cloud.debian.org/images/cloud/trixie/latest/`. Make it larger with
+   `qemu-img resize debian-13-generic-arm64.qcow2 10G`.
+2. Make a cloud-init disk: `xorriso -as mkisofs -V cidata -J -r -o seed.iso images/debian-seed`.
+3. Start the image once in QEMU with the flags of `up`, and add `seed.iso` as a virtio disk.
+4. Copy `images/debian-desktop.sh` into the guest. Run `sudo sh debian-desktop.sh tester`, then shut down.
+5. `proofreel vm base linux debian-13-generic-arm64.qcow2 --backend qemu --user tester --guest-password tester`.
+6. `proofreel vm up linux --memory 2048`, then `proofreel vm save linux`.
 
 ## The session folder
 

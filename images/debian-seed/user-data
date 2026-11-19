@@ -1,0 +1,11 @@
+#cloud-config
+hostname: proofreel-linux
+users:
+  - name: tester
+    gecos: Test User
+    shell: /bin/bash
+    groups: [sudo]
+    sudo: "ALL=(ALL) NOPASSWD:ALL"
+    lock_passwd: false
+    plain_text_passwd: tester
+ssh_pwauth: true

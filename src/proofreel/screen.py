@@ -35,13 +35,15 @@ class Screen:
         self.client.mouseMove(x, y)
 
     def click(self, x, y, button=1, count=1):
-        """Approach the target, rest, then press: some apps need hover before a click."""
+        """Approach the target, rest, press, then rest again: some apps need hover before a click, and keys sent at
+        once after a click that moves the focus can be lost (Chromium on Linux drops the first one)."""
         self.client.mouseMove(x - 6, y - 6)
         time.sleep(0.15)
         self.client.mouseMove(x, y)
         time.sleep(0.15)
         for _ in range(count):
             self.client.mousePress(button)
+        time.sleep(0.2)
 
     def drag(self, x1, y1, x2, y2, steps=12):
         self.client.mouseMove(x1, y1)
