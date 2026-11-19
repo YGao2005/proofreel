@@ -6,7 +6,7 @@ import shutil
 import subprocess
 import sys
 
-from .vm import HOME, RUN, current, scp, ssh, wait  # WHY: ax.py calls tart.current, tart.ssh, tart.scp
+from .vm import HOME, RUN, ssh, wait
 
 PREFIX = "pr-"
 

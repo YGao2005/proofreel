@@ -5,8 +5,10 @@
   step <text> | note <text>                             Name the next part (a caption in the video), or add a note.
   click <x> <y> [--double|--right] | move <x> <y> | drag <x1> <y1> <x2> <y2> | type <text> | key <keys...>
   click-text <text> [--nth N] [--timeout S] [--if-shown]   Find the words on the screen, then click them.
+  ax [--app NAME] [--find TEXT] [--json] | click-ax <label> [--role R] [--app NAME] [--nth N] [--timeout S]
+                                                        Read the accessibility tree of a run VM, or click by label.
   wait-text <text> [seconds] | find [text]              Wait for words, or print the words on the screen.
-  check text|no-text <text> [seconds] | check cmd <shell command> --label L   A pass or fail on the page.
+  check text|no-text|ax|no-ax <text> [seconds] | check cmd <shell command> --label L   A pass or fail on the page.
   event <kind> <text> [--x X --y Y] [--ok|--fail] [--detail D]   Log an action that another tool did.
   shot <png>                                            Save the screen.
   run <flow> [--set NAME=VALUE]                         Run a flow file: one proofreel command per line.
@@ -30,6 +32,7 @@ import sys
 import time
 from pathlib import Path
 
+from . import ax, tart
 from . import vm as vms
 from .screen import Screen, center, find, screen_text, wait_for
 
@@ -103,12 +106,14 @@ def stop(args, error=None):
 
 
 def check(args, screen):
-    if args.kind in ("text", "no-text"):
-        text = args.args[0]
-        seconds = float(args.args[1]) if len(args.args) > 1 else (10 if args.kind == "text" else 0)
-        found = wait_for(screen, text, seconds, present=args.kind == "text")
-        ok = bool(found) == (args.kind == "text")
-        return ok, f'"{text}" is {"" if args.kind == "text" else "not "}on the screen', ""
+    if args.kind in ("text", "no-text", "ax", "no-ax"):
+        text, present = args.args[0], not args.kind.startswith("no-")
+        seconds = float(args.args[1]) if len(args.args) > 1 else (10 if present else 0)
+        if args.kind.endswith("ax"):
+            found = ax.wait_for(screen, text, seconds, present, app=args.app, role=args.role)
+            return bool(found) == present, f'"{text}" is {"" if present else "not "}in the accessibility tree', ""
+        found = wait_for(screen, text, seconds, present=present)
+        return bool(found) == present, f'"{text}" is {"" if present else "not "}on the screen', ""
     if args.kind == "cmd":
         command = " ".join(args.args)
         result = subprocess.run(command, shell=True, capture_output=True, text=True)
@@ -172,6 +177,16 @@ def parser():
             s.add_argument("--nth", type=int, default=1)
             s.add_argument("--timeout", type=float, default=10)
             s.add_argument("--if-shown", action="store_true")
+    s = sub.add_parser("ax")
+    s.add_argument("--app")
+    s.add_argument("--find")
+    s.add_argument("--json", action="store_true")
+    s = sub.add_parser("click-ax")
+    s.add_argument("label")
+    s.add_argument("--role")
+    s.add_argument("--app")
+    s.add_argument("--nth", type=int, default=1)
+    s.add_argument("--timeout", type=float, default=10)
     s = sub.add_parser("click")
     s.add_argument("x", type=int)
     s.add_argument("y", type=int)
@@ -187,9 +202,11 @@ def parser():
     s = sub.add_parser("key")
     s.add_argument("keys", nargs="+")
     s = sub.add_parser("check")
-    s.add_argument("kind", choices=["text", "no-text", "cmd"])
+    s.add_argument("kind", choices=["text", "no-text", "ax", "no-ax", "cmd"])
     s.add_argument("args", nargs="+")
     s.add_argument("--label")
+    s.add_argument("--app")
+    s.add_argument("--role")
     s = sub.add_parser("event")
     s.add_argument("kind")
     s.add_argument("text")
@@ -312,6 +329,8 @@ def command(argv):
             log("check", label, ok=ok, detail=detail)
             print(("Pass: " if ok else "Fail: ") + label)
             return sys.exit(0 if ok else 1)
+    if a.command in ("ax", "click-ax") or a.command == "check" and a.kind.endswith("ax"):
+        ax.need_vm(a.vnc or os.environ.get("PROOFREEL_VNC"))
     with Screen(*target(a)) as screen:
         act(a, screen)
 
@@ -358,6 +377,21 @@ def act(a, screen):
                 sys.exit(f'"{a.text}" is not on the screen.')
             x, y = center(lines[a.nth - 1])
             log("click", f'click "{a.text}"', x=x, y=y)
+            screen.click(x, y)
+        case "ax":
+            if a.json:
+                return print(json.dumps(ax.tree(a.app), indent=1, ensure_ascii=False))
+            found = ax.matches(ax.elements(screen, a.app), a.find) if a.find else ax.elements(screen, a.app)
+            for element in found:
+                print(ax.describe(element, indent=not a.find))
+            if a.find and not found:
+                sys.exit(1)
+        case "click-ax":
+            found = ax.wait_for(screen, a.label, a.timeout, app=a.app, role=a.role)
+            if len(found) < a.nth:
+                sys.exit(f'"{a.label}" is not in the accessibility tree.')
+            x, y = found[a.nth - 1]["x"], found[a.nth - 1]["y"]
+            log("click", f'click "{a.label}"', x=x, y=y)
             screen.click(x, y)
         case "check":
             ok, label, detail = check(a, screen)

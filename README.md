@@ -78,6 +78,42 @@ proofreel event click 'click "Save"' --x 640 --y 410
 proofreel event check "The file is saved" --ok
 ```
 
+### Click by the accessibility tree (macOS guests)
+
+Text recognition finds what the screen shows. In a macOS run VM, proofreel can also read the accessibility (AX)
+tree: the role, label, value, and frame of each element. A small helper runs in the guest over SSH, so the app under
+test needs no permission.
+
+```bash
+proofreel ax --app TextEdit                 # the tree of the app's windows, with the click point of each element
+proofreel ax --find "Save"                  # only the elements with this label (the front app by default)
+proofreel ax --json                         # the raw tree: frames in points, and the screen size in points
+proofreel click-ax "Save" --role AXButton   # find the element by its label, then click its center
+proofreel check ax "Saved" 10               # a pass when the label shows in 10 s
+proofreel check no-ax "Error"
+```
+
+The label of an element is its title, description, linked label, text value, or identifier. An exact label comes
+first, then a label that contains the text. Case is ignored. An element counts only when its center is in its window
+and its scroll areas, so scroll to a row that is out of view first. The click points are screen pixels (2x the
+points on a Retina guest), the same as `click`.
+
+The helper is compiled on the host once (`swiftc`, into `~/.proofreel/bin/`) and copied into the guest on first use.
+It needs a run VM from `proofreel vm up`, because it uses SSH. A plain `--vnc` screen cannot use it.
+
+**The permission.** macOS gives each app its own permissions. A process that SSH starts uses the Accessibility
+permission of `/usr/libexec/sshd-keygen-wrapper`. Give that permission once in your base state:
+
+1. `proofreel vm up <state>`, then open the VNC address that it prints in a VNC viewer.
+2. In the guest, open System Settings > Privacy & Security > Accessibility, click **+**, and type the password. In the
+   file dialog, press Cmd-Shift-G, type `/usr/libexec/sshd-keygen-wrapper`, press Return, and click **Open**. Make sure
+   that its switch is on.
+3. Save it as a new state, such as `proofreel vm save macos-ax`, and make your later states from it.
+
+The app under test gets nothing from this, so a state such as "app installed, no permissions" stays true for the app.
+But the grant leaves a trace: `sshd-keygen-wrapper` shows in the Accessibility list. A check that the list is empty
+sees it.
+
 ## VM states
 
 Send each test to the right VM:
