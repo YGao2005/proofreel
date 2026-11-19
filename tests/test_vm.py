@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from proofreel import qemu, vm
+from proofreel import guest, qemu, vm
 
 
 def test_states_tree_survives_a_parent_cycle(tmp_path, monkeypatch, capsys):
@@ -16,8 +16,9 @@ def test_states_tree_survives_a_parent_cycle(tmp_path, monkeypatch, capsys):
 def test_saving_over_the_run_state_keeps_its_parent(tmp_path, monkeypatch):
     monkeypatch.setattr(vm, "STATES", tmp_path)
     monkeypatch.setattr(vm, "CURRENT", tmp_path / "run.json")
-    vm.write_state("app", parent="clean", user="u", password="p", warm=False, backend="qemu")
-    (tmp_path / "run.json").write_text(json.dumps({"state": "app", "backend": "qemu", "user": "u", "password": "p"}))
+    vm.write_state("app", parent="clean", user="u", password="p", warm=False, backend="qemu", os="linux")
+    (tmp_path / "run.json").write_text(json.dumps({"state": "app", "backend": "qemu", "os": "linux", "user": "u",
+                                                   "password": "p", "conditions": []}))
 
     class Backend:
         save = staticmethod(lambda name, run, warm: {"memory": 4096, "cpu": 4})
@@ -27,6 +28,21 @@ def test_saving_over_the_run_state_keeps_its_parent(tmp_path, monkeypatch):
     monkeypatch.setattr(vm, "start", lambda info, name, run: run)
     vm.save("app")
     assert vm.state_info("app")["parent"] == "clean"
+
+
+def test_a_state_must_say_its_backend_and_system(tmp_path, monkeypatch):
+    monkeypatch.setattr(vm, "STATES", tmp_path)
+    vm.write_state("old", parent="x", user="u", password="p")
+    with pytest.raises(SystemExit, match="does not say its backend or os"):
+        vm.state_info("old")
+
+
+@pytest.mark.parametrize("system, cleaned", [("windows", True), ("linux", False), ("macos", False)])
+def test_only_windows_forgets_its_screen_size_before_a_cold_save(system, cleaned, monkeypatch):
+    commands = []
+    monkeypatch.setattr(vm, "ssh", lambda command, **_: commands.append(command))
+    guest.of({"os": system}).before_save({})
+    assert bool(commands) == cleaned and all("GraphicsDrivers" in c for c in commands)
 
 
 def test_qemu_display_comes_from_up_then_the_state_then_the_default(tmp_path, monkeypatch):

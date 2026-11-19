@@ -17,7 +17,7 @@ import sys
 import time
 from pathlib import Path
 
-from .vm import HOME, RUN, ssh, wait
+from .vm import HOME, RUN, wait
 
 FOLDER = HOME / "qemu"
 MACHINE = {"memory": 4096, "cpu": 4, "display": "1440x900"}
@@ -164,9 +164,6 @@ def save(name, run, warm):
         if done["status"] != "completed":
             sys.exit(f"The memory did not save: {done.get('error-desc', 'the migration failed')}.")
     else:
-        # WHY: Windows keeps the last screen size and scales it to a new one. With none saved, it fills the screen.
-        ssh(r"reg delete HKLM\SYSTEM\CurrentControlSet\Control\GraphicsDrivers\Configuration /f", check=False,
-            run=run)
         qmp(run, "system_powerdown")
         wait(lambda: not alive(run["pid"]), 180, "The VM did not shut down.")
     target = folder(name)

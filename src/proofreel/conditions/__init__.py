@@ -1,7 +1,8 @@
 """Conditions: fake hardware and setups in a VM guest, such as a Bluetooth headset, no microphone, or no network.
 
 A condition is a folder here (or any folder path) with:
-  condition.toml   name, version, fakes, applies, checks, fidelity, and [values] (name = default; "" = required)
+  condition.toml   name, version, os (the guest systems it works on), fakes, applies, checks, fidelity, and
+                   [values] (name = default; "" = required)
   apply.sh         runs once in the guest, as the guest user (sudo needs no password)
   check.sh         runs in the guest; exit 0 when the effect holds; it prints what it saw
   host.sh          optional; runs on the host first, in a copy of the folder ($OUT). The copy goes to the guest.
@@ -20,11 +21,10 @@ import tempfile
 import tomllib
 from pathlib import Path
 
-from .. import vm
+from .. import guest as guests, vm
 
 HERE = Path(__file__).parent
-FIELDS = ("name", "version", "fakes", "applies", "checks", "fidelity")
-GUEST = "/Users/Shared/proofreel/conditions"
+FIELDS = ("name", "version", "os", "fakes", "applies", "checks", "fidelity")
 
 
 def known():
@@ -43,6 +43,8 @@ def manifest(path):
     info = tomllib.loads((path / "condition.toml").read_text())
     if missing := [f for f in FIELDS if not info.get(f)]:
         raise ValueError(f"{path.name}/condition.toml has no {', '.join(missing)}.")
+    if unknown := [name for name in info["os"] if name not in guests.GUESTS]:
+        raise ValueError(f"{path.name}/condition.toml names unknown systems {unknown}. Known: {', '.join(guests.GUESTS)}.")
     if info["name"] != path.name:
         raise ValueError(f"{path.name}/condition.toml is named {info['name']!r}; the folder and the name must match.")
     if missing := [s for s in ("apply.sh", "check.sh") if not (path / s).exists()]:
@@ -69,17 +71,27 @@ def missing(needed, conditions):
 
 def guest(record, script):
     env = " ".join(f"{k}={shlex.quote(str(v))}" for k, v in record.get("values", {}).items())
+    where = guests.of(vm.current()).conditions
     try:
-        result = vm.ssh(f"cd {GUEST}/{record['name']} && {env} sh {script}", check=False, timeout=300)
+        result = vm.ssh(f"cd {where}/{record['name']} && {env} sh {script}", check=False, timeout=300)
     except subprocess.TimeoutExpired:
         return 124, f"{script} did not end in 300 s."
     return result.returncode, (result.stdout + result.stderr).strip()
 
 
+def fits(name, system):
+    """The condition's manifest. A condition that does not work on the guest system stops everything."""
+    info = manifest(folder(name))
+    if system not in info["os"]:
+        sys.exit(f"Condition {name} works on {', '.join(info['os'])}, and the VM is {system}.")
+    return info
+
+
 def apply(name, given):
     """Apply a condition in the run VM, then check it. Returns the record to keep in the state."""
     path = folder(name)
-    info = manifest(path)
+    system = guests.of(vm.current())
+    info = fits(name, system.name)
     record = {"name": info["name"], "version": info["version"], "values": resolve(info, given)}
     with tempfile.TemporaryDirectory() as temp:
         stage = Path(temp) / info["name"]
@@ -89,8 +101,8 @@ def apply(name, given):
                                   capture_output=True, text=True)
             if done.returncode:
                 sys.exit(f"Condition {name}: host.sh failed: {(done.stdout + done.stderr).strip()[-800:]}")
-        vm.ssh(f"mkdir -p {GUEST} && rm -rf {GUEST}/{info['name']}", timeout=30)
-        vm.put(str(stage), GUEST)
+        vm.ssh(f"mkdir -p {system.conditions} && rm -rf {system.conditions}/{info['name']}", timeout=30)
+        vm.put(str(stage), system.conditions)
     code, output = guest(record, "apply.sh")
     if code:
         sys.exit(f"Condition {name} did not apply: {output[-800:]}")

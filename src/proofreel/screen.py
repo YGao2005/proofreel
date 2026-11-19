@@ -17,14 +17,13 @@ from vncdotool import api
 from . import __version__
 
 SHIFTED = dict(zip('~!@#$%^&*()_+{}|:"<>?', "`1234567890-=[]\\;',./"))
-# WHY: the VNC server of a Tart macOS guest sends the X11 Meta keys as Option and the Alt keys as Command.
-MAC_KEYS = {"option": "meta", "roption": "rmeta", "command": "alt", "rcommand": "ralt"}
 HOME = Path.home() / ".proofreel"
 
 
 class Screen:
-    def __init__(self, server, password=None):
-        self.server, self.password = server, password
+    def __init__(self, server, password=None, keys=None):
+        """keys: key names that this screen's VNC server needs as other names (see guest.py)."""
+        self.server, self.password, self.keys = server, password, keys or {}
 
     def __enter__(self):
         self.client = api.connect(self.server, password=self.password or None, timeout=30)
@@ -78,7 +77,7 @@ class Screen:
             time.sleep(0.05)
 
     def hold(self, key, seconds):
-        key = MAC_KEYS.get(key, key)
+        key = self.keys.get(key, key)
         self.client.keyDown(key)
         time.sleep(seconds)
         self.client.keyUp(key)

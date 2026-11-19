@@ -1,5 +1,6 @@
 name = "run-from-dmg"
 version = 1
+os = ["macos"]
 fakes = "A user who opens the app from its mounted disk image and never copies it to /Applications."
 applies = "host.sh copies the DMG (--set DMG=<host path>) into the guest. Apply mounts it in /Volumes as a user does (shown in Finder), and a LaunchDaemon mounts it again at each boot. The flow opens the app from /Volumes."
 checks = "The DMG is mounted, and an app is at the top of its volume. The check prints the app's path."
