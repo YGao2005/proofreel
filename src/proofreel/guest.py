@@ -2,7 +2,8 @@
 
 A guest owns the jobs that only some systems have, or that each system does in its own way: crash reports, a step
 before a cold save, modifier keys that its VNC server sends differently or cannot send, the accessibility tree,
-helpers that run in the guest, how to find a running process, and the guest folder for conditions. A new system, or a new
+helpers that run in the guest, how to find a running process, and the folder and shell for plugins (`home`,
+`script`, `run_script`). A new system, or a new
 job for one, is a change in this file only.
 """
 
@@ -14,12 +15,30 @@ from . import Problem, crash, swift_tool
 TAP_PRESS, TAP_GAP = 0.07, 0.11
 
 
+def powershell(command):
+    """A PowerShell command line that works from Windows OpenSSH's default shell (cmd)."""
+    return f'powershell -NoProfile -ExecutionPolicy Bypass -Command "{command}"'
+
+
 class Guest:
     name = ""
     keys = {}
-    conditions = ""
+    home = ""
     ax = False
     desktop = ""
+
+    def script(self, step):
+        """The file name of a plugin step's script on this system."""
+        return f"{step}.sh"
+
+    def run_script(self, folder, step, values):
+        """The shell command that runs a plugin step in its folder, with its values in the environment."""
+        env = " ".join(f"{k}={shlex.quote(str(v))}" for k, v in values.items())
+        return f"cd {shlex.quote(folder)} && {env} sh {self.script(step)}"
+
+    def fresh_folder(self, path):
+        """The shell command that makes an empty folder at path, removing what was there."""
+        return f"mkdir -p {shlex.quote(path.rsplit('/', 1)[0])} && rm -rf {shlex.quote(path)}"
 
     def mark(self, run):
         """Mark the session start, so harvest finds only the reports made after it."""
@@ -56,7 +75,7 @@ class MacOS(Guest):
     keys = {"option": "meta", "roption": "rmeta", "command": "alt", "rcommand": "ralt"}
     # WHY: VNC has no Fn key, and a tap sent over VNC loses its timing. keys.swift posts these in the guest.
     modifiers = {"fn", "option", "roption", "command", "rcommand", "control", "rcontrol", "shift", "rshift"}
-    conditions = "/Users/Shared/proofreel/conditions"
+    home = "/Users/Shared/proofreel"
     ax = True
 
     def mark(self, run):
@@ -104,17 +123,29 @@ class MacOS(Guest):
 class Linux(Guest):
     name = "linux"
     desktop = "pgrep -x xfce4-panel >/dev/null || pgrep -x gnome-shell >/dev/null"
-    conditions = "/var/tmp/proofreel/conditions"
+    home = "/var/tmp/proofreel"
 
 
 class Windows(Guest):
     name = "windows"
-    desktop = 'powershell -NoProfile -Command "if (Get-Process explorer -ErrorAction SilentlyContinue) { exit 0 } exit 1"'
+    home = "C:/ProgramData/proofreel"
+
+    def script(self, step):
+        return f"{step}.ps1"
+
+    def run_script(self, folder, step, values):
+        env = "".join(f"$env:{k} = '{str(v).replace(chr(39), chr(39) * 2)}'; " for k, v in values.items())
+        return powershell(f"Set-Location '{folder}'; {env}& .\\{self.script(step)}; exit $LASTEXITCODE")
+
+    def fresh_folder(self, path):
+        return powershell(f"Remove-Item -Recurse -Force -ErrorAction SilentlyContinue '{path}'; "
+                          f"New-Item -ItemType Directory -Force '{path.rsplit('/', 1)[0]}' | Out-Null")
+    desktop = powershell("if (Get-Process explorer -ErrorAction SilentlyContinue) { exit 0 } exit 1")
 
     def running(self, run, process):
         name = process.removesuffix(".exe").replace("'", "''")
-        return run.ssh(f"if (Get-Process -Name '{name}' -ErrorAction SilentlyContinue) {{ exit 0 }} else {{ exit 1 }}",
-                      check=False, timeout=30).returncode == 0
+        return run.ssh(powershell(f"if (Get-Process -Name '{name}' -ErrorAction SilentlyContinue) {{ exit 0 }} exit 1"),
+                       check=False, timeout=30).returncode == 0
 
     def before_save(self, run):
         # WHY: Windows keeps the last screen size and scales it to a new one. With none saved, it fills the screen.
