@@ -182,7 +182,7 @@ it. The page lists the conditions of the run in its header.
 | `no-microphone` | no input device at all | Core Audio lists no device with input |
 | `offline` | no internet (pf refuses all traffic but SSH from the host) | pf is on; a TCP connection and DNS fail |
 | `run-from-dmg` | the app runs from its mounted DMG (`DMG=<host path>`) | the DMG is mounted with an app at its top |
-| `quarantined-download` | the app is in `~/Downloads` with a browser's quarantine flag, so the first open shows Gatekeeper and translocates it | the flag is set and not yet approved |
+| `quarantined-download` | the app is in `~/Downloads` with the quarantine flag and download record a browser makes, so the first open shows Gatekeeper and translocates it | the flag is set, not yet approved, and has a download record |
 
 The headset is a small Core Audio driver (`headset.c`, an AudioServerPlugIn), built on the host with clang. It
 reports Bluetooth transport. When input starts, it asks Core Audio for a configuration change to the call rate, as a

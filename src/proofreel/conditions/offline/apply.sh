@@ -3,7 +3,8 @@ set -eu
 sudo tee /etc/proofreel-offline.conf >/dev/null <<'RULES'
 set skip on lo0
 block return all
-pass in proto tcp from any to any port 22 keep state
+pass in proto tcp from any to any port 22 flags any no state
+pass out proto tcp from any port 22 to any flags any no state
 RULES
 sudo tee /Library/LaunchDaemons/dev.proofreel.offline.plist >/dev/null <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>

@@ -1,6 +1,6 @@
 name = "offline"
 version = 1
 fakes = "A Mac with no internet: every connection out fails at once, and so does DNS."
-applies = "A pf rule set in the guest refuses all traffic (block return) except SSH in from the host, which proofreel needs. A LaunchDaemon loads it again at each boot."
+applies = "A pf rule set in the guest refuses all traffic (block return) except SSH from the host, which proofreel needs; SSH passes with no state, so the session that applies it lives on. A LaunchDaemon loads it again at each boot."
 checks = "pf is on with the proofreel rules, a TCP connection to 1.1.1.1:443 fails, and a DNS query for example.com (dig) fails."
 fidelity = "The network interface stays up and has an address, so NWPathMonitor and SCNetworkReachability still say the network is there. A Mac with Wi-Fi off says it is not. Apps see refused connections, not 'not connected to the internet', and a lookup through the system resolver can take a minute to fail."

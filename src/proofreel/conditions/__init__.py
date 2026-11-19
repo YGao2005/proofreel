@@ -69,7 +69,10 @@ def missing(needed, conditions):
 
 def guest(record, script):
     env = " ".join(f"{k}={shlex.quote(str(v))}" for k, v in record.get("values", {}).items())
-    result = vm.ssh(f"cd {GUEST}/{record['name']} && {env} sh {script}", check=False, timeout=300)
+    try:
+        result = vm.ssh(f"cd {GUEST}/{record['name']} && {env} sh {script}", check=False, timeout=300)
+    except subprocess.TimeoutExpired:
+        return 124, f"{script} did not end in 300 s."
     return result.returncode, (result.stdout + result.stderr).strip()
 
 
