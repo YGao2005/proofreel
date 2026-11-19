@@ -45,3 +45,9 @@ def test_a_long_wait_plays_faster_than_real_time_even_while_the_screen_changes()
     plan = timeline(spans(changes, [{"t": 10.0, "end": 21.0, "kind": "wait"}]), 24)
     during = [speed for now, speed in plan if 12.5 <= now <= 19.5]
     assert min(during) > 2.5
+
+
+def test_the_page_assets_ship_with_the_package():
+    from proofreel import page
+    assert "function render()" in page.ASSETS.joinpath("page.js").read_text()
+    assert "--accent" in page.ASSETS.joinpath("page.css").read_text()
