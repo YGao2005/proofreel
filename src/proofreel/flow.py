@@ -67,7 +67,7 @@ def run(flow, execute, abort):
         except BaseException as error:
             abort(f"{where}: {error}")
             raise
-        if code and words[0] != "check":
+        if code and words[0] not in ("check", "stop"):
             abort(f"{where}: exit {code}")
             raise Problem(f"{where} failed (exit {code}).")
         failed |= code

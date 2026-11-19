@@ -136,6 +136,13 @@ A stat is `mean`, `min`, `max`, `p50`, `p90`, `p95`, `p99`, `last`, `count`, or 
 that says which series there are. `stop` prints a line for each series, and `proofreel stats [session]` prints them
 again (`--json` for all the numbers).
 
+Input latency needs no probe: when the run stops, proofreel reads the recorded frames and measures how long the
+screen took to answer each click (around the pointer) and each key (anywhere), with an error bar of half the time
+between two frames. It ignores what was already changing just before (a caret, a spinner). The series are
+`input/click` and `input/key`; an input that got no change on the screen in 2 s counts as `failed`. A budget on
+`input/*` is decided at `stop`, which then exits 1 if it failed:
+`check metric input/* p95 --below 0.2`.
+
 A probe is a folder like a condition (`probe.toml` and a script), found in the same places. It runs on the host
 (`run.py`) or in the guest (`run.sh`, `run.ps1`) and prints one JSON line for each measure:
 `{"m": "cpu/app", "v": 42}` is a sample, `{"m": "net/GET /items", "d": 0.31, "ok": true}` is a span (something that

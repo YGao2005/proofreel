@@ -40,7 +40,7 @@ def run_data(folder, info, events, length, real, clock, camera):
     meta += [f"conditions {', '.join(c['name'] for c in info['conditions'])}" if info.get("conditions") else "",
              f"{passed}/{len(checks)} checks pass" if checks else "", f"{real:.0f} s of screen in a {length:.0f} s video"]
     started = info.get("started")
-    keep = ("t", "dur", "kind", "text", "ok", "detail", "shot", "row", "chip")
+    keep = ("t", "dur", "kind", "text", "ok", "detail", "shot", "row", "chip", "late")
     return {"version": VERSION, "id": folder.name, "title": info.get("title") or folder.name,
             "about": info.get("about", ""), "error": info.get("error", ""), "verdict": verdict(info, events),
             "meta": [m for m in meta if m], "base": "", "length": round(length, 2), "real": round(real, 2),

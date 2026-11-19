@@ -17,6 +17,9 @@ from pathlib import Path
 from . import Problem
 
 STATS = ("mean", "min", "max", "p50", "p90", "p95", "p99", "last", "count", "failed")
+AFTER = ("input/",)
+TRACKS = {"input/click": {"label": "Click latency", "better": "lower"},
+          "input/key": {"label": "Key latency", "better": "lower"}}
 
 
 @dataclass
@@ -94,7 +97,9 @@ class Metrics:
     def line(self, m):
         """One series in one line: what it is, and the numbers that say most about it."""
         chosen = self.select(m)
-        kind, label = chosen[-1].kind, self.track(m).get("label", m)
+        kinds = {x.kind for x in chosen}
+        kind = "span" if "span" in kinds else "sample" if "sample" in kinds else "mark"
+        label = self.track(m).get("label", m)
         unit = self.unit(m, kind)
         unit = ("" if unit in ("%", "") else " ") + unit
         if kind == "mark":
@@ -120,7 +125,7 @@ def load(folder):
     folder = Path(folder)
     info_path = folder / "session.json"
     info = json.loads(info_path.read_text()) if info_path.exists() else {}
-    tracks = {glob: track for probe in info.get("probes") or [] for glob, track in probe.get("tracks", {}).items()}
+    tracks = {**TRACKS, **{glob: track for probe in info.get("probes") or [] for glob, track in probe.get("tracks", {}).items()}}
     status_path = folder / "metrics" / "probes.json"
     status = json.loads(status_path.read_text()) if status_path.exists() else {}
     measures = []
@@ -157,3 +162,29 @@ def check(folder, glob, stat, below=None, above=None, since=None, window="the ru
     ok = value < below if below is not None else value > above
     unit = metrics.unit(metrics.select(glob)[-1].m, metrics.select(glob)[-1].kind) if stat not in ("count", "failed") else ""
     return ok, label, f"{stat} {number(value)}{'' if unit in ('%', '') else ' '}{unit}"
+
+
+def pending(glob, stat, below, above, since, until, window):
+    """A budget on a series that is measured after the run (AFTER): its check waits to be decided at stop."""
+    label = f"{glob} {stat} {'below ' + number(below) if below is not None else 'above ' + number(above)} in {window}"
+    return None, label, "decided when the run stops", {"pending": {"glob": glob, "stat": stat, "below": below,
+                                                                   "above": above, "since": since, "until": until}}
+
+
+def decide(folder, events):
+    """The events with each pending budget decided from the metrics as they are now. A decided check has late."""
+    found = load(folder)
+    out = []
+    for event in events:
+        if "pending" in event:
+            p = event["pending"]
+            value = found.stat(p["glob"], p["stat"], p["since"], p["until"])
+            event = {k: v for k, v in event.items() if k != "pending"}
+            if value is None:
+                event.update(ok=False, late=True, detail=f"No {p['glob']} data was measured.")
+            else:
+                ok = value < p["below"] if p["below"] is not None else value > p["above"]
+                unit = "" if p["stat"] in ("count", "failed") else " s"
+                event.update(ok=ok, late=True, detail=f"{p['stat']} {number(value)}{unit}, measured after the run")
+        out.append(event)
+    return out
