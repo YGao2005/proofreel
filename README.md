@@ -349,8 +349,11 @@ Any tool can write this folder and then run `proofreel render <dir>`:
   sound device), no shared clipboard. Nothing it does shows or plays on the host.
 - One run VM and one recording at a time for each `PROOFREEL_VM` name (default `pr-run`). Agents that work at the
   same time each set their own name, such as `PROOFREEL_VM=pr-a`. macOS lets a Mac run at most 2 macOS VMs at once.
+  State and run names use letters, digits, `-`, and `_`. The backend names a run VM `<name>.vm`, so it never has the
+  name of a state. Commands to one run VM share one SSH connection for each boot.
 - Files go to `PROOFREEL_HOME` (default `~/.proofreel`): states, run records, compiled helpers, and `sessions/`
-  (`PROOFREEL_SESSIONS`). The guest password is given to `ssh` in the environment, never written to disk.
+  (`PROOFREEL_SESSIONS`). The guest password is in each state's file (`states/<name>.json`), and it reaches `ssh` through the environment,
+  never a command line. Use a throwaway password in a VM, never a real one.
 - A VNC server sends keys as keysyms. Some apps read hardware key codes. A macOS run VM posts modifiers in the
   guest (see [Modifier keys](#modifier-keys-macos-guests)); send other keys from in the guest, and log them with
   `proofreel event key ...`.

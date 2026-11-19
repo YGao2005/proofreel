@@ -15,27 +15,89 @@ shows or plays on the host.
 
 import json
 import os
+import re
 import subprocess
+import tempfile
 import time
+import uuid
+from pathlib import Path
 
 from . import HOME, Problem, guest
 
 STATES = HOME / "states"
 RUN = os.environ.get("PROOFREEL_VM", "pr-run")
 CURRENT = HOME / f"{RUN}.json"
+NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,62}")
+MACHINE = f"{RUN}.vm"
 SSH_OPTS = ["-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "LogLevel=ERROR",
             "-o", "ConnectTimeout=5", "-o", "PubkeyAuthentication=no"]
+
+
+def check_name(name, what="state"):
+    """A state or run name: letters, digits, - and _. A backend names the run VM MACHINE, with a dot, so a run VM
+    never has the name of a state."""
+    if not NAME.fullmatch(name or ""):
+        raise Problem(f"{what.capitalize()} name {name!r}: use letters, digits, - and _, up to 63 characters.")
+    return name
+
+
+class Run(dict):
+    """The run VM: the record its backend made, plus state, backend, os, user, password, conditions, and an id that
+    is new at each boot. Load it once and pass it on."""
+
+    @classmethod
+    def current(cls):
+        if not CURRENT.exists():
+            raise Problem("No run VM. Start one: proofreel vm up <state>.")
+        return cls(json.loads(CURRENT.read_text()))
+
+    @property
+    def guest(self):
+        return guest.of(self)
+
+    @property
+    def target(self):
+        return f"{self['user']}@{self['ip']}"
+
+    @property
+    def _socket(self):
+        return Path(tempfile.gettempdir()) / f"proofreel-{self['id'][:12]}"
+
+    def _options(self, port_flag):
+        return [*SSH_OPTS, "-o", f"ControlPath={self._socket}",
+                *([port_flag, str(self["port"])] if self.get("port") else [])]
+
+    def _shared(self):
+        """One SSH connection for each boot, opened once and shared by every later command."""
+        if not self._socket.exists():
+            subprocess.run(["ssh", *self._options("-p"), "-o", "ControlMaster=yes", "-o", "ControlPersist=600", "-fN",
+                            self.target], env=askpass(self["password"]), stdin=subprocess.DEVNULL,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30, check=False)
+
+    def ssh(self, command, check=True, capture=True, timeout=None):
+        self._shared()
+        return subprocess.run(["ssh", *self._options("-p"), "-o", "ControlMaster=no", self.target, command],
+                              env=askpass(self["password"]), check=check, text=True, capture_output=capture,
+                              stdin=subprocess.DEVNULL, timeout=timeout)
+
+    def _scp(self, source, target):
+        self._shared()
+        subprocess.run(["scp", *self._options("-P"), "-o", "ControlMaster=no", "-q", "-r", source, target],
+                       env=askpass(self["password"]), check=True, stdin=subprocess.DEVNULL)
+
+    def upload(self, host, guest_path):
+        self._scp(host, f"{self.target}:{guest_path}")
+
+    def download(self, guest_path, host):
+        self._scp(f"{self.target}:{guest_path}", host)
+
+    def close(self):
+        subprocess.run(["ssh", *self._options("-p"), "-O", "exit", self.target], capture_output=True, check=False)
 
 
 def backend(name):
     from . import qemu, tart
     return {"tart": tart, "qemu": qemu}[name]
-
-
-def current():
-    if not CURRENT.exists():
-        raise Problem("No run VM. Start one: proofreel vm up <state>.")
-    return json.loads(CURRENT.read_text())
 
 
 def state_info(name):
@@ -79,42 +141,18 @@ def askpass(password):
             "PROOFREEL_GUEST_PASSWORD": password}
 
 
-def ssh(command, check=True, capture=True, timeout=None, run=None):
-    run = run or current()
-    port = ["-p", str(run["port"])] if run.get("port") else []
-    return subprocess.run(["ssh", *SSH_OPTS, *port, f"{run['user']}@{run['ip']}", command],
-                          env=askpass(run["password"]), check=check, text=True, capture_output=capture,
-                          stdin=subprocess.DEVNULL, timeout=timeout)
-
-
-def scp(source, target, run=None):
-    run = run or current()
-    port = ["-P", str(run["port"])] if run.get("port") else []
-    subprocess.run(["scp", *SSH_OPTS, *port, "-q", "-r", source, target], env=askpass(run["password"]), check=True,
-                   stdin=subprocess.DEVNULL)
-
-
-def put(host, guest):
-    run = current()
-    scp(host, f"{run['user']}@{run['ip']}:{guest}", run)
-
-
-def get(guest, host):
-    run = current()
-    scp(f"{run['user']}@{run['ip']}:{guest}", host, run)
-
-
-def start(info, name, run):
-    """Record the run VM, then wait for SSH."""
-    run = {**run, "state": name, "backend": info["backend"], "os": info["os"], "user": info["user"],
-           "password": info["password"], "conditions": info.get("conditions", [])}
+def start(info, name, fields):
+    """Record the run VM that a backend booted, then wait for SSH."""
+    run = Run({**fields, "id": uuid.uuid4().hex, "state": name, "backend": info["backend"], "os": info["os"],
+               "user": info["user"], "password": info["password"], "conditions": info.get("conditions", [])})
     CURRENT.write_text(json.dumps(run))
-    wait(lambda: ssh("exit 0", check=False, timeout=10, run=run).returncode == 0, 240, "SSH in the VM did not start.")
+    wait(lambda: run.ssh("exit 0", check=False, timeout=10).returncode == 0, 240, "SSH in the VM did not start.")
     return run
 
 
 def base(name, image, kind, system, user, password):
     """Make a state from an image: for tart an OCI image or a local VM, for qemu a disk file."""
+    check_name(name)
     if backend(kind).exists(name):
         raise Problem(f"State {name!r} exists. Drop it first: proofreel vm drop {name}.")
     guest.of({"os": system})
@@ -125,6 +163,7 @@ def base(name, image, kind, system, user, password):
 
 def up(name, display=None, memory=None, cpu=None, warmable=False):
     """Start a run VM from a state."""
+    check_name(RUN, "run")
     info = state_info(name)
     down()
     HOME.mkdir(parents=True, exist_ok=True)
@@ -133,18 +172,20 @@ def up(name, display=None, memory=None, cpu=None, warmable=False):
           f"{':' + str(run['port']) if run.get('port') else ''}.")
     from . import conditions
     for record in info.get("conditions", []):
-        conditions.check(record)
+        conditions.check(run, record)
+    return run
 
 
 def save(name, warm=False, note="", flow=None, values=None, conditions=None):
     """Save the run VM as a state, then keep it running. Warm keeps memory: apps stay open. The state keeps the
     conditions of the state the run VM came from, and the ones given."""
-    run = current()
+    check_name(name)
+    run = Run.current()
     kind = run["backend"]
     parent = state_info(name).get("parent") if run["state"] == name else run["state"]
     kept = {c["name"]: c for c in [*run["conditions"], *(conditions or [])]}
     if not warm:
-        guest.of(run).before_save(run)
+        run.guest.before_save(run)
     machine = backend(kind).save(name, run, warm)
     write_state(name, parent=parent, backend=kind, os=run["os"], user=run["user"], password=run["password"], warm=warm,
                 note=note, flow=flow, values=values or {}, conditions=list(kept.values()),
@@ -154,10 +195,11 @@ def save(name, warm=False, note="", flow=None, values=None, conditions=None):
 
 
 def down():
-    run = json.loads(CURRENT.read_text()) if CURRENT.exists() else {}
-    for pid in (run.get("recorder"), run.get("pid")):
-        if pid:
-            subprocess.run(["kill", str(pid)], capture_output=True)
+    if CURRENT.exists():
+        run = Run.current()
+        run.close()
+        if run.get("pid"):
+            subprocess.run(["kill", str(run["pid"])], capture_output=True)
     CURRENT.unlink(missing_ok=True)
     for kind in ("tart", "qemu"):
         backend(kind).stop()

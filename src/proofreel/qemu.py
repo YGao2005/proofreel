@@ -18,10 +18,10 @@ import time
 from pathlib import Path
 
 from . import Problem
-from .vm import HOME, RUN, wait
+from .vm import HOME, MACHINE, wait
 
 FOLDER = HOME / "qemu"
-MACHINE = {"memory": 4096, "cpu": 4, "display": "1440x900"}
+DEFAULTS = {"memory": 4096, "cpu": 4, "display": "1440x900"}
 CUSTOM_FIRMWARE = HOME / "firmware" / "edk2-aarch64-code.fd"
 
 
@@ -71,12 +71,12 @@ def free_port(first=0):
 
 
 def up(name, info, display=None, memory=None, cpu=None, warmable=False):
-    run = folder(RUN)
+    run = folder(MACHINE)
     shutil.rmtree(run, ignore_errors=True)
     run.mkdir(parents=True)
     for file in ("disk.qcow2", "vars.fd"):
         clone(folder(name) / file, run / file)
-    machine = {**MACHINE, **info.get("machine", {})}
+    machine = {**DEFAULTS, **info.get("machine", {})}
     if not info.get("warm"):
         machine.update({k: v for k, v in (("memory", memory), ("cpu", cpu), ("display", display)) if v})
     if not re.fullmatch(r"\d{3,4}x\d{3,4}", machine["display"]):
@@ -88,10 +88,10 @@ def up(name, info, display=None, memory=None, cpu=None, warmable=False):
 
 
 def boot(machine, memory_file=None):
-    run = folder(RUN)
+    run = folder(MACHINE)
     port, vnc = free_port(), free_port(5900)
     accel = "hvf" if platform.system() == "Darwin" else "kvm"
-    args = ["qemu-system-aarch64", "-name", RUN, "-machine", "virt,gic-version=3", "-accel", accel, "-cpu", "host",
+    args = ["qemu-system-aarch64", "-name", MACHINE, "-machine", "virt,gic-version=3", "-accel", accel, "-cpu", "host",
             "-smp", str(machine["cpu"]), "-m", str(machine["memory"]), "-nodefaults", "-display", "none",
             "-audio", "none", "-vnc", f"127.0.0.1:{vnc - 5900}",
             "-drive", f"if=pflash,format=raw,readonly=on,file={firmware()[0]}",
@@ -107,7 +107,7 @@ def boot(machine, memory_file=None):
     with open(run / "qemu.log", "w") as out:
         proc = subprocess.Popen(args, stdout=out, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
                                 start_new_session=True)
-    record = {"vm": RUN, "backend": "qemu", "pid": proc.pid, "ip": "127.0.0.1", "port": port,
+    record = {"vm": MACHINE, "backend": "qemu", "pid": proc.pid, "ip": "127.0.0.1", "port": port,
               "vnc": f"127.0.0.1::{vnc}", "vnc_password": "", "qmp": str(run / "qmp.sock"), "machine": machine}
 
     def running():
@@ -155,7 +155,7 @@ def alive(pid):
 
 
 def save(name, run, warm):
-    memory = folder(RUN) / "memory.bin"
+    memory = folder(MACHINE) / "memory.bin"
     memory.unlink(missing_ok=True)
     if warm:
         qmp(run, "stop")
@@ -171,7 +171,7 @@ def save(name, run, warm):
     shutil.rmtree(target, ignore_errors=True)
     target.mkdir(parents=True)
     for file in ("disk.qcow2", "vars.fd"):
-        clone(folder(RUN) / file, target / file)
+        clone(folder(MACHINE) / file, target / file)
     if warm:
         memory.rename(target / "memory.bin")
     return run["machine"]
@@ -185,7 +185,7 @@ def resume(name, run, warm):
 
 
 def stop():
-    run = folder(RUN)
+    run = folder(MACHINE)
     if (run / "qmp.sock").exists():
         try:
             qmp({"qmp": str(run / "qmp.sock")}, "quit")
