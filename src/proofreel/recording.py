@@ -41,6 +41,14 @@ def current():
     return session
 
 
+def session_folder(name):
+    """A session folder from a path or a bare session name (a folder in SESSIONS)."""
+    for folder in (Path(name), SESSIONS / name):
+        if (folder / "session.json").exists():
+            return folder
+    raise Problem(f"No session {name!r}: not a session folder, and not in {SESSIONS}.")
+
+
 def recording(folder):
     """True while a recorder holds the folder's lock."""
     lock = Path(folder) / "recorder.lock"

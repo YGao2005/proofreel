@@ -33,7 +33,8 @@
   shot <png>                                            Save the screen.
   run <flow> [--set NAME=VALUE]                         Run a flow file: one proofreel command per line. A line
                                                         `condition <name>` refuses a run VM whose state lacks it.
-  render <dir> [--plain] [--width W]                    Make the video and page of a session folder again.
+  render <session> [--plain] [--width W]                Make the video and page of a session again. A session is
+                                                        its folder or its name in the sessions folder.
   publish <session> --out <dir>                         Add a run to a review folder: one page, every run, one URL.
   demo [dir]                                            Render a made-up session (no VNC needed).
   clean [--days 7]                                      Delete sessions older than this.
@@ -328,7 +329,7 @@ def parser():
 
 
 def stats(a):
-    folder = Path(a.session) if a.session else Path((recording.current() or {}).get("dir") or newest())
+    folder = recording.session_folder(a.session) if a.session else Path((recording.current() or {}).get("dir") or newest())
     found = metrics.load(folder)
     if a.json:
         return print(json.dumps({"series": {m: {stat: found.stat(m, stat) for stat in metrics.STATS}
@@ -410,10 +411,10 @@ def command(argv):
         case "run": return run_flow(a.flow, dict(v.split("=", 1) for v in a.set))
         case "render":
             from .render import render
-            return print(render(a.dir, framed=not a.plain, width=a.width))
+            return print(render(recording.session_folder(a.dir), framed=not a.plain, width=a.width))
         case "publish":
             from .page import CAPABILITIES, publish
-            page, files, runs = publish(a.session, a.out)
+            page, files, runs = publish(recording.session_folder(a.session), a.out)
             return print(json.dumps({"page": str(page.resolve()), "runs": runs, "files": files,
                                      "capabilities": CAPABILITIES}, indent=2))
         case "demo":
