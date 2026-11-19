@@ -324,7 +324,7 @@ def act(a, screen):
         case "wait-text":
             started = time.time()
             ok = bool(wait_for(screen, a.text, a.seconds))
-            log("wait", f'wait for "{a.text}"', ok=ok,
+            log("wait", f'wait for "{a.text}"', ok=ok, waited=round(time.time() - started, 1),
                 detail=f"seen after {time.time() - started:.1f} s" if ok else f"not seen in {a.seconds:.0f} s")
             if not ok:
                 sys.exit(f'"{a.text}" did not show in {a.seconds:.0f} s.')

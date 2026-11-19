@@ -10,6 +10,7 @@ A session folder holds:
 
 import json
 import multiprocessing
+import re
 import os
 import subprocess
 import sys
@@ -19,7 +20,7 @@ from pathlib import Path
 from PIL import Image, ImageChops, ImageStat
 
 from . import draw, page
-from .motion import FAST, FPS, Camera, Pointer, busy_spans, ease, timeline
+from .motion import FAST, FPS, Camera, Pointer, ease, spans, timeline
 
 CHANGED = 1.5
 CHIP_KINDS = {"click", "double", "right", "drag", "type", "key", "open", "scroll", "wait", "check"}
@@ -52,6 +53,8 @@ def relative(events, start, scale):
     out = []
     for e in events:
         e = dict(e, t=e["t"] - start)
+        if e["kind"] == "wait" and "waited" not in e and (m := re.search(r"after ([\d.]+) s", e.get("detail", ""))):
+            e["waited"] = float(m[1])
         for key in ("x", "y", "x2", "y2"):
             if key in e:
                 e[key] = e[key] * scale
@@ -157,7 +160,7 @@ class Scene:
         clock = draw.pill(draw.clock(now), int(15 * ui), fill=draw.INK + (150,))
         draw.paste(view, clock, margin, margin, 0.9)
         if speed > 1.6:
-            badge = draw.pill(f"{FAST}x  no change on screen", int(15 * ui), fill=draw.INK + (190,))
+            badge = draw.pill(f"{FAST}x  no change on screen" if speed > 3.5 else "3x  waiting", int(15 * ui), fill=draw.INK + (190,))
             draw.paste(view, badge, margin + clock.width + int(8 * ui), margin, min(1.0, (speed - 1.6) / 3))
 
 
@@ -186,7 +189,7 @@ def video(folder, events, frames, times, start, end, framed, width, crf):
     first = Image.open(frames[-1])
     out_w = even(width or first.width)
     out_size = (out_w, even(out_w * first.height / first.width))
-    plan = timeline(busy_spans(screen_changes(frames, times, start), events), end)
+    plan = timeline(spans(screen_changes(frames, times, start), events), end)
     scene = Scene(first.size, out_size, events, framed)
     real = [t - start for t in times]
     jobs = [(max(0, bisect_right(real, now) - 1), now, speed, scene.camera.step(now, 1 / FPS)) for now, speed in plan]

@@ -2,11 +2,11 @@ import json
 import subprocess
 
 from proofreel.demo import demo
-from proofreel.motion import FAST, Camera, Pointer, busy_spans, timeline
+from proofreel.motion import FAST, Camera, Pointer, spans, timeline
 
 
 def test_timeline_ramps_and_slows_for_actions():
-    plan = timeline(busy_spans([], [{"t": 20.0, "kind": "click"}]), 30)
+    plan = timeline(spans([], [{"t": 20.0, "kind": "click"}]), 30)
     speeds = [speed for _, speed in plan]
     assert max(speeds) > FAST * 0.9
     assert all(abs(b - a) < FAST * 0.6 for a, b in zip(speeds, speeds[1:]))
@@ -38,3 +38,10 @@ def test_demo_renders_a_page_and_video(tmp_path):
     probe = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "json",
                             str(tmp_path / "demo" / "session.mp4")], capture_output=True, text=True, check=True)
     assert 8 < float(json.loads(probe.stdout)["format"]["duration"]) < 16
+
+
+def test_a_long_wait_plays_faster_than_real_time_even_while_the_screen_changes():
+    changes = [10 + i * 0.25 for i in range(40)]
+    plan = timeline(spans(changes, [{"t": 21.0, "kind": "wait", "waited": 11.0}]), 24)
+    during = [speed for now, speed in plan if 12.5 <= now <= 19.5]
+    assert min(during) > 2.5

@@ -122,9 +122,18 @@ def screen_text(screen):
         return read_text(png)
 
 
+def wrapped(lines):
+    """The lines, plus each line joined with the line under it, so a phrase that wraps can be found."""
+    joined = []
+    for line, below in zip(lines, lines[1:]):
+        if 0 < below["y"] - line["y"] < 2 * line["h"] and abs(below["x"] - line["x"]) < 3 * line["h"]:
+            joined.append({**line, "text": f"{line['text']} {below['text']}"})
+    return lines + joined
+
+
 def find(screen, text):
-    """Lines that are the text, then lines that contain it. Case is ignored."""
-    lines = screen_text(screen)
+    """Lines that are the text, then lines that contain it. Case is ignored. A phrase may wrap onto a second line."""
+    lines = wrapped(screen_text(screen))
     want = text.lower().strip()
     exact = [line for line in lines if line["text"].strip().lower() == want]
     return exact + [line for line in lines if want in line["text"].lower() and line not in exact]

@@ -21,25 +21,39 @@ def ease(x):
     return x * x * (3 - 2 * x)
 
 
-def busy_spans(changes, events):
-    """Real time that plays at 1x: around each screen change and each action. The rest plays at FAST."""
-    spans = [(t - 0.4, t + 1.0) for t in changes]
-    spans += [(e["t"] - 1.2, e["t"] + 2.0) for e in events if e["kind"] not in ("move", "note")]
-    return sorted(spans)
+WAITING = 3
 
 
-def timeline(spans, end, fps=FPS, fast=FAST):
+def spans(changes, events):
+    """Real time by how fast it plays: 1x around each action; WAITING while the agent waits for the screen (model
+    output, animations); 1x around other screen changes; FAST for the rest."""
+    actions = sorted((e["t"] - 1.2, e["t"] + 2.0) for e in events if e["kind"] not in ("move", "note", "wait"))
+    waits = sorted((e["t"] - e["waited"] + 0.6, e["t"] - 0.4) for e in events if e.get("waited", 0) > 1.5)
+    shown = sorted([(t - 0.4, t + 1.0) for t in changes] +
+                   [(e["t"] - 0.4, e["t"] + 1.6) for e in events if e["kind"] == "wait"])
+    return actions, waits, shown
+
+
+def _any(spans_, a, b):
+    i = bisect_right([s for s, _ in spans_], b)
+    return any(spans_[j][1] >= a for j in range(max(0, i - 8), i))
+
+
+def timeline(spans_, end, fps=FPS, fast=FAST):
     """The real time shown in each video frame, and its speed. Speed ramps, so a jump to FAST is never a cut."""
-    starts = [a for a, _ in spans]
+    actions, waits, shown = spans_
     frames, now, speed = [], 0.0, 1.0
-
-    def busy(a, b):
-        i = bisect_right(starts, b)
-        return any(spans[j][1] >= a for j in range(max(0, i - 8), i))
-
     while now < end:
         frames.append((now, speed))
-        target = 1.0 if busy(now, now + speed * 0.4) else fast
+        ahead = now + speed * 0.4
+        if _any(actions, now, ahead):
+            target = 1.0
+        elif _any(waits, now, ahead):
+            target = WAITING
+        elif _any(shown, now, ahead):
+            target = 1.0
+        else:
+            target = fast
         speed += (target - speed) * (0.5 if target < speed else 0.12)
         now += speed / fps
     return frames
