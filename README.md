@@ -152,6 +152,10 @@ proofreel vm build app-installed --from macos-26 --flow flows/install.flow --set
 proofreel vm down
 ```
 
+Each state names its backend and its guest system (`--os macos`, the default, `linux`, or `windows`). The
+system decides what proofreel can do in it: crash reports and the accessibility tree are macOS only, and each
+condition names the systems it works on. All of this is in `src/proofreel/guest.py`, so a new system is one class.
+
 A clone is copy on write (APFS), so a state costs only the disk blocks that it changes. On an M-series Mac with a
 macOS 26 guest: `up` from a cold state takes about 18 s to SSH ready, a warm `up` about 12 s with the apps as they
 were, and `save --warm` about 60 s. A warm state needs a run VM
@@ -195,7 +199,7 @@ on real hardware before a release.
 ```bash
 brew install qemu llvm lld acpica
 firmware/build.sh                                       # once: UEFI firmware that takes any screen size
-proofreel vm base win11 win11.qcow2 --backend qemu      # once: a disk that boots Windows (see below)
+proofreel vm base win11 win11.qcow2 --backend qemu --os windows   # once: a disk that boots Windows (see below)
 proofreel vm up win11                                   # PowerShell over SSH, the screen over VNC (1440x900)
 proofreel vm up win11 --display 1920x1080               # any WIDTHxHEIGHT
 proofreel vm sh 'Get-ComputerInfo -Property OsName'
@@ -281,7 +285,7 @@ To make the `linux` state again:
 2. Make a cloud-init disk: `xorriso -as mkisofs -V cidata -J -r -o seed.iso images/debian-seed`.
 3. Start the image once in QEMU with the flags of `up`, and add `seed.iso` as a virtio disk.
 4. Copy `images/debian-desktop.sh` into the guest. Run `sudo sh debian-desktop.sh tester`, then shut down.
-5. `proofreel vm base linux debian-13-generic-arm64.qcow2 --backend qemu --user tester --guest-password tester`.
+5. `proofreel vm base linux debian-13-generic-arm64.qcow2 --backend qemu --os linux --user tester --guest-password tester`.
 6. `proofreel vm up linux --memory 2048`, then `proofreel vm save linux`.
 
 ## The session folder

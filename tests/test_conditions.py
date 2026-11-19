@@ -8,7 +8,7 @@ from proofreel import cli, conditions, crash, vm
 def write_condition(folder, folder_name="fake-thing", **fields):
     path = folder / folder_name
     path.mkdir()
-    manifest = {"name": folder_name, "version": 1, "fakes": "a thing", "applies": "a script", "checks": "a probe",
+    manifest = {"name": folder_name, "version": 1, "os": ["macos"], "fakes": "a thing", "applies": "a script", "checks": "a probe",
                 "fidelity": "no radio", **fields}
     lines = [f"{k} = {json.dumps(v)}" for k, v in manifest.items() if k != "values"]
     if "values" in fields:
@@ -38,6 +38,16 @@ def test_a_manifest_needs_every_field_its_folder_name_and_both_scripts(tmp_path)
         conditions.manifest(path)
 
 
+def test_a_condition_refuses_a_run_vm_of_another_system(tmp_path, monkeypatch):
+    monkeypatch.setattr(vm, "CURRENT", tmp_path / "run.json")
+    (tmp_path / "run.json").write_text(json.dumps({"state": "s", "os": "linux", "conditions": []}))
+    monkeypatch.setattr(vm, "ssh", lambda *a, **k: pytest.fail("nothing runs in the guest"))
+    with pytest.raises(SystemExit, match="works on macos, and the VM is linux"):
+        conditions.apply("offline", {})
+    with pytest.raises(ValueError, match="unknown systems"):
+        conditions.manifest(write_condition(tmp_path, os=["beos"]))
+
+
 def test_values_take_the_default_and_a_value_with_no_default_is_required(tmp_path):
     info = conditions.manifest(write_condition(tmp_path, values={"RATE": "24000", "DMG": ""}))
     assert conditions.resolve(info, {"DMG": "/x.dmg", "OTHER": "1"}) == {"RATE": "24000", "DMG": "/x.dmg"}
@@ -55,8 +65,7 @@ def test_a_flow_names_its_conditions_and_a_state_must_have_them():
 def test_run_refuses_a_state_without_the_flow_condition(tmp_path, monkeypatch):
     monkeypatch.setattr(vm, "STATES", tmp_path)
     monkeypatch.setattr(vm, "CURRENT", tmp_path / "run.json")
-    vm.write_state("plain", parent="base", conditions=[{"name": "offline", "version": 1}])
-    (tmp_path / "run.json").write_text(json.dumps({"state": "plain"}))
+    (tmp_path / "run.json").write_text(json.dumps({"state": "plain", "conditions": [{"name": "offline", "version": 1}]}))
     ran = []
     monkeypatch.setattr(cli, "main", lambda words: ran.append(words))
     flow = tmp_path / "f.flow"

@@ -18,11 +18,6 @@ from . import vm
 SOURCE = resources.files("proofreel").joinpath("ax.swift")
 
 
-def need_vm(plain_vnc):
-    if plain_vnc:
-        sys.exit("AX reads the guest over SSH, so it needs a run VM from proofreel vm up <state>, not a --vnc screen.")
-
-
 def helper():
     """The guest helper, compiled once on the host. The name holds a hash of the source, so a change rebuilds it."""
     source = SOURCE.read_bytes()

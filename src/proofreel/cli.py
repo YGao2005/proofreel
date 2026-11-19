@@ -37,7 +37,7 @@ import sys
 import time
 from pathlib import Path
 
-from . import ax, conditions, crash, tart
+from . import ax, conditions, guest
 from . import vm as vms
 from .screen import Screen, center, find, screen_text, wait_for
 
@@ -47,13 +47,14 @@ ACTIVE = HOME / "session.json"
 
 
 def target(args):
+    """The screen: (VNC server, password, guest). The guest is None for a screen that is not the run VM."""
     if getattr(args, "vnc", None):
-        return args.vnc, args.password
+        return args.vnc, args.password, None
     if os.environ.get("PROOFREEL_VNC"):
-        return os.environ["PROOFREEL_VNC"], os.environ.get("PROOFREEL_PASSWORD")
+        return os.environ["PROOFREEL_VNC"], os.environ.get("PROOFREEL_PASSWORD"), None
     if vms.CURRENT.exists():
         run = vms.current()
-        return run["vnc"], run["vnc_password"]
+        return run["vnc"], run["vnc_password"], guest.of(run)
     sys.exit("No screen. Use --vnc host::port, PROOFREEL_VNC, or proofreel vm up <state>.")
 
 
@@ -71,22 +72,22 @@ def log(kind, text, t=None, **fields):
 def start(args):
     if active():
         sys.exit(f"A session is recording: {active()['dir']}. Stop it first.")
-    server, password = target(args)
+    server, password, system = target(args)
     folder = SESSIONS / f"{args.name}-{time.strftime('%Y%m%d-%H%M%S')}"
     folder.mkdir(parents=True)
     meta = dict(item.split("=", 1) for item in args.meta)
     faked = []
-    if vms.CURRENT.exists():
-        state = vms.current().get("state", "")
-        meta.setdefault("from state", state)
-        faked = vms.state_info(state).get("conditions", []) if (vms.STATES / f"{state}.json").exists() else []
+    if system:
+        run = vms.current()
+        meta.setdefault("from state", run["state"])
+        faked = run["conditions"]
         if faked:
             meta.setdefault("conditions", ", ".join(conditions.names(faked)))
-        if harvests():
-            crash.mark()
+        system.mark()
     meta.setdefault("", time.strftime("%Y-%m-%d %H:%M"))
     (folder / "session.json").write_text(json.dumps({"title": args.title or args.name, "about": args.about,
                                                     "meta": meta, "app": args.app, "conditions": faked,
+                                                    "os": system.name if system else None,
                                                     "started": time.time()}))
     recorder = subprocess.Popen([sys.executable, "-m", "proofreel.capture", str(folder), server, password or "",
                                  str(args.fps), str(args.reduce)], stdout=open(folder / "recorder.log", "w"),
@@ -108,9 +109,9 @@ def stop(args, error=None):
         time.sleep(0.1)
     ACTIVE.unlink()
     info = json.loads((folder / "session.json").read_text())
-    if harvests():
+    if info.get("os"):
         with open(folder / "events.jsonl", "a") as out:
-            for event in crash.harvest(folder, info.get("app"), info.get("started", 0)):
+            for event in guest.GUESTS[info["os"]].harvest(folder, info.get("app"), info.get("started", 0)):
                 out.write(json.dumps(event) + "\n")
     if error:
         (folder / "session.json").write_text(json.dumps({**info, "error": error}))
@@ -120,11 +121,6 @@ def stop(args, error=None):
     if not getattr(args, "keep_frames", False):
         shutil.rmtree(folder / "frames", ignore_errors=True)
     print(f"{verdict}. {real:.0f} s of screen in a {length:.0f} s video, {size:.1f} MB. Page: {folder / 'index.html'}")
-
-
-def harvests():
-    """Crash reports come from a macOS run VM (Tart)."""
-    return vms.CURRENT.exists() and vms.current().get("backend", "tart") == "tart"
 
 
 def check(args, screen):
@@ -165,8 +161,8 @@ def run_flow(path, values):
     path = Path(path)
     text = path.read_text()
     if wanted := needed(text):
-        state = vms.current()["state"] if vms.CURRENT.exists() else None
-        have = vms.state_info(state).get("conditions", []) if state else []
+        run = vms.current() if vms.CURRENT.exists() else {}
+        state, have = run.get("state"), run.get("conditions", [])
         if gaps := conditions.missing(wanted, have):
             sys.exit(f"{path.name} needs condition {', '.join(gaps)}, and the run VM's state {state or '(none)'} has "
                      f"{', '.join(conditions.names(have)) or 'no conditions'}. Make a state with it: proofreel vm "
@@ -276,6 +272,7 @@ def parser():
     v.add_argument("name")
     v.add_argument("image")
     v.add_argument("--backend", choices=["tart", "qemu"], default="tart")
+    v.add_argument("--os", choices=list(guest.GUESTS), default="macos", help="the guest system")
     v.add_argument("--user", default="admin")
     v.add_argument("--guest-password", default="admin")
     v = vm.add_parser("up", help="start the run VM from a state")
@@ -314,13 +311,15 @@ def parser():
 
 def vm(a):
     match a.action:
-        case "base": vms.base(a.name, a.image, a.backend, a.user, a.guest_password)
+        case "base": vms.base(a.name, a.image, a.backend, a.os, a.user, a.guest_password)
         case "up": vms.up(a.state, a.display, a.memory, a.cpu, a.warmable)
         case "save": vms.save(a.state, a.warm, a.note)
         case "build":
             if not (a.flow or a.condition):
                 sys.exit("Give --flow, --condition, or both.")
             values = dict(v.split("=", 1) for v in a.set)
+            for name in a.condition:
+                conditions.resolve(conditions.fits(name, vms.state_info(a.parent)["os"]), values)
             vms.up(a.parent, warmable=a.warm)
             applied = [conditions.apply(name, values) for name in a.condition]
             if a.flow:
@@ -332,7 +331,8 @@ def vm(a):
             for name in conditions.known():
                 info = conditions.manifest(conditions.folder(name))
                 values = " ".join(f"{k}={v or '...'}" for k, v in info["values"].items())
-                print(f"{name}{'  ' + values if values else ''}\n  {info['fakes']}\n  Not faked: {info['fidelity']}")
+                print(f"{name}  ({', '.join(info['os'])}){'  ' + values if values else ''}\n  {info['fakes']}\n"
+                      f"  Not faked: {info['fidelity']}")
         case "drop": vms.drop(a.state)
         case "down": vms.down()
         case "sh": sys.exit(vms.ssh(shlex.join(a.cmd) if len(a.cmd) > 1 else a.cmd[0], check=False,
@@ -381,9 +381,10 @@ def command(argv):
             log("check", label, ok=ok, detail=detail)
             print(("Pass: " if ok else "Fail: ") + label)
             return sys.exit(0 if ok else 1)
-    if a.command in ("ax", "click-ax") or a.command == "check" and a.kind.endswith("ax"):
-        ax.need_vm(a.vnc or os.environ.get("PROOFREEL_VNC"))
-    with Screen(*target(a)) as screen:
+    server, password, system = target(a)
+    if (a.command in ("ax", "click-ax") or a.command == "check" and a.kind.endswith("ax")) and not (system and system.ax):
+        sys.exit("AX reads a macOS run VM over SSH (proofreel vm up <state>), not a --vnc screen or another system.")
+    with Screen(server, password, system.keys if system else None) as screen:
         act(a, screen)
 
 
