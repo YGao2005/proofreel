@@ -18,6 +18,7 @@ class Guest:
     keys = {}
     conditions = ""
     ax = False
+    desktop = ""
 
     def mark(self, run):
         """Mark the session start, so harvest finds only the reports made after it."""
@@ -43,6 +44,8 @@ class Guest:
 
 class MacOS(Guest):
     name = "macos"
+    # WHY: SSH is up before the desktop; an app opened then fails ("Launch failed", RBS code 5).
+    desktop = "pgrep -xq Dock && pgrep -xq Finder"
     # WHY: the VNC server of a Tart macOS guest sends the X11 Meta keys as Option and the Alt keys as Command.
     keys = {"option": "meta", "roption": "rmeta", "command": "alt", "rcommand": "ralt"}
     # WHY: VNC has no Fn key, and a tap sent over VNC loses its timing. keys.swift posts these in the guest.
@@ -91,11 +94,13 @@ class MacOS(Guest):
 
 class Linux(Guest):
     name = "linux"
+    desktop = "pgrep -x xfce4-panel >/dev/null || pgrep -x gnome-shell >/dev/null"
     conditions = "/var/tmp/proofreel/conditions"
 
 
 class Windows(Guest):
     name = "windows"
+    desktop = 'powershell -NoProfile -Command "if (Get-Process explorer -ErrorAction SilentlyContinue) { exit 0 } exit 1"'
 
     def before_save(self, run):
         # WHY: Windows keeps the last screen size and scales it to a new one. With none saved, it fills the screen.
