@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import tempfile
 import time
+import unicodedata
 from pathlib import Path
 
 from vncdotool import api
@@ -161,11 +162,12 @@ def _tesseract(png):
             continue
         key = tuple(cols[2:5])
         x, y, w, h = (int(v) for v in cols[6:10])
-        line = lines.setdefault(key, {"text": "", "x": x, "y": y, "r": x + w, "b": y + h})
+        line = lines.setdefault(key, {"text": "", "x": x, "y": y, "r": x + w, "b": y + h, "words": []})
         line["text"] = (line["text"] + " " + cols[11]).strip()
+        line["words"].append({"text": cols[11], "x": x, "y": y, "w": w, "h": h})
         line["r"], line["b"] = max(line["r"], x + w), max(line["b"], y + h)
         line["y"] = min(line["y"], y)
-    return [{"text": v["text"], "x": v["x"], "y": v["y"], "w": v["r"] - v["x"], "h": v["b"] - v["y"]}
+    return [{"text": v["text"], "x": v["x"], "y": v["y"], "w": v["r"] - v["x"], "h": v["b"] - v["y"], "words": v["words"]}
             for v in lines.values()]
 
 
@@ -181,16 +183,43 @@ def wrapped(lines):
     joined = []
     for line, below in zip(lines, lines[1:]):
         if 0 < below["y"] - line["y"] < 2 * line["h"] and abs(below["x"] - line["x"]) < 3 * line["h"]:
-            joined.append({**line, "text": f"{line['text']} {below['text']}"})
+            joined.append({**line, "text": f"{line['text']} {below['text']}",
+                           "words": line.get("words", []) + below.get("words", [])})
     return lines + joined
 
 
+# WHY: Apple Vision can read Latin words as Cyrillic or Greek letters that look the same ("Acme" as "Асте"), even with
+# English as its only language (a lower-case "т" for "m"). Matching folds both sides, so the look of the text decides.
+LOOKALIKE = str.maketrans("аВсеЕһіјКМНорРСТтхуАΑΒΕΗΙΚΜΝΟΡΤΧΥΖνοτ", "aBceEhijKMHopPCTmxyAABEHIKMNOPTXYZvot")
+
+
+def fold(text):
+    return unicodedata.normalize("NFKC", text).translate(LOOKALIKE).lower().strip()
+
+
 def find(screen, text):
-    """Lines that are the text, then lines that contain it. Case is ignored. A phrase may wrap onto a second line."""
+    """Lines that are the text, then lines that contain it. Case and look-alike letters are ignored. A phrase may wrap
+    onto a second line."""
     lines = wrapped(screen_text(screen))
-    want = text.lower().strip()
-    exact = [line for line in lines if line["text"].strip().lower() == want]
-    return exact + [line for line in lines if want in line["text"].lower() and line not in exact]
+    want = fold(text)
+    exact = [line for line in lines if fold(line["text"]) == want]
+    return exact + [narrowed(line, want) for line in lines if want in fold(line["text"]) and line not in exact]
+
+
+def narrowed(line, want):
+    """The line cut to the words that hold the text, so a click on "Try again" in "Wrong password. Try again"
+    lands on the button. A line with no word boxes stays whole."""
+    words, starts, at = line.get("words") or [], [], 0
+    for word in words:
+        starts.append(at)
+        at += len(fold(word["text"])) + 1
+    start = " ".join(fold(word["text"]) for word in words).find(want)
+    hit = [w for w, s in zip(words, starts) if start >= 0 and s < start + len(want) and s + len(fold(w["text"])) > start]
+    if not hit:
+        return line
+    x, y = min(w["x"] for w in hit), min(w["y"] for w in hit)
+    return {**line, "text": " ".join(w["text"] for w in hit), "x": x, "y": y,
+            "w": max(w["x"] + w["w"] for w in hit) - x, "h": max(w["y"] + w["h"] for w in hit) - y}
 
 
 def wait_for(screen, text, seconds, present=True):
