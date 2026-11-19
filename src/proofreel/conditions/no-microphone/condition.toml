@@ -1,0 +1,6 @@
+name = "no-microphone"
+version = 1
+fakes = "A Mac with no microphone at all, such as a Mac mini or a Mac Studio with nothing plugged in."
+applies = "The run VM has no audio input (Tart runs it with --no-audio). Apply removes the proofreel headset driver if a parent state has it, and restarts coreaudiod."
+checks = "Core Audio lists no device with input channels (system_profiler SPAudioDataType)."
+fidelity = "The VM still has a virtual speaker. A real Mac mini has a headphone jack, so Core Audio can show an input there when something is plugged in; this never does."

@@ -1,0 +1,9 @@
+name = "bluetooth-headset-call-mode"
+version = 1
+fakes = "A Bluetooth headset, such as AirPods, as the only microphone. When an app starts input, the headset goes to call mode: its sample rate drops from 48 kHz to RATE."
+applies = "Installs a small Core Audio driver (an AudioServerPlugIn built from headset.c on the host), restarts coreaudiod, and makes the headset the default input. When input starts, the driver asks Core Audio for a configuration change to RATE, as a Bluetooth driver does. 2 s after the last input stops, it goes back to 48 kHz."
+checks = "The default input reports Bluetooth transport and 48 kHz. Input starts, and the rate changes to RATE. Input stops, and the rate goes back to 48 kHz."
+fidelity = "No radio, no real codec, no Bluetooth timing: the rate changes as soon as Core Audio can do it. Input only: real AirPods are also the output device; here the output stays on the VM speaker. No built-in microphone is next to it, so an app that prefers a built-in microphone uses the headset here. The sound is quiet noise."
+
+[values]
+RATE = "24000"

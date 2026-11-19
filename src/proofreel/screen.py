@@ -17,6 +17,8 @@ from vncdotool import api
 from . import __version__
 
 SHIFTED = dict(zip('~!@#$%^&*()_+{}|:"<>?', "`1234567890-=[]\\;',./"))
+# WHY: the VNC server of a Tart macOS guest sends the X11 Meta keys as Option and the Alt keys as Command.
+MAC_KEYS = {"option": "meta", "roption": "rmeta", "command": "alt", "rcommand": "ralt"}
 HOME = Path.home() / ".proofreel"
 
 
@@ -74,6 +76,12 @@ class Screen:
         for key in keys:
             self.client.keyPress(key)
             time.sleep(0.05)
+
+    def hold(self, key, seconds):
+        key = MAC_KEYS.get(key, key)
+        self.client.keyDown(key)
+        time.sleep(seconds)
+        self.client.keyUp(key)
 
     def size(self):
         """The framebuffer size in pixels. pause(0) waits for the connection, which sets it."""

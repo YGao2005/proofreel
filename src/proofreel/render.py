@@ -24,7 +24,7 @@ from .motion import FAST, FPS, Camera, Pointer, ease, fit, spans
 
 CHANGED = 1.5
 INSET = 0.88
-CHIP_KINDS = {"click", "double", "right", "drag", "type", "key", "open", "scroll", "wait", "check"}
+CHIP_KINDS = {"click", "double", "right", "drag", "type", "key", "hold", "open", "scroll", "wait", "check"}
 SHOT_KINDS = CHIP_KINDS - {"scroll"}
 
 
