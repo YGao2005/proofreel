@@ -99,7 +99,7 @@ def start(info, name, run):
     """Record the run VM, then wait for SSH."""
     run = {**run, "state": name, "user": info.get("user", "admin"), "password": info.get("password", "admin")}
     CURRENT.write_text(json.dumps(run))
-    wait(lambda: ssh("true", check=False, timeout=10, run=run).returncode == 0, 240, "SSH in the VM did not start.")
+    wait(lambda: ssh("exit 0", check=False, timeout=10, run=run).returncode == 0, 240, "SSH in the VM did not start.")
     return run
 
 

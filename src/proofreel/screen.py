@@ -59,8 +59,10 @@ class Screen:
                 key = "space"
             elif char == "\n":
                 key = "enter"
-            elif char in SHIFTED or char.isupper():
-                key = f"shift-{SHIFTED.get(char, char.lower())}"
+            elif char.isupper():
+                key = f"shift-{char}"
+            elif char in SHIFTED:
+                key = f"shift-{SHIFTED[char]}"
             else:
                 key = char
             self.client.keyPress(key)

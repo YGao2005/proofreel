@@ -80,6 +80,8 @@ proofreel event check "The file is saved" --ok
 
 ## VM states
 
+Use a macOS VM only when the test needs a native Mac app. Use a Linux VM for a web page, a server flow, or anything that a browser shows, or a Windows VM when the target is Windows: a Mac can run only 2 macOS VMs at the same time, and QEMU VMs are limited only by memory.
+
 ### macOS and Linux (Tart)
 
 ```bash
@@ -127,7 +129,13 @@ other `vm` commands work as they do for Tart, and `--warmable` is not necessary.
 - Automatic sign-in for the user that you give to `base` (`--user`, `--guest-password`; the default is admin/admin),
   hibernation off (`powercfg /hibernate off`), and no sleep or lock screen.
 
-UTM's Windows VMs meet these when you install OpenSSH: use the `.qcow2` in the bundle's `Data` folder.
+A UTM Windows VM keeps its disk as a `.qcow2` in the bundle's `Data` folder. Give that file to `base` after you
+install the items above (`base` clones it, so UTM's copy does not change).
+
+To make a disk from Microsoft's own files: the Media Creation Tool catalog (`products.cab`) lists the Windows 11 ARM64
+ESD. Use `wimlib-imagex` to make an install tree, add an `autounattend.xml` and the NetKVM driver in `$WinPEDriver$`,
+and make an ISO with `xorriso` (boot image `efi/microsoft/boot/efisys_noprompt.bin`). Boot it once in QEMU with the
+ISO as a USB CD-ROM and a new qcow2 disk. Setup then runs with no clicks.
 
 proofreel runs `qemu-system-aarch64` with HVF, headless (`-display none`, `-audio none`, no sound device, no
 clipboard), QEMU's own VNC server on 127.0.0.1, user networking with SSH forwarded from a free 127.0.0.1 port, an
@@ -139,7 +147,22 @@ to a file); `up` loads it with `-incoming`. This works with the UEFI variables a
 With the variables as a qcow2, `savevm` works but writes the memory into the variables file, `-loadvm` at start
 works, and `loadvm` in a running VM stops QEMU 11.1 with an assertion.
 
-WINDOWS_TIMES
+On an M-series Mac, with Windows 11 Pro 24H2 ARM64, 4 GB of memory, and 4 cores:
+
+| Step | Time | Disk |
+|---|---|---|
+| `up` from a cold state | about 20-35 s to SSH | copy on write |
+| `save` (cold) | about 30 s: the guest shuts down, then starts again | copy on write |
+| `save --warm` | about 35 s | `memory.bin` is about the size of the guest memory (4 GB) |
+| `up` from a warm state | about 6 s to SSH, with the apps open | none |
+
+Limits that are particular to QEMU:
+
+- The screen is 800x600 (the UEFI default for `ramfb`), and `up --display` has no effect.
+- A command from `vm sh` runs in the SSH session, which has no desktop. To open an app on the screen, run it as a
+  scheduled task with `/it`, as in the example above.
+- After a warm `up`, the guest clock shows the time of the save until Windows syncs it again.
+- QEMU's VNC server types the keysym that it gets, so proofreel sends the upper-case keysym for a capital letter.
 
 ## The session folder
 
