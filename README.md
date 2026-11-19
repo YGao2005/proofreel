@@ -124,6 +124,27 @@ The app under test gets nothing from this, so a state such as "app installed, no
 But the grant leaves a trace: `sshd-keygen-wrapper` shows in the Accessibility list. A check that the list is empty
 sees it.
 
+### Modifier keys (macOS guests)
+
+`key` presses keys and combos (`key command-a`, `key enter`). `hold` and `tap` press one key with timing, for an app
+that watches the keys themselves, such as a push-to-talk key or a double tap:
+
+```bash
+proofreel hold fn 1.5          # hold Fn for 1.5 s
+proofreel tap option 2         # a double tap: 70 ms presses, 110 ms apart
+proofreel hold command down    # only press it ...
+proofreel hold command up      # ... and release it later
+```
+
+In a macOS run VM, the modifiers (`fn`, `option`, `command`, `control`, `shift`, and `roption`, `rcommand`,
+`rcontrol`, `rshift` for the right keys) do not go through VNC: VNC has no Fn key, and each VNC command is a new
+connection, so a double tap would lose its timing. A small helper (`keys.swift`) posts them in the guest as a hardware
+keyboard does, with the key code and the left or right device flag. A whole `hold` or `tap` is one process in the
+guest, so its timing holds. The helper needs the same Accessibility grant as [the accessibility tree](#click-by-the-accessibility-tree-macos-guests),
+and it stops with an error without it. A modifier from `hold <key> down` reaches apps that watch modifier changes,
+but a VNC click or key does not carry it: for Cmd-click or a shifted key, use `key` with a combo. On other screens,
+`hold` and `tap` send every key over VNC.
+
 ## VM states
 
 Send each test to the right VM:
@@ -295,7 +316,7 @@ Any tool can write this folder and then run `proofreel render <dir>`:
 | File | Content |
 |---|---|
 | `session.json` | `{"title", "about", "meta": {label: value}, "error", "app", "conditions", "started"}` |
-| `events.jsonl` | one action on each line: `{"t": unix seconds, "kind", "text", "x", "y", "ok", "detail"}`. The kinds are `step`, `note`, `click`, `double`, `right`, `move`, `drag` (`x2`, `y2`), `type`, `key`, `hold`, `open`, `wait`, and `check` |
+| `events.jsonl` | one action on each line: `{"t": unix seconds, "kind", "text", "x", "y", "ok", "detail"}`. The kinds are `step`, `note`, `click`, `double`, `right`, `move`, `drag` (`x2`, `y2`), `type`, `key`, `hold`, `tap`, `open`, `wait`, and `check` |
 | `reports/` | the crash and hang reports of a macOS run VM |
 | `frames/*.jpg` | the screen, in name order |
 | `times.txt` | the unix time of each frame, one on each line |
@@ -324,9 +345,9 @@ Any tool can write this folder and then run `proofreel render <dir>`:
   same time each set their own name, such as `PROOFREEL_VM=pr-a`. macOS lets a Mac run at most 2 macOS VMs at once.
 - Files go to `PROOFREEL_HOME` (default `~/.proofreel`): states, run records, compiled helpers, and `sessions/`
   (`PROOFREEL_SESSIONS`). The guest password is given to `ssh` in the environment, never written to disk.
-- A VNC server sends keys as keysyms. Some apps read hardware key codes. `hold <key> <seconds>` holds a key down; in
-  a Tart macOS guest, `option` is Left Option and `command` is Left Command. Send other keys from in the guest, and
-  log them with `proofreel event key ...`.
+- A VNC server sends keys as keysyms. Some apps read hardware key codes. A macOS run VM posts modifiers in the
+  guest (see [Modifier keys](#modifier-keys-macos-guests)); send other keys from in the guest, and log them with
+  `proofreel event key ...`.
 
 ## License
 
