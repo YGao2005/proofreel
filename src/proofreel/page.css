@@ -83,3 +83,39 @@ footer { margin-top: 28px; color: var(--muted); font-size: 12px; }
 .overlay .now.ok { background: rgba(36, 138, 61, .92); } .overlay .now.bad { background: rgba(215, 0, 21, .92); }
 .overlay .caption { bottom: max(48px, 5cqw); left: 50%; transform: translateX(-50%); font-size: max(11px, 1.55cqw); }
 .overlay .caption b { font-weight: 400; opacity: .6; margin-right: .7em; }
+.column { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.views { display: flex; gap: 6px; }
+.views .btn[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+li.state .row { margin-top: 10px; border-left: 3px solid var(--info); border-radius: 0 8px 8px 0; }
+li.state.ok .row { border-left-color: var(--ok); } li.state.bad .row { border-left-color: var(--bad); }
+li.state .text { font-weight: 600; font-size: 15px; }
+li.state + li.step .row { margin-top: 0; }
+.machine .graph { overflow-x: auto; padding: 14px 10px 6px; }
+.machine svg { display: block; max-width: 100%; height: auto; margin: 0 auto; font-family: var(--sans); }
+.machine .edge { cursor: pointer; }
+.machine .edge .hit { fill: none; stroke: transparent; stroke-width: 12px; }
+.machine .edge .line { fill: none; stroke: var(--line); stroke-width: 1.5px; }
+.machine .edge.on .line { stroke: var(--accent); stroke-width: 2.2px; }
+.machine .edge.back .line { stroke-dasharray: 5 4; }
+.machine .head { fill: var(--muted); } .machine .edge.on .head { fill: var(--accent); }
+.machine .edge .label { font-size: 11px; fill: var(--muted); paint-order: stroke; stroke: var(--panel); stroke-width: 4px; }
+.machine .edge:hover .line { stroke: var(--fg); }
+.machine .node { cursor: pointer; outline: none; }
+.machine .node rect { fill: var(--panel); stroke: var(--line); stroke-width: 1.5px; }
+.machine .node .name { font-size: 13px; font-weight: 600; fill: var(--fg); text-anchor: middle; }
+.machine .node.ok rect { fill: var(--ok-bg); stroke: var(--ok); }
+.machine .node.bad rect { fill: var(--bad-bg); stroke: var(--bad); }
+.machine .node.info rect { stroke: var(--info); stroke-dasharray: 4 3; }
+.machine .node.away rect { stroke-dasharray: 2 3; } .machine .node.away .name { fill: var(--muted); font-weight: 400; }
+.machine .node.start rect { fill: var(--info-bg); stroke: none; } .machine .node.start .name { fill: var(--info); font-size: 12px; }
+.machine .node:focus-visible rect, .machine .node.picked rect { stroke: var(--accent); stroke-width: 2.5px; }
+.machine .node.now rect { stroke: var(--accent); stroke-width: 3px; filter: drop-shadow(0 0 6px var(--accent)); }
+.machine .dot { stroke: none; fill: var(--muted); } .machine .dot.ok { fill: var(--ok); } .machine .dot.bad { fill: var(--bad); }
+.machine .dot.away { fill: none; stroke: var(--muted); stroke-width: 1px; }
+.machine .dot.mine { stroke: var(--fg); stroke-width: 1.5px; }
+.machine .visit { border-top: 1px solid var(--line); padding: 10px 14px 12px; display: flex; flex-direction: column; gap: 8px; }
+.machine .visit h3 { margin: 0; font-size: 15px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.machine .visit .hint { margin: 0; color: var(--muted); font-size: 12px; }
+.machine .visit .choices { display: flex; gap: 6px; flex-wrap: wrap; }
+.overlay .top .pill.state.ok { background: rgba(36, 138, 61, .85); } .overlay .top .pill.state.bad { background: rgba(215, 0, 21, .85); }
+[hidden] { display: none !important; }

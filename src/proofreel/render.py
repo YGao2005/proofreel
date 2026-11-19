@@ -17,7 +17,7 @@ from PIL import Image, ImageChops, ImageStat
 
 from . import Problem, draw, page
 from .motion import FPS, Camera, Clock, Pointer, ease, fit, spans
-from .session import CHIP, RING, VERDICT, Session
+from .session import CHIP, RING, VERDICT, Session, path_line
 
 CHANGED = 1.5
 INSET = 0.88
@@ -189,7 +189,7 @@ def render(folder, framed=True, width=None, crf=20, target=30):
     end = max(times[-1] - start, max((e.get("end", e["t"]) for e in rel), default=0) + 2.0)
     length, clock, camera = video(folder, rel, frames, times, start, end, framed, width, crf, target)
     shots(folder, rel, frames, times, start)
-    verdict = page.write(folder, info, rel, length, end, clock, camera)
+    run = page.write(folder, info, rel, length, end, clock, camera)
     size = (folder / "session.mp4").stat().st_size / 1e6
-    return (f"{verdict.capitalize()}. {end:.0f} s of screen in a {length:.0f} s video, {size:.1f} MB. "
-            f"Page: {folder / 'index.html'}")
+    return (f"{run['verdict'].capitalize()}. {end:.0f} s of screen in a {length:.0f} s video, {size:.1f} MB. "
+            f"Page: {folder / 'index.html'}" + (f"\n{path_line(run['states'])}" if run["states"] else ""))

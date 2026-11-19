@@ -65,9 +65,10 @@ def demo(folder, broken=False):
             t += 1 / fps
 
     mid = lambda box: ((box[0] + box[2]) // 2, (box[1] + box[3]) // 2)
-    at(0.2, "step", "Open the sign-up form")
+    at(0.1, "state", "Sign-up form")
+    at(0.2, "check", '"Create your account" is on the screen', end=t0 + 0.6, ok=True)
+    at(1.0, "step", "Fill in the form")
     hold(0, 1.5)
-    at(1.5, "step", "Fill in the form")
     at(2.2, "click", 'click "Email"', x=mid(FIELD_EMAIL)[0], y=mid(FIELD_EMAIL)[1])
     hold(1.5, 2.3)
     state["focus"] = "Email"
@@ -85,7 +86,7 @@ def demo(folder, broken=False):
     at(5.8, "click", 'click "Create account"', x=mid(BUTTON)[0], y=mid(BUTTON)[1])
     hold(5.2, 5.9)
     state["busy"], state["focus"] = True, None
-    at(5.95, "step", "The account is made")
+    at(5.95, "state", "Welcome")
     frames.append((6.0, dict(state)))
     for t in range(7, 14):
         frames.append((float(t) + 0.2, dict(state)))

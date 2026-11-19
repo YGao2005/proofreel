@@ -2,7 +2,8 @@
 
 `#` starts a comment. `${NAME}` and `${NAME:-default}` take their values from `--set NAME=VALUE`. A line
 `condition <name>` says that the run VM's state must have that condition. Every line is read and parsed before the
-first one runs, so a typo stops the flow before it changes anything. A failed check is recorded and the flow goes
+first one runs, so a typo stops the flow before it changes anything. A line `state <name>` says where the app should
+be; the waits and checks after it prove it (see session.visits). A failed check is recorded and the flow goes
 on. Any other failure stops the flow.
 """
 

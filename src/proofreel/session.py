@@ -8,6 +8,8 @@
   times.txt     "<request> <arrival>": the unix times when each frame was asked for and when it came
   screen.txt    "<width> <height>": the pixel space of event x and y (frames may be smaller)
 
+A `state` event names where the app should be. The waits and checks after it, up to the next state, are its checks.
+
 A folder that an older proofreel wrote is upgraded as it is read, and never written back.
 """
 
@@ -24,7 +26,7 @@ CAMERA = {"click", "double", "right", "drag", "type"}
 RING = {"click", "double", "right", "drag"}
 CHIP = {"click", "double", "right", "drag", "type", "key", "hold", "tap", "open", "wait", "check"}
 VERDICT = {"wait", "check"}
-ROW = {"step", "note", "wait", "check"}
+ROW = {"state", "step", "note", "wait", "check"}
 HIDDEN = {"move"}
 CLICK_LEAD = 0.3
 
@@ -51,6 +53,28 @@ def upgrade(event):
         if waited:
             event["end"], event["t"] = event["t"], event["t"] - waited
     return event
+
+
+def visits(events, error="", end=None):
+    """The run's path through its states: one visit for each state event, until the next one or end. A visit
+    passes (ok True) when all its waits and checks pass. It fails when one fails or the run stopped in it. With no
+    waits or checks, ok is None: the run said it got there, and nothing checked it."""
+    marks = [e for e in events if e["kind"] == "state"]
+    path = []
+    for i, mark in enumerate(marks):
+        until = marks[i + 1]["t"] if i + 1 < len(marks) else end
+        checks = [e for e in events if e["kind"] in VERDICT and mark["t"] <= e["t"] and (until is None or e["t"] < until)]
+        ok = all(e.get("ok") for e in checks) if checks else None
+        if error and i == len(marks) - 1:
+            ok = False
+        path.append({"name": mark["text"], "t": mark["t"], "end": until, "ok": ok})
+    return path
+
+
+def path_line(path):
+    """A run's path in one line, for the agent: States: Home ok → Sign in FAIL."""
+    words = {True: "ok", False: "FAIL", None: "not checked"}
+    return "States: " + " → ".join(f"{v['name']} {words[v['ok']]}" for v in path)
 
 
 class Session:
