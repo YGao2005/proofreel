@@ -78,3 +78,8 @@ def test_main_exits_1_for_a_failed_check_and_2_for_a_problem(monkeypatch, capsys
         cli.main([])
     assert done.value.code == 2
     assert capsys.readouterr().err == "proofreel: No run VM. Start one: proofreel vm up <state>.\n"
+
+
+def test_a_command_that_returns_a_value_does_not_become_the_exit_code(monkeypatch):
+    monkeypatch.setattr(cli.vms, "up", lambda *a, **k: {"vm": "pr-run.vm"})
+    assert cli.command(["vm", "up", "linux"]) is None

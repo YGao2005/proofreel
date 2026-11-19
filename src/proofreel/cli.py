@@ -301,8 +301,8 @@ def parser():
 
 def vm(a):
     match a.action:
-        case "base": return vms.base(a.name, a.image, a.backend, a.os, a.user, a.guest_password)
-        case "up": return vms.up(a.state, a.display, a.memory, a.cpu, a.warmable)
+        case "base": vms.base(a.name, a.image, a.backend, a.os, a.user, a.guest_password)
+        case "up": vms.up(a.state, a.display, a.memory, a.cpu, a.warmable)
         case "save": vms.save(a.state, a.warm, a.note)
         case "build":
             if not (a.flow or a.condition):
