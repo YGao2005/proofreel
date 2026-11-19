@@ -4,6 +4,9 @@
                                                         logged. --app names the app under test: its crash fails the run.
   stop [--keep-frames] [--plain] [--width W]            Stop, then make session.mp4, index.html, and shots/. In a macOS
                                                         run VM, new crash and hang reports go to reports/ and the log.
+  state <name>                                          Say where the app should be now. The waits and checks after
+                                                        it, up to the next state, prove it. The page draws the states
+                                                        of every run as one state machine.
   step <text> | note <text>                             Name the next part (a caption in the video), or add a note.
   click <x> <y> [--double|--right] | move <x> <y> | drag <x1> <y1> <x2> <y2> | type <text> | key <keys...>
   hold <key> <seconds|down|up> | tap <key> [count]      Hold a key, or only press or release it; tap it count times.
@@ -151,7 +154,7 @@ def parser():
     s.add_argument("--keep-frames", action="store_true")
     s.add_argument("--plain", action="store_true")
     s.add_argument("--width", type=int)
-    for name in ("step", "note", "type", "shot", "wait-text", "find", "click-text"):
+    for name in ("state", "step", "note", "type", "shot", "wait-text", "find", "click-text"):
         s = sub.add_parser(name)
         s.add_argument("text", nargs="?" if name == "find" else None)
         if name == "wait-text":
@@ -316,7 +319,7 @@ def command(argv):
     match a.command:
         case "start": return start(a)
         case "stop": return stop(plain=a.plain, width=a.width, keep_frames=a.keep_frames)
-        case "step" | "note": return log(a.command, a.text)
+        case "state" | "step" | "note": return log(a.command, a.text)
         case "event":
             fields = {k: v for k, v in (("x", a.x), ("y", a.y), ("ok", a.ok), ("detail", a.detail)) if v is not None}
             return log(a.kind, a.text, a.t, a.end, **fields)

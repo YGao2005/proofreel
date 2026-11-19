@@ -23,8 +23,12 @@ const fastest = r => Math.round(Math.max(1, ...r.clock.slice(1).map((k, i) =>
   k[1] > r.clock[i][1] ? (k[0] - r.clock[i][0]) / (k[1] - r.clock[i][1]) : 1)));
 const caps = {};
 let run = RUNS.length - 1;
-let zoom = true;
-try { zoom = localStorage.getItem("proofreel-zoom") !== "0"; } catch (err) {}
+let zoom = true, view = "timeline", selected = null;
+try { zoom = localStorage.getItem("proofreel-zoom") !== "0"; view = localStorage.getItem("proofreel-view") || view; } catch (err) {}
+const MACHINE = RUNS.some(x => x.states && x.states.length);
+const VISITS = { ok: ["Pass", "ok"], bad: ["Fail", "bad"], unchecked: ["Not checked", "info"] };
+const visitAt = (r, real) => (r.states || []).find(v => v.t <= real && real < v.end) || null;
+const visitVerdict = v => v.ok === false ? "bad" : v.ok ? "ok" : "unchecked";
 const fromHash = () => {
   const m = /^#run-(\d+)$/.exec(location.hash);
   if (m && +m[1] >= 1 && +m[1] <= RUNS.length) run = +m[1] - 1;
@@ -54,7 +58,7 @@ function render() {
   const video = $("video", { controls: "", controlslist: "nofullscreen", playsinline: "", muted: "", preload: "metadata",
     poster: r.base + "poster.jpg", src: r.base + "session.mp4" });
   const overlay = r.overlay ? $("div", { class: "overlay", "aria-hidden": "true" },
-    $("div", { class: "top" }, $("span", { class: "pill clock" }), $("span", { class: "pill speed" })),
+    $("div", { class: "top" }, $("span", { class: "pill clock" }), $("span", { class: "pill state" }), $("span", { class: "pill speed" })),
     $("span", { class: "pill now" }), $("span", { class: "pill caption" })) : null;
   const screen = $("div", { class: "screen" }, video, overlay);
   const update = () => stage(r, video, overlay);
@@ -89,9 +93,9 @@ function render() {
     $("p", { text: `Recorded from the screen as the agent drove it. Blue rings are clicks. The video is sped up to about 30 s; a badge shows the speed (up to ${fastest(r)}x with no change on the screen). The clock is real time. Click a row or a mark to jump to it.` }));
   const side = $("div", { class: "side" }, player, reviewPanel(r), askPanel(r, video));
   const list = $("ol");
-  let actions = null, summary = null;
+  let actions = null, summary = null, visit = 0;
   for (const e of shown) {
-    if (e.row === "key") { list.append(row(r, e, seek)); actions = null; continue; }
+    if (e.row === "key") { list.append(row(r, e, seek, e.kind === "state" ? r.states[visit++] : null)); actions = null; continue; }
     if (!actions) {
       actions = $("ol");
       summary = $("summary");
@@ -101,8 +105,24 @@ function render() {
     const n = actions.children.length;
     summary.textContent = `${n} action${n === 1 ? "" : "s"}`;
   }
-  app.append($("div", { class: "grid" }, side, list));
+  const machine = MACHINE ? machineView(r, seek) : null;
+  const views = machine ? $("div", { class: "views", role: "group", "aria-label": "View" }) : null;
+  const show = () => {
+    list.hidden = !!machine && view === "machine";
+    if (machine) machine.element.hidden = view !== "machine";
+    if (views) views.querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.view === view)));
+  };
+  if (views) for (const [name, label] of [["timeline", "Timeline"], ["machine", "State machine"]]) {
+    views.append($("button", { type: "button", class: "btn small", "data-view": name, text: label, onclick: () => {
+      view = name;
+      try { localStorage.setItem("proofreel-view", view); } catch (err) {}
+      show();
+    } }));
+  }
+  show();
+  app.append($("div", { class: "grid" }, side, $("div", { class: "column" }, views, list, machine && machine.element)));
   video.addEventListener("timeupdate", () => {
+    if (machine) machine.now(toReal(r, video.currentTime));
     if (video.duration) done.style.width = (video.currentTime / video.duration * 100) + "%";
     let current = null;
     const rows = list.querySelectorAll("li[data-t]");
@@ -147,8 +167,14 @@ function stage(r, video, overlay) {
   }
   if (!overlay) return;
   const real = toReal(r, at), speed = speedAt(r, at);
-  const [clockPill, speedPill] = overlay.querySelectorAll(".top .pill");
+  const [clockPill, statePill, speedPill] = ["clock", "state", "speed"].map(name => overlay.querySelector(".top ." + name));
   clockPill.textContent = clock(Math.max(0, real));
+  const visit = visitAt(r, real);
+  statePill.hidden = !visit;
+  if (visit) {
+    statePill.textContent = visit.name;
+    statePill.className = `pill state ${VISITS[visitVerdict(visit)][1]}`;
+  }
   speedPill.textContent = `${speed >= 2 ? Math.round(speed) : speed.toFixed(1)}x speed`;
   speedPill.style.opacity = Math.min(1, Math.max(0, (speed - 1.3) / 1.5));
   const steps = r.events.filter(e => e.kind === "step" && e.t <= real);
@@ -164,19 +190,127 @@ function stage(r, video, overlay) {
   }
 }
 
-function row(r, e, seek) {
+function row(r, e, seek, visit) {
   const status = e.kind === "check" ? chip(e.ok ? "Pass" : "Fail", e.ok ? "ok" : "bad")
-    : e.kind === "wait" ? chip(e.ok ? "Seen" : "Not seen", e.ok ? "ok" : "bad") : null;
+    : e.kind === "wait" ? chip(e.ok ? "Seen" : "Not seen", e.ok ? "ok" : "bad")
+    : visit ? chip(...VISITS[visitVerdict(visit)]) : null;
   const text = $("span", { class: "text" },
-    ["step", "check", "note"].includes(e.kind) || e.text.startsWith(e.kind) ? null : $("span", { class: "kind", text: e.kind + " " }),
+    ["state", "step", "check", "note"].includes(e.kind) || e.text.startsWith(e.kind) ? null : $("span", { class: "kind", text: e.kind + " " }),
     document.createTextNode(e.text + " "), status, e.detail ? $("span", { class: "detail", text: e.detail }) : null);
   const body = $("div", { class: "row", tabindex: "0", role: "button", "aria-label": `Jump to ${clock(e.t)}: ${e.text}` },
     $("span", { class: "t", text: clock(e.t) }), text, e.shot ? $("img", { src: r.base + e.shot, alt: "", loading: "lazy" }) : $("span"));
-  const li = $("li", { class: e.kind, "data-t": toVideo(r, e.t) }, body);
+  const li = $("li", { class: e.kind + (visit ? " " + VISITS[visitVerdict(visit)][1] : ""), "data-t": toVideo(r, e.t) }, body);
   const go = () => seek(toVideo(r, e.t) - 0.4);
   body.addEventListener("click", go);
   body.addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); go(); } });
   return li;
+}
+
+// Every run's states as one graph. The run on show is drawn strong: its path, a verdict on each node it visited, and
+// how long each step took. A dot under a node is its verdict in each run. The node the video is in lights up.
+function machineView(r, seek) {
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = (tag, attrs = {}, ...kids) => {
+    const el = document.createElementNS(NS, tag);
+    for (const [k, v] of Object.entries(attrs)) if (k.startsWith("on")) el.addEventListener(k.slice(2), v); else el.setAttribute(k, v);
+    for (const kid of kids) if (kid) el.append(kid);
+    return el;
+  };
+  const graph = Machine.build(RUNS), current = RUNS.indexOf(r), many = RUNS.length > 1, states = r.states || [];
+  const measure = document.createElement("canvas").getContext("2d");
+  measure.font = "600 13px Inter, system-ui, sans-serif";
+  const name = id => id.length > 32 ? id.slice(0, 31) + "…" : id;
+  const size = id => id === Machine.START ? [measure.measureText(id).width + 26, 26]
+    : [Math.max(64, measure.measureText(name(id)).width + 30), many ? 46 : 34];
+  const box = Machine.layout(graph, size);
+  const pad = 8;
+  const drawing = svg("svg", { role: "img", "aria-label": "State machine of the runs" },
+    svg("defs", {}, svg("marker", { id: "arrow", viewBox: "0 0 10 10", refX: "9", refY: "5", markerWidth: "7",
+      markerHeight: "7", orient: "auto-start-reverse" }, svg("path", { d: "M0,0 L10,5 L0,10 z", class: "head" }))));
+  const start = (run, visit) => visit ? RUNS[run].states[visit - 1].t : 0;
+  const small = document.createElement("canvas").getContext("2d");
+  small.font = "11px Inter, system-ui, sans-serif";
+  let left = 0, right = box.width;
+  for (const e of box.edges) {
+    const mine = e.takes.filter(x => x.run === current);
+    const steps = mine.map(x => r.events.find(ev => ev.kind === "step" && ev.t >= start(current, x.visit) && ev.t < states[x.visit].t));
+    const took = mine.map(x => states[x.visit].t - start(current, x.visit));
+    const label = mine.length ? `${took[0].toFixed(1)} s${mine.length > 1 ? ` ×${mine.length}` : ""}${steps[0] ? " · " + steps[0].text : ""}` : "";
+    const runs = [...new Set(e.takes.map(x => x.run + 1))];
+    const g = svg("g", { class: "edge" + (mine.length ? " on" : "") + (e.back ? " back" : ""),
+      onclick: () => { if (mine.length) seek(toVideo(r, start(current, mine[0].visit)) - 0.2); } },
+      svg("title", {}, `${e.from} → ${e.to}${many ? ` (run ${runs.join(", ")})` : ""}${steps[0] ? ": " + steps[0].text : ""}`),
+      svg("path", { d: e.d, class: "hit" }), svg("path", { d: e.d, class: "line", "marker-end": "url(#arrow)" }));
+    if (label && e.label) {
+      const text = label.length > 34 ? label.slice(0, 33) + "…" : label;
+      const [x, y, anchor] = e.label, width = small.measureText(text).width, at = anchor === "end" ? x - 7 : x + 7;
+      g.append(svg("text", { x: at, y: y + 4, "text-anchor": anchor, class: "label" }, text));
+      left = Math.min(left, anchor === "end" ? at - width : at);
+      right = Math.max(right, anchor === "end" ? at : at + width);
+    }
+    drawing.append(g);
+  }
+  const nodes = new Map();
+  let playing = -1;
+  for (const n of box.nodes) {
+    const here = Machine.verdict(states, n.id), first = n.id === Machine.START;
+    const g = svg("g", { class: `node ${first ? "start" : here ? VISITS[here][1] : "away"}`, tabindex: "0", role: "button",
+      transform: `translate(${n.x},${n.y})`, "aria-label": `${n.id}${here ? ": " + VISITS[here][0] : ""}` },
+      svg("rect", { width: n.w, height: n.h, rx: first ? n.h / 2 : 8 }),
+      svg("text", { x: n.w / 2, y: many && !first ? 19 : n.h / 2 + 4.5, class: "name" }, first ? n.id : name(n.id)));
+    if (many && !first) RUNS.forEach((x, i) => {
+      const v = Machine.verdict(x.states, n.id);
+      g.append(svg("circle", { cx: n.w / 2 + (i - (RUNS.length - 1) / 2) * 11, cy: 33, r: i === current ? 4 : 3.2,
+        class: `dot ${v ? VISITS[v][1] : "away"}${i === current ? " mine" : ""}` }, svg("title", {}, `Run ${i + 1}: ${v ? VISITS[v][0] : "not visited"}`)));
+    });
+    // A state the run visits more than once: each click goes to its next visit.
+    const pick = () => {
+      selected = n.id;
+      details();
+      const visits = states.filter(v => v.name === n.id);
+      const v = visits.find(v => v.t > playing + 0.3) || visits[0];
+      if (v) seek(toVideo(r, v.t) - 0.2);
+    };
+    g.addEventListener("click", pick);
+    g.addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); pick(); } });
+    drawing.append(g);
+    nodes.set(n.id, g);
+  }
+  drawing.setAttribute("viewBox", `${left - pad} ${-pad} ${right - left + 2 * pad} ${box.height + 2 * pad}`);
+  drawing.setAttribute("width", right - left + 2 * pad);
+  const info = $("div", { class: "visit" });
+  const details = () => {
+    nodes.forEach((g, id) => g.classList.toggle("picked", id === selected));
+    info.replaceChildren();
+    if (!selected || selected === Machine.START || !nodes.has(selected)) {
+      info.append($("p", { class: "hint", text: "Click a state to see its checks, or a step to jump to it." }));
+      return;
+    }
+    const here = Machine.verdict(states, selected);
+    info.append($("h3", {}, document.createTextNode(selected + " "), here ? chip(...VISITS[here]) : chip("Not in this run", "info")));
+    const visits = states.filter(v => v.name === selected);
+    const checks = r.events.filter(e => ["wait", "check"].includes(e.kind) && visits.some(v => e.t >= v.t && e.t < v.end));
+    if (visits.length && !checks.length) info.append($("p", { class: "hint", text: "No wait or check ran in this state." }));
+    if (checks.length) { const ol = $("ol"); checks.forEach(e => ol.append(row(r, e, seek))); info.append(ol); }
+    if (r.error && visits.includes(states[states.length - 1])) info.append($("p", { class: "hint" }, chip("Stopped", "bad"), document.createTextNode(" " + r.error)));
+    if (many) {
+      const others = $("div", { class: "choices" });
+      RUNS.forEach((x, i) => {
+        const v = Machine.verdict(x.states, selected);
+        if (v && i !== current) others.append($("button", { type: "button", class: "btn small", onclick: () => { location.hash = `run-${i + 1}`; } },
+          $("span", { text: `Run ${i + 1}` }), chip(...VISITS[v])));
+      });
+      if (others.children.length) info.append($("p", { class: "hint", text: "In other runs:" }), others);
+    }
+  };
+  details();
+  const element = $("div", { class: "panel machine" }, $("div", { class: "graph" }, drawing), info);
+  const now = real => {
+    playing = real;
+    const v = visitAt(r, real);
+    nodes.forEach((g, id) => g.classList.toggle("now", !!v && v.name === id));
+  };
+  return { element, now };
 }
 
 function reviewPanel(r) {

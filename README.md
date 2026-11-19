@@ -92,6 +92,29 @@ A problem prints one line that says what to do.
 proofreel run flows/sign-up.flow --set EMAIL=sam@example.com
 ```
 
+### States: the flow as a state machine
+
+Put `state <name>` where the app should be, such as `state "Sign in"`. The waits and checks after it, up to the next
+`state`, prove that the app got there. A visit to a state passes when all of them pass. It fails when one fails or the
+run stopped in it. With no wait or check, it is "not checked". The actions between two states are a transition, and
+`step` names it.
+
+```
+state Home
+wait-text "Acme Notes" 30
+step "Open sign in"
+click-text "Sign in"
+state "Sign in"
+check text "Sign in to Acme"
+```
+
+`stop` prints the run's path, such as `States: Home ok → Sign in ok → Welcome FAIL`. On the page, the
+Timeline | State machine switch draws the states of every run in the review folder as one graph: a node for each state
+and an edge for each transition that a run took. Other flows and conditions add branches and loops. The run on show
+is drawn strong, each node has a dot for its verdict in each run, and each edge shows how long the transition took.
+Click a state or a transition to play the video from there. Click a state again to go to its next visit. The node
+that the video is in lights up. Use the same state name in each flow for the same place in the app.
+
 ### Crash and hang reports (macOS guests)
 
 `start` marks the time in the guest. `stop` copies each new `.ips`, `.hang`, and `.spin` report from
@@ -342,7 +365,7 @@ Any tool can write this folder and then run `proofreel render <dir>`. `src/proof
 | File | Content |
 |---|---|
 | `session.json` | `{"version": 2, "title", "about", "meta": {label: value}, "error", "app", "conditions", "os", "run", "started"}` |
-| `events.jsonl` | one event on each line: `{"t", "end", "kind", "text", "x", "y", "x2", "y2", "ok", "detail"}`, in unix seconds. `[t, end]` is when the action affected the screen: a click's press, the first and last key of `type`, `key`, `hold`, and `tap`, a drag's press and release, and a `wait`'s or `check`'s first look and its verdict. `end` is left out when the event has no length. The kinds are `step`, `note`, `click`, `double`, `right`, `move`, `drag`, `type`, `key`, `hold`, `tap`, `open`, `wait`, and `check` |
+| `events.jsonl` | one event on each line: `{"t", "end", "kind", "text", "x", "y", "x2", "y2", "ok", "detail"}`, in unix seconds. `[t, end]` is when the action affected the screen: a click's press, the first and last key of `type`, `key`, `hold`, and `tap`, a drag's press and release, and a `wait`'s or `check`'s first look and its verdict. `end` is left out when the event has no length. The kinds are `state`, `step`, `note`, `click`, `double`, `right`, `move`, `drag`, `type`, `key`, `hold`, `tap`, `open`, `wait`, and `check` |
 | `reports/` | the crash and hang reports of a macOS run VM |
 | `frames/*.jpg` | the screen, in name order |
 | `times.txt` | `<request> <arrival>`: when each frame was asked for and when it came, one frame on each line |
