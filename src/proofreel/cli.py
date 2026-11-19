@@ -82,7 +82,11 @@ def start(args):
 
 
 def stop(**options):
+    """Exit 1 when a budget that waited for the end of the run failed."""
+    folder = Path(recording.current()["dir"]) if recording.current() else None
     print(recording.stop(**options))
+    run = json.loads((folder / "run.json").read_text())
+    return 1 if any(e.get("late") and not e.get("ok") for e in run["events"]) else 0
 
 
 def check(args, screen, run):
@@ -132,6 +136,8 @@ def metric(args):
         since, window = (steps[-1] if steps else None), "this step"
     else:
         since, window = None, "the run"
+    if args.args[0].startswith(metrics.AFTER):
+        return metrics.pending(args.args[0], args.args[1], args.below, args.above, since, time.time(), window)
     return metrics.check(folder, args.args[0], args.args[1], args.below, args.above, since, window, args.wait)
 
 
@@ -150,10 +156,13 @@ def run_check(args, screen, run=None):
     """Record the check and return 1 when it fails. A check that cannot run is a failed check, with the reason."""
     started = time.time()
     try:
-        ok, label, detail = check(args, screen, run)
+        ok, label, detail, *fields = check(args, screen, run)
     except Problem as problem:
-        ok, label, detail = False, f"check {args.kind} {' '.join(args.args)}", f"The check could not run: {problem}"
-    log("check", label, t=started, end=time.time(), ok=ok, detail=detail)
+        ok, label, detail, fields = False, f"check {args.kind} {' '.join(args.args)}", f"The check could not run: {problem}", []
+    log("check", label, t=started, end=time.time(), ok=ok, detail=detail, **(fields[0] if fields else {}))
+    if ok is None:
+        print(f"Pending: {label} ({detail})")
+        return 0
     print(("Pass: " if ok else "Fail: ") + label + (f" ({detail})" if detail and not ok else ""))
     return 0 if ok else 1
 

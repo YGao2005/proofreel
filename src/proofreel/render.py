@@ -15,7 +15,7 @@ from bisect import bisect_right
 
 from PIL import Image, ImageChops, ImageStat
 
-from . import Problem, draw, metrics, page
+from . import Problem, draw, latency, metrics, page
 from .motion import FPS, Camera, Clock, Pointer, ease, fit, spans
 from .session import CHIP, RING, VERDICT, Session, path_line
 
@@ -182,9 +182,11 @@ def shots(folder, events, frames, times, start):
 def render(folder, framed=True, width=None, crf=20, target=30):
     session = Session(folder)
     folder, info, events = session.folder, session.info, session.events()
-    frames, times, _ = session.frames()
+    frames, times, arrived = session.frames()
     start = times[0]
     scale = Image.open(frames[-1]).width / (session.screen_width() or Image.open(frames[-1]).width)
+    latency.measure(folder, events, frames, times, arrived, scale)
+    events = metrics.decide(folder, events)
     rel = relative(events, start, scale)
     end = max(times[-1] - start, max((e.get("end", e["t"]) for e in rel), default=0) + 2.0)
     length, clock, camera = video(folder, rel, frames, times, start, end, framed, width, crf, target)
