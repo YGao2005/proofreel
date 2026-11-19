@@ -22,7 +22,8 @@ def test_running_asks_the_guest_in_its_own_way(system, code, ok, monkeypatch):
     monkeypatch.setattr(vm.Run, "ssh", lambda self, command, **_: sent.append(command) or
                         subprocess.CompletedProcess(command, code, "", ""))
     assert run_check(["running", "it's.exe" if system == "windows" else "app"], monkeypatch)[1] is ok
-    assert sent[0].startswith("if (Get-Process -Name 'it''s' " if system == "windows" else "pgrep -x app")
+    assert ("if (Get-Process -Name 'it''s' " in sent[0] and sent[0].startswith("powershell -NoProfile")
+            if system == "windows" else sent[0].startswith("pgrep -x app"))
 
 
 def test_a_guest_command_runs_again_until_it_passes(monkeypatch):

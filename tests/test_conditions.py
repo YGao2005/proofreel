@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from proofreel import Problem, cli, conditions, crash, flow, vm
+from proofreel import Problem, cli, conditions, crash, flow, plugins, vm
 
 
 def write_condition(folder, folder_name="fake-thing", **fields):
@@ -20,37 +20,39 @@ def write_condition(folder, folder_name="fake-thing", **fields):
 
 
 def test_every_shipped_condition_has_a_full_manifest():
-    assert {"bluetooth-headset-call-mode", "no-microphone", "offline", "run-from-dmg",
-            "quarantined-download"} <= set(conditions.known())
-    for name in conditions.known():
-        info = conditions.manifest(conditions.folder(name))
-        assert all(info[field] for field in conditions.FIELDS)
+    names = plugins.known("condition")
+    assert {"bluetooth-headset-call-mode", "no-microphone", "offline", "run-from-dmg", "quarantined-download"} <= set(names)
+    for name in names:
+        info = plugins.manifest("condition", plugins.find("condition", name))
+        assert all(info[field] for field in plugins.COMMON + plugins.KINDS["condition"]["fields"])
 
 
-def test_a_manifest_needs_every_field_its_folder_name_and_both_scripts(tmp_path):
+def test_a_manifest_needs_every_field_its_folder_name_and_each_script(tmp_path):
     with pytest.raises(ValueError, match="fidelity"):
-        conditions.manifest(write_condition(tmp_path, "a", fidelity=""))
+        plugins.manifest("condition", write_condition(tmp_path, "a", fidelity=""))
     with pytest.raises(ValueError, match="must match"):
-        conditions.manifest(write_condition(tmp_path, "b", name="other"))
+        plugins.manifest("condition", write_condition(tmp_path, "b", name="other"))
     path = write_condition(tmp_path, "c")
     (path / "check.sh").unlink()
     with pytest.raises(ValueError, match="check.sh"):
-        conditions.manifest(path)
+        plugins.manifest("condition", path)
+    with pytest.raises(ValueError, match="apply.ps1, check.ps1"):
+        plugins.manifest("condition", write_condition(tmp_path, "d", os=["macos", "windows"]))
+    with pytest.raises(ValueError, match="unknown systems"):
+        plugins.manifest("condition", write_condition(tmp_path, "e", os=["beos"]))
 
 
-def test_a_condition_refuses_a_run_vm_of_another_system(home, tmp_path, monkeypatch):
+def test_a_condition_refuses_a_run_vm_of_another_system(home, monkeypatch):
     monkeypatch.setattr(vm.Run, "ssh", lambda *a, **k: pytest.fail("nothing runs in the guest"))
     with pytest.raises(Problem, match="works on macos, and the VM is linux"):
         conditions.apply(vm.Run({"id": "x", "state": "s", "os": "linux", "conditions": []}), "offline", {})
-    with pytest.raises(ValueError, match="unknown systems"):
-        conditions.manifest(write_condition(tmp_path, os=["beos"]))
 
 
 def test_values_take_the_default_and_a_value_with_no_default_is_required(tmp_path):
-    info = conditions.manifest(write_condition(tmp_path, values={"RATE": "24000", "DMG": ""}))
-    assert conditions.resolve(info, {"DMG": "/x.dmg", "OTHER": "1"}) == {"RATE": "24000", "DMG": "/x.dmg"}
+    info = plugins.manifest("condition", write_condition(tmp_path, values={"RATE": "24000", "DMG": ""}))
+    assert plugins.resolve(info, {"DMG": "/x.dmg", "OTHER": "1"}) == {"RATE": "24000", "DMG": "/x.dmg"}
     with pytest.raises(Problem, match="DMG"):
-        conditions.resolve(info, {})
+        plugins.resolve(info, {})
 
 
 def test_a_flow_names_its_conditions_and_a_state_must_have_them(tmp_path):

@@ -40,7 +40,7 @@ import sys
 import time
 from pathlib import Path
 
-from . import HOME, Problem, ax, conditions, flow, guest, recording
+from . import HOME, Problem, ax, conditions, flow, guest, plugins, recording
 from .recording import log
 from . import vm as vms
 from .screen import Screen, center, find, screen_text, wait_for
@@ -274,7 +274,7 @@ def vm(a):
                 raise Problem("Give --flow, --condition, or both.")
             values = dict(v.split("=", 1) for v in a.set)
             for name in a.condition:
-                conditions.resolve(conditions.fits(name, vms.state_info(a.parent)["os"]), values)
+                plugins.resolve(plugins.fits("condition", name, vms.state_info(a.parent)["os"]), values)
             run = vms.up(a.parent, warmable=a.warm)
             applied = [conditions.apply(run, name, values) for name in a.condition]
             if a.flow:
@@ -283,11 +283,11 @@ def vm(a):
                      conditions=applied)
         case "states": vms.states()
         case "conditions":
-            for name in conditions.known():
-                info = conditions.manifest(conditions.folder(name))
+            for name, source in plugins.known("condition").items():
+                info = plugins.manifest("condition", plugins.find("condition", name))
                 values = " ".join(f"{k}={v or '...'}" for k, v in info["values"].items())
-                print(f"{name}  ({', '.join(info['os'])}){'  ' + values if values else ''}\n  {info['fakes']}\n"
-                      f"  Not faked: {info['fidelity']}")
+                print(f"{name}  ({', '.join(info['os'])}{', ' + source if source else ''})"
+                      f"{'  ' + values if values else ''}\n  {info['fakes']}\n  Not faked: {info['fidelity']}")
         case "drop": vms.drop(a.state)
         case "down": vms.down()
         case "sh": return vms.Run.current().ssh(shlex.join(a.cmd) if len(a.cmd) > 1 else a.cmd[0], check=False,

@@ -209,9 +209,12 @@ warm VM.
 ### Conditions: fake hardware and setups (macOS guests)
 
 A condition makes the guest look like a setup that you do not have, such as a Bluetooth headset or a Mac with no
-microphone. It is a folder in `src/proofreel/conditions/` (or any folder path): `condition.toml` says what it fakes,
-how it applies, how it checks, and what it does not reproduce. `apply.sh` and `check.sh` run in the guest. An
-optional `host.sh` runs on the host first, for example to build a driver.
+microphone. It is a plugin folder: `condition.toml` says what it fakes, how it applies, how it checks, and what it
+does not reproduce. `apply` and `check` run in the guest (`.sh` on macOS and Linux, `.ps1` on Windows). An optional
+`host.sh` runs on the host first, for example to build a driver. proofreel looks for a condition (and later a probe)
+by name in this order: a folder path, `./.proofreel/conditions/` in the project you work in, then
+`$PROOFREEL_HOME/conditions/`, then the ones that come with proofreel. So an app's repo can ship its own conditions,
+and `proofreel vm conditions` says where each one comes from.
 
 ```bash
 proofreel vm conditions                                   # the list, with what each does not fake
