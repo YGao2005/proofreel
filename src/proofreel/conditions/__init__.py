@@ -20,7 +20,7 @@ import tempfile
 import tomllib
 from pathlib import Path
 
-from .. import Problem, guest as guests, vm
+from .. import Problem, guest as guests
 
 HERE = Path(__file__).parent
 FIELDS = ("name", "version", "os", "fakes", "applies", "checks", "fidelity")
@@ -68,11 +68,10 @@ def missing(needed, conditions):
     return [name for name in needed if name not in names(conditions)]
 
 
-def guest(record, script):
+def guest(run, record, script):
     env = " ".join(f"{k}={shlex.quote(str(v))}" for k, v in record.get("values", {}).items())
-    where = guests.of(vm.current()).conditions
     try:
-        result = vm.ssh(f"cd {where}/{record['name']} && {env} sh {script}", check=False, timeout=300)
+        result = run.ssh(f"cd {run.guest.conditions}/{record['name']} && {env} sh {script}", check=False, timeout=300)
     except subprocess.TimeoutExpired:
         return 124, f"{script} did not end in 300 s."
     return result.returncode, (result.stdout + result.stderr).strip()
@@ -86,10 +85,10 @@ def fits(name, system):
     return info
 
 
-def apply(name, given):
+def apply(run, name, given):
     """Apply a condition in the run VM, then check it. Returns the record to keep in the state."""
     path = folder(name)
-    system = guests.of(vm.current())
+    system = run.guest
     info = fits(name, system.name)
     record = {"name": info["name"], "version": info["version"], "values": resolve(info, given)}
     with tempfile.TemporaryDirectory() as temp:
@@ -100,18 +99,18 @@ def apply(name, given):
                                   capture_output=True, text=True)
             if done.returncode:
                 raise Problem(f"Condition {name}: host.sh failed: {(done.stdout + done.stderr).strip()[-800:]}")
-        vm.ssh(f"mkdir -p {system.conditions} && rm -rf {system.conditions}/{info['name']}", timeout=30)
-        vm.put(str(stage), system.conditions)
-    code, output = guest(record, "apply.sh")
+        run.ssh(f"mkdir -p {system.conditions} && rm -rf {system.conditions}/{info['name']}", timeout=30)
+        run.upload(str(stage), system.conditions)
+    code, output = guest(run, record, "apply.sh")
     if code:
         raise Problem(f"Condition {name} did not apply: {output[-800:]}")
-    check(record)
+    check(run, record)
     return record
 
 
-def check(record):
+def check(run, record):
     """Run the condition's check in the run VM. A failed check stops everything."""
-    code, output = guest(record, "check.sh")
+    code, output = guest(run, record, "check.sh")
     if code:
         raise Problem(f"Condition {record['name']} does not hold: {output[-800:] or f'check.sh exit {code}'}")
     print(f"Condition {record['name']}: {output.splitlines()[-1] if output else 'holds'}")

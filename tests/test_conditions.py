@@ -38,12 +38,10 @@ def test_a_manifest_needs_every_field_its_folder_name_and_both_scripts(tmp_path)
         conditions.manifest(path)
 
 
-def test_a_condition_refuses_a_run_vm_of_another_system(tmp_path, monkeypatch):
-    monkeypatch.setattr(vm, "CURRENT", tmp_path / "run.json")
-    (tmp_path / "run.json").write_text(json.dumps({"state": "s", "os": "linux", "conditions": []}))
-    monkeypatch.setattr(vm, "ssh", lambda *a, **k: pytest.fail("nothing runs in the guest"))
+def test_a_condition_refuses_a_run_vm_of_another_system(home, tmp_path, monkeypatch):
+    monkeypatch.setattr(vm.Run, "ssh", lambda *a, **k: pytest.fail("nothing runs in the guest"))
     with pytest.raises(Problem, match="works on macos, and the VM is linux"):
-        conditions.apply("offline", {})
+        conditions.apply(vm.Run({"id": "x", "state": "s", "os": "linux", "conditions": []}), "offline", {})
     with pytest.raises(ValueError, match="unknown systems"):
         conditions.manifest(write_condition(tmp_path, os=["beos"]))
 
@@ -63,9 +61,7 @@ def test_a_flow_names_its_conditions_and_a_state_must_have_them(tmp_path):
     assert conditions.missing(["offline", "no-microphone"], state) == ["no-microphone"]
 
 
-def test_run_refuses_a_state_without_the_flow_condition(tmp_path, monkeypatch):
-    monkeypatch.setattr(vm, "STATES", tmp_path)
-    monkeypatch.setattr(vm, "CURRENT", tmp_path / "run.json")
+def test_run_refuses_a_state_without_the_flow_condition(home, tmp_path, monkeypatch):
     (tmp_path / "run.json").write_text(json.dumps({"state": "plain", "conditions": [{"name": "offline", "version": 1}]}))
     ran = []
     monkeypatch.setattr(cli, "command", lambda words: ran.append(words))

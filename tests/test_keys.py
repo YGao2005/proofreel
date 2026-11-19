@@ -26,12 +26,12 @@ def screen(keys=None):
 
 def test_a_macos_guest_posts_modifiers_in_the_guest_and_other_keys_over_vnc(monkeypatch):
     calls = []
-    monkeypatch.setattr(guest.MacOS, "keys_helper", lambda self, *args, timeout=30: calls.append(args))
+    monkeypatch.setattr(guest.MacOS, "keys_helper", lambda self, run, *args, timeout=30: calls.append(args))
     mac, s = guest.GUESTS["macos"], screen(guest.GUESTS["macos"].keys)
-    mac.tap(s, "fn", 2)
-    mac.hold(s, "option", 1.5)
-    mac.press(s, "command", True)
-    mac.tap(s, "a", 2)
+    mac.tap(None, s, "fn", 2)
+    mac.hold(None, s, "option", 1.5)
+    mac.press(None, s, "command", True)
+    mac.tap(None, s, "a", 2)
     assert calls == [("tap", "fn", "2", "70", "110"), ("hold", "option", "1.5"), ("down", "command")]
     assert s.client.sent == [("down", "a"), ("up", "a"), ("down", "a"), ("up", "a")]
 
@@ -39,8 +39,8 @@ def test_a_macos_guest_posts_modifiers_in_the_guest_and_other_keys_over_vnc(monk
 def test_other_guests_send_every_key_over_vnc(monkeypatch):
     monkeypatch.setattr(guest.MacOS, "keys_helper", lambda *_, **__: pytest.fail("not a macOS guest"))
     s = screen()
-    guest.GUESTS["linux"].press(s, "shift", True)
-    guest.Guest().tap(s, "ctrl", 1)
+    guest.GUESTS["linux"].press(None, s, "shift", True)
+    guest.Guest().tap(None, s, "ctrl", 1)
     assert s.client.sent == [("down", "shift"), ("down", "ctrl"), ("up", "ctrl")]
 
 
@@ -54,10 +54,14 @@ def test_hold_takes_seconds_down_or_up(monkeypatch):
     done = []
     monkeypatch.setattr(cli, "log", lambda *a, **k: None)
     system = guest.Guest()
-    monkeypatch.setattr(system, "press", lambda screen, key, down: done.append((key, down)))
-    monkeypatch.setattr(system, "hold", lambda screen, key, seconds: done.append((key, seconds)))
+    monkeypatch.setattr(system, "press", lambda run, screen, key, down: done.append((key, down)))
+    monkeypatch.setattr(system, "hold", lambda run, screen, key, seconds: done.append((key, seconds)))
+
+    class Run:
+        guest = system
+
     for argv in (["hold", "fn", "down"], ["hold", "fn", "up"], ["hold", "fn", "0.5"]):
-        cli.act(cli.parser().parse_args(argv), None, system)
+        cli.act(cli.parser().parse_args(argv), None, Run())
     assert done == [("fn", True), ("fn", False), ("fn", 0.5)]
     with pytest.raises(Problem, match="seconds, down, or up"):
-        cli.act(cli.parser().parse_args(["hold", "fn", "long"]), None, system)
+        cli.act(cli.parser().parse_args(["hold", "fn", "long"]), None, Run())

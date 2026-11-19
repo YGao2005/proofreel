@@ -14,8 +14,6 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from . import vm
-
 MARK = "/tmp/proofreel-session-start"
 FOLDERS = "~/Library/Logs/DiagnosticReports /Library/Logs/DiagnosticReports"
 KINDS = (".ips", ".hang", ".spin")
@@ -23,8 +21,8 @@ TOP = 8
 LATE = 120
 
 
-def mark():
-    vm.ssh(f"touch {MARK}", check=False, timeout=20)
+def mark(run):
+    run.ssh(f"touch {MARK}", check=False, timeout=20)
 
 
 def when(text):
@@ -101,26 +99,26 @@ def events(reports, app, start, end):
     return out
 
 
-def listing():
+def listing(run):
     names = " -o ".join(f"-name '*{kind}'" for kind in KINDS)
-    found = vm.ssh(f"sudo -n find {FOLDERS} -maxdepth 1 -type f \\( {names} \\) -newer {MARK} 2>/dev/null",
+    found = run.ssh(f"sudo -n find {FOLDERS} -maxdepth 1 -type f \\( {names} \\) -newer {MARK} 2>/dev/null",
                    check=False, timeout=30)
     return [line for line in found.stdout.splitlines() if line.strip()]
 
 
-def harvest(folder, app=None, start=0.0):
+def harvest(run, folder, app=None, start=0.0):
     """Copy the new reports into folder/reports and return their log events. If the app under test is gone and left
     no report yet, wait up to LATE seconds: ReportCrash writes the report a few seconds after the crash."""
     end = time.time()
-    paths = listing()
-    if app and vm.ssh(f"pgrep -xq {shlex.quote(app)}", check=False, timeout=20).returncode:
+    paths = listing(run)
+    if app and run.ssh(f"pgrep -xq {shlex.quote(app)}", check=False, timeout=20).returncode:
         give_up = time.time() + LATE
         while time.time() < give_up and not any(Path(p).name.lower().startswith(app.lower()) for p in paths):
             time.sleep(2)
-            paths = listing()
+            paths = listing(run)
     reports = []
     for path in paths:
-        text = vm.ssh(f"sudo -n cat {shlex.quote(path)}", check=False, timeout=60).stdout
+        text = run.ssh(f"sudo -n cat {shlex.quote(path)}", check=False, timeout=60).stdout
         (folder / "reports").mkdir(exist_ok=True)
         (folder / "reports" / Path(path).name).write_text(text)
         try:

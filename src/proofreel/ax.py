@@ -10,10 +10,10 @@ import time
 from . import Problem, guest
 
 
-def tree(app=None):
+def tree(run, app=None):
     """The AX tree of the app's windows (the front app by default), and the main screen size in points. The helper
     is compiled on the host and copied to the guest the first time."""
-    result = guest.GUESTS["macos"].helper("ax.swift", *(["--app", app] if app else []))
+    result = guest.GUESTS["macos"].helper(run, "ax.swift", *(["--app", app] if app else []))
     if result.returncode:
         raise Problem(f"AX: {result.stderr.strip() or f'the helper failed ({result.returncode})'}")
     return json.loads(result.stdout)
@@ -45,8 +45,8 @@ def flatten(node, scale, clip, depth=0):
         yield from flatten(child, scale, clip, depth + 1)
 
 
-def elements(screen, app=None):
-    data = tree(app)
+def elements(run, screen, app=None):
+    data = tree(run, app)
     scale = screen.size()[0] / data["screen"]["w"]
     clip = (0, 0, data["screen"]["w"], data["screen"]["h"])
     return [element for window in data["windows"] for element in flatten(window, scale, clip)]
@@ -70,10 +70,10 @@ def matches(items, label, role=None):
     return exact + [e for e in pool if e not in exact and any(want in name.lower() for name in names(e))]
 
 
-def wait_for(screen, label, seconds, present=True, app=None, role=None):
+def wait_for(run, screen, label, seconds, present=True, app=None, role=None):
     end = time.time() + seconds
     while True:
-        found = matches(elements(screen, app), label, role)
+        found = matches(elements(run, screen, app), label, role)
         if bool(found) == present or time.time() > end:
             return found
         time.sleep(0.5)

@@ -6,7 +6,7 @@ import shutil
 import subprocess
 
 from . import Problem
-from .vm import HOME, RUN, ssh, wait
+from .vm import HOME, MACHINE, wait
 
 PREFIX = "pr-"
 
@@ -28,25 +28,25 @@ def base(name, image):
 
 
 def up(name, info, display=None, memory=None, cpu=None, warmable=False):
-    tart("clone", PREFIX + name, RUN)
+    tart("clone", PREFIX + name, MACHINE)
     settings = [*(["--display", display] if display else []), *(["--memory", str(memory)] if memory else []),
                 *(["--cpu", str(cpu)] if cpu else [])]
     if settings and not info.get("warm"):
-        tart("set", RUN, *settings)
+        tart("set", MACHINE, *settings)
     return boot(warmable or info.get("warm"))
 
 
 def boot(suspendable=False):
-    log = HOME / f"{RUN}.log"
-    args = ["tart", "run", RUN, "--no-graphics", "--vnc-experimental", "--no-clipboard",
+    log = HOME / f"{MACHINE}.log"
+    args = ["tart", "run", MACHINE, "--no-graphics", "--vnc-experimental", "--no-clipboard",
             *(["--suspendable"] if suspendable else ["--no-audio"])]
     with open(log, "w") as out:
         proc = subprocess.Popen(args, stdout=out, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
                                 start_new_session=True)
     url = wait(lambda: re.search(r"vnc://:(?P<pw>[^@]*)@(?P<host>[^:]+):(?P<port>\d+)", log.read_text()), 90,
                f"Tart printed no VNC address. See {log}.")
-    ip = wait(lambda: tart("ip", RUN, "--wait", "5", check=False).stdout.strip(), 180, "The VM got no IP address.")
-    return {"vm": RUN, "pid": proc.pid, "ip": ip, "vnc": f"{url['host']}::{url['port']}", "vnc_password": url["pw"],
+    ip = wait(lambda: tart("ip", MACHINE, "--wait", "5", check=False).stdout.strip(), 180, "The VM got no IP address.")
+    return {"vm": MACHINE, "pid": proc.pid, "ip": ip, "vnc": f"{url['host']}::{url['port']}", "vnc_password": url["pw"],
             "suspendable": bool(suspendable)}
 
 
@@ -56,12 +56,12 @@ def save(name, run, warm):
     if warm and not run.get("suspendable"):
         raise Problem("This run VM cannot keep its memory. Start it with: proofreel vm up <state> --warmable.")
     if warm:
-        tart("suspend", RUN)
+        tart("suspend", MACHINE)
     else:
-        ssh("sudo -S shutdown -h now <<< " + json.dumps(run["password"]), check=False, timeout=20)
-        wait(lambda: vms().get(RUN, {}).get("State") == "stopped", 120, "The VM did not shut down.")
-    wait(lambda: vms().get(RUN, {}).get("State") in ("stopped", "suspended"), 60, "The VM did not stop.")
-    tart("clone", RUN, PREFIX + name)
+        run.ssh("sudo -S shutdown -h now <<< " + json.dumps(run["password"]), check=False, timeout=20)
+        wait(lambda: vms().get(MACHINE, {}).get("State") == "stopped", 120, "The VM did not shut down.")
+    wait(lambda: vms().get(MACHINE, {}).get("State") in ("stopped", "suspended"), 60, "The VM did not stop.")
+    tart("clone", MACHINE, PREFIX + name)
 
 
 def resume(name, run, warm):
@@ -69,9 +69,9 @@ def resume(name, run, warm):
 
 
 def stop():
-    if shutil.which("tart") and RUN in vms():
-        tart("stop", RUN, check=False)
-        tart("delete", RUN)
+    if shutil.which("tart") and MACHINE in vms():
+        tart("stop", MACHINE, check=False)
+        tart("delete", MACHINE)
 
 
 def drop(name):

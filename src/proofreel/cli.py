@@ -47,14 +47,14 @@ ACTIVE = HOME / f"{vms.RUN}-session.json"
 
 
 def target(args):
-    """The screen: (VNC server, password, guest). The guest is None for a screen that is not the run VM."""
+    """The screen: (VNC server, password, run VM). The run VM is None for a screen that is not one."""
     if getattr(args, "vnc", None):
         return args.vnc, args.password, None
     if os.environ.get("PROOFREEL_VNC"):
         return os.environ["PROOFREEL_VNC"], os.environ.get("PROOFREEL_PASSWORD"), None
     if vms.CURRENT.exists():
-        run = vms.current()
-        return run["vnc"], run["vnc_password"], guest.of(run)
+        run = vms.Run.current()
+        return run["vnc"], run["vnc_password"], run
     raise Problem("No screen. Use --vnc host::port, PROOFREEL_VNC, or proofreel vm up <state>.")
 
 
@@ -72,22 +72,21 @@ def log(kind, text, t=None, **fields):
 def start(args):
     if active():
         raise Problem(f"A session is recording: {active()['dir']}. Stop it first.")
-    server, password, system = target(args)
+    server, password, run = target(args)
     folder = SESSIONS / f"{args.name}-{time.strftime('%Y%m%d-%H%M%S')}"
     folder.mkdir(parents=True)
     meta = dict(item.split("=", 1) for item in args.meta)
     faked = []
-    if system:
-        run = vms.current()
+    if run:
         meta.setdefault("from state", run["state"])
         faked = run["conditions"]
         if faked:
             meta.setdefault("conditions", ", ".join(conditions.names(faked)))
-        system.mark()
+        run.guest.mark(run)
     meta.setdefault("", time.strftime("%Y-%m-%d %H:%M"))
     (folder / "session.json").write_text(json.dumps({"title": args.title or args.name, "about": args.about,
                                                     "meta": meta, "app": args.app, "conditions": faked,
-                                                    "os": system.name if system else None,
+                                                    "os": run["os"] if run else None, "run": run and run["id"],
                                                     "started": time.time()}))
     recorder = subprocess.Popen([sys.executable, "-m", "proofreel.capture", str(folder), server, password or "",
                                  str(args.fps), str(args.reduce)], stdout=open(folder / "recorder.log", "w"),
@@ -109,9 +108,14 @@ def stop(plain=False, width=None, keep_frames=False, error=None):
         time.sleep(0.1)
     ACTIVE.unlink()
     info = json.loads((folder / "session.json").read_text())
-    if info.get("os"):
+    if info.get("run"):
+        run = vms.Run.current() if vms.CURRENT.exists() else None
+        if run and run["id"] == info["run"]:
+            events = run.guest.harvest(run, folder, info.get("app"), info.get("started", 0))
+        else:
+            events = [{"t": time.time(), "kind": "note", "text": "No crash reports: the run VM stopped or changed."}]
         with open(folder / "events.jsonl", "a") as out:
-            for event in guest.GUESTS[info["os"]].harvest(folder, info.get("app"), info.get("started", 0)):
+            for event in events:
                 out.write(json.dumps(event) + "\n")
     if error:
         (folder / "session.json").write_text(json.dumps({**info, "error": error}))
@@ -122,12 +126,12 @@ def stop(plain=False, width=None, keep_frames=False, error=None):
     print(f"{verdict}. {real:.0f} s of screen in a {length:.0f} s video, {size:.1f} MB. Page: {folder / 'index.html'}")
 
 
-def check(args, screen):
+def check(args, screen, run):
     if args.kind in ("text", "no-text", "ax", "no-ax"):
         text, present = args.args[0], not args.kind.startswith("no-")
         seconds = float(args.args[1]) if len(args.args) > 1 else (10 if present else 0)
         if args.kind.endswith("ax"):
-            found = ax.wait_for(screen, text, seconds, present, app=args.app, role=args.role)
+            found = ax.wait_for(run, screen, text, seconds, present, app=args.app, role=args.role)
             return bool(found) == present, f'"{text}" is {"" if present else "not "}in the accessibility tree', ""
         found = wait_for(screen, text, seconds, present=present)
         return bool(found) == present, f'"{text}" is {"" if present else "not "}on the screen', ""
@@ -139,10 +143,10 @@ def check(args, screen):
     raise Problem(f"Unknown check {args.kind!r}.")
 
 
-def run_check(args, screen):
+def run_check(args, screen, run=None):
     """Record the check and return 1 when it fails. A check that cannot run is a failed check, with the reason."""
     try:
-        ok, label, detail = check(args, screen)
+        ok, label, detail = check(args, screen, run)
     except Problem as problem:
         ok, label, detail = False, f"check {args.kind} {' '.join(args.args)}", f"The check could not run: {problem}"
     log("check", label, ok=ok, detail=detail)
@@ -153,7 +157,7 @@ def run_check(args, screen):
 def run_flow(path, values):
     steps = flow.load(path, values, parse=lambda words: parser().parse_args(words))
     if steps.conditions:
-        run = vms.current() if vms.CURRENT.exists() else {}
+        run = vms.Run.current() if vms.CURRENT.exists() else {}
         state, have = run.get("state"), run.get("conditions", [])
         if gaps := conditions.missing(steps.conditions, have):
             raise Problem(f"{steps.name} needs condition {', '.join(gaps)}, and the run VM's state {state or '(none)'} "
@@ -297,8 +301,8 @@ def parser():
 
 def vm(a):
     match a.action:
-        case "base": return vms.base(a.name, a.image, a.backend, a.os, a.user, a.guest_password)
-        case "up": return vms.up(a.state, a.display, a.memory, a.cpu, a.warmable)
+        case "base": vms.base(a.name, a.image, a.backend, a.os, a.user, a.guest_password)
+        case "up": vms.up(a.state, a.display, a.memory, a.cpu, a.warmable)
         case "save": vms.save(a.state, a.warm, a.note)
         case "build":
             if not (a.flow or a.condition):
@@ -306,8 +310,8 @@ def vm(a):
             values = dict(v.split("=", 1) for v in a.set)
             for name in a.condition:
                 conditions.resolve(conditions.fits(name, vms.state_info(a.parent)["os"]), values)
-            vms.up(a.parent, warmable=a.warm)
-            applied = [conditions.apply(name, values) for name in a.condition]
+            run = vms.up(a.parent, warmable=a.warm)
+            applied = [conditions.apply(run, name, values) for name in a.condition]
             if a.flow:
                 run_flow(a.flow, values)
             vms.save(a.state, a.warm, a.note, flow=str(Path(a.flow).resolve()) if a.flow else None, values=values,
@@ -321,10 +325,10 @@ def vm(a):
                       f"  Not faked: {info['fidelity']}")
         case "drop": vms.drop(a.state)
         case "down": vms.down()
-        case "sh": return vms.ssh(shlex.join(a.cmd) if len(a.cmd) > 1 else a.cmd[0], check=False,
-                                  capture=False).returncode
-        case "put": vms.put(a.host, a.guest)
-        case "get": vms.get(a.guest, a.host)
+        case "sh": return vms.Run.current().ssh(shlex.join(a.cmd) if len(a.cmd) > 1 else a.cmd[0], check=False,
+                                                capture=False).returncode
+        case "put": vms.Run.current().upload(a.host, a.guest)
+        case "get": vms.Run.current().download(a.guest, a.host)
 
 
 def main(argv=None):
@@ -368,18 +372,19 @@ def command(argv):
         case "vm": return vm(a)
         case "check" if a.kind == "cmd":
             return run_check(a, None)
-    server, password, system = target(a)
-    if (a.command in ("ax", "click-ax") or a.command == "check" and a.kind.endswith("ax")) and not (system and system.ax):
+    server, password, run = target(a)
+    if (a.command in ("ax", "click-ax") or a.command == "check" and a.kind.endswith("ax")) and not (run and run.guest.ax):
         problem = "AX reads a macOS run VM over SSH (proofreel vm up <state>), not a --vnc screen or another system."
         if a.command == "check":
             log("check", f"check {a.kind} {' '.join(a.args)}", ok=False, detail=f"The check could not run: {problem}")
             return 1
         raise Problem(problem)
-    with Screen(server, password, system.keys if system else None) as screen:
-        return act(a, screen, system or guest.Guest())
+    with Screen(server, password, run.guest.keys if run else None) as screen:
+        return act(a, screen, run)
 
 
-def act(a, screen, system):
+def act(a, screen, run):
+    system = run.guest if run else guest.Guest()
     match a.command:
         case "click":
             label = a.label or f"click {a.x}, {a.y}"
@@ -401,17 +406,17 @@ def act(a, screen, system):
             screen.key(*a.keys)
         case "hold" if a.seconds in ("down", "up"):
             log("hold", f"{'press' if a.seconds == 'down' else 'release'} {a.key}")
-            system.press(screen, a.key, a.seconds == "down")
+            system.press(run, screen, a.key, a.seconds == "down")
         case "hold":
             try:
                 seconds = float(a.seconds)
             except ValueError:
                 raise Problem(f"hold takes seconds, down, or up, not {a.seconds!r}.")
             log("hold", f"hold {a.key} for {seconds:g} s", dur=seconds)
-            system.hold(screen, a.key, seconds)
+            system.hold(run, screen, a.key, seconds)
         case "tap":
             log("tap", f"tap {a.key}" + (f" {a.count} times" if a.count > 1 else ""))
-            system.tap(screen, a.key, a.count)
+            system.tap(run, screen, a.key, a.count)
         case "shot": screen.capture(a.text)
         case "find":
             lines = find(screen, a.text) if a.text else screen_text(screen)
@@ -436,20 +441,20 @@ def act(a, screen, system):
             screen.click(x, y)
         case "ax":
             if a.json:
-                return print(json.dumps(ax.tree(a.app), indent=1, ensure_ascii=False))
-            found = ax.matches(ax.elements(screen, a.app), a.find) if a.find else ax.elements(screen, a.app)
+                return print(json.dumps(ax.tree(run, a.app), indent=1, ensure_ascii=False))
+            found = ax.matches(ax.elements(run, screen, a.app), a.find) if a.find else ax.elements(run, screen, a.app)
             for element in found:
                 print(ax.describe(element, indent=not a.find))
             return 1 if a.find and not found else 0
         case "click-ax":
-            found = ax.wait_for(screen, a.label, a.timeout, app=a.app, role=a.role)
+            found = ax.wait_for(run, screen, a.label, a.timeout, app=a.app, role=a.role)
             if len(found) < a.nth:
                 raise Problem(f'"{a.label}" is not in the accessibility tree.')
             x, y = found[a.nth - 1]["x"], found[a.nth - 1]["y"]
             log("click", f'click "{a.label}"', x=x, y=y)
             screen.click(x, y)
         case "check":
-            return run_check(a, screen)
+            return run_check(a, screen, run)
 
 
 def clean(days):
