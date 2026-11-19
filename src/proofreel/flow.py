@@ -1,7 +1,8 @@
 """Flow files: one proofreel command on each line.
 
 `#` starts a comment. `${NAME}` and `${NAME:-default}` take their values from `--set NAME=VALUE`. A line
-`condition <name>` says that the run VM's state must have that condition. Every line is read and parsed before the
+`condition <name>` says that the run VM's state must have that condition. A line `probe <name>[:KEY=VALUE,...]` adds
+a probe to the flow's recording. Every line is read and parsed before the
 first one runs, so a typo stops the flow before it changes anything. A line `state <name>` says where the app should
 be; the waits and checks after it prove it (see session.visits). A failed check is recorded and the flow goes
 on. Any other failure stops the flow.
@@ -22,6 +23,7 @@ class Flow:
     name: str
     lines: list = field(default_factory=list)
     conditions: list = field(default_factory=list)
+    probes: list = field(default_factory=list)
 
 
 def expand(line, values):
@@ -41,10 +43,10 @@ def load(path, values, parse):
     for number, raw in enumerate(path.read_text().splitlines(), 1):
         try:
             words = shlex.split(expand(raw, values), comments=True)
-            if words and words[0] == "condition":
+            if words and words[0] in ("condition", "probe"):
                 if len(words) != 2:
-                    raise Problem("Write one condition on each line: condition <name>.")
-                flow.conditions.append(words[1])
+                    raise Problem(f"Write one {words[0]} on each line: {words[0]} <name>.")
+                (flow.conditions if words[0] == "condition" else flow.probes).append(words[1])
             elif words:
                 parse(words)
                 flow.lines.append((number, words))

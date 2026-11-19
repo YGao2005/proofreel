@@ -74,11 +74,14 @@ class Run(dict):
                             self.target], env=askpass(self["password"]), stdin=subprocess.DEVNULL,
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30, check=False)
 
-    def ssh(self, command, check=True, capture=True, timeout=None):
+    def argv(self, command, tty=False):
+        """The ssh command line for a guest command. With tty, the guest command ends when the connection does."""
         self._shared()
-        return subprocess.run(["ssh", *self._options("-p"), "-o", "ControlMaster=no", self.target, command],
-                              env=askpass(self["password"]), check=check, text=True, capture_output=capture,
-                              stdin=subprocess.DEVNULL, timeout=timeout)
+        return ["ssh", *self._options("-p"), "-o", "ControlMaster=no", *(["-tt"] if tty else []), self.target, command]
+
+    def ssh(self, command, check=True, capture=True, timeout=None):
+        return subprocess.run(self.argv(command), env=askpass(self["password"]), check=check, text=True,
+                              capture_output=capture, stdin=subprocess.DEVNULL, timeout=timeout)
 
     def _scp(self, source, target):
         self._shared()

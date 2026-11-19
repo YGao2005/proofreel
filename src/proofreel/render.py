@@ -15,7 +15,7 @@ from bisect import bisect_right
 
 from PIL import Image, ImageChops, ImageStat
 
-from . import Problem, draw, page
+from . import Problem, draw, metrics, page
 from .motion import FPS, Camera, Clock, Pointer, ease, fit, spans
 from .session import CHIP, RING, VERDICT, Session, path_line
 
@@ -192,4 +192,5 @@ def render(folder, framed=True, width=None, crf=20, target=30):
     run = page.write(folder, info, rel, length, end, clock, camera)
     size = (folder / "session.mp4").stat().st_size / 1e6
     return (f"{run['verdict'].capitalize()}. {end:.0f} s of screen in a {length:.0f} s video, {size:.1f} MB. "
-            f"Page: {folder / 'index.html'}" + (f"\n{path_line(run['states'])}" if run["states"] else ""))
+            f"Page: {folder / 'index.html'}" + (f"\n{path_line(run['states'])}" if run["states"] else "")
+            + "".join(f"\n{line}" for line in metrics.load(folder).summary(limit=8)))

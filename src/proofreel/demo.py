@@ -45,6 +45,19 @@ def screen(state):
     return image
 
 
+TRACKS = {"host/cpu": {"label": "Host CPU", "unit": "%", "better": "lower", "max": 100},
+          "host/vm-cpu": {"label": "This VM's CPU", "unit": "%", "better": "lower", "max": 100}}
+
+
+def host_load(t0):
+    """Made-up host load, once a second: the VM works hard while the server makes the account (6 s to 14 s)."""
+    for n in range(17):
+        busy = 6 <= n <= 14
+        vm = 62 + 3 * (n % 3) if busy else 9 + n % 4
+        yield {"m": "host/cpu", "v": vm + 11, "a": t0 + n + 0.5}
+        yield {"m": "host/vm-cpu", "v": vm, "a": t0 + n + 0.5}
+
+
 def demo(folder, broken=False):
     """broken: the first name is typed wrong, so the final check fails."""
     name = TYPO if broken else NAME
@@ -106,8 +119,12 @@ def demo(folder, broken=False):
             times.write(f"{t0 + t:.3f} {t0 + t + 0.03:.3f}\n")
     (folder / "screen.txt").write_text(f"{W} {H}\n")
     (folder / "events.jsonl").write_text("".join(json.dumps(e) + "\n" for e in events))
+    (folder / "metrics").mkdir()
+    (folder / "metrics" / "host-load.jsonl").write_text("".join(json.dumps(line) + "\n" for line in host_load(t0)))
+    (folder / "metrics" / "probes.json").write_text(json.dumps({"host-load": {"status": "ok", "note": "", "kept": 68}}))
     (folder / "session.json").write_text(json.dumps({
         "version": VERSION, "title": "Sign-up demo",
         "about": "A new user makes an account in a made-up app, drawn frame by frame to show what proofreel makes. The wait for the server plays fast.",
-        "meta": {"": "proofreel demo, run with a typo" if broken else "proofreel demo"}}))
+        "meta": {"": "proofreel demo, run with a typo" if broken else "proofreel demo"},
+        "probes": [{"name": "host-load", "version": "1", "where": "host", "values": {}, "tracks": TRACKS}]}))
     print(render(folder))

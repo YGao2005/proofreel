@@ -1,4 +1,4 @@
-"""Plugin folders: conditions now, probes next. A plugin is a folder with a manifest (<kind>.toml) and scripts.
+"""Plugin folders: conditions and probes. A plugin is a folder with a manifest (<kind>.toml) and scripts.
 
 A name is found in this order, and the first match wins:
   1. a path to a folder
@@ -7,9 +7,10 @@ A name is found in this order, and the first match wins:
   4. the plugins that come with proofreel
 
 Every manifest has name (the folder's name), version, os (the guest systems it works on), fidelity (what it does not
-reproduce), and [values] (name = default; "" means the value is required). Each kind adds its own fields. A script
-step runs in the guest as <step>.sh on macOS and Linux, and as <step>.ps1 on Windows (guest.py decides). host.sh, if
-it is there, runs on the host first, in a copy of the folder ($OUT), and that copy goes to the guest.
+reproduce), and [values] (name = default; "" means the value is required). Each kind adds its own fields and says
+which scripts it needs. A step that runs in the guest is <step>.sh on macOS and Linux, and <step>.ps1 on Windows
+(guest.py decides). host.sh, if it is there, runs on the host first, in a copy of the folder ($OUT), and that copy
+goes to the guest.
 """
 
 import os
@@ -21,8 +22,22 @@ from pathlib import Path
 
 from . import HOME, Problem, guest
 
+def guest_steps(*steps):
+    return lambda info: {guest.GUESTS[system].script(step) for system in info["os"] for step in steps}
+
+
+def probe_scripts(info):
+    """A host probe is run.py, run with this Python. A guest probe is run, in the guest's own script language."""
+    if info["where"] == "host":
+        return {"run.py"}
+    if info["where"] != "guest":
+        raise ValueError(f"{info['name']}/probe.toml: where is host or guest, not {info['where']!r}.")
+    return guest_steps("run")(info)
+
+
 KINDS = {
-    "condition": {"fields": ("fakes", "applies", "checks"), "steps": ("apply", "check")},
+    "condition": {"fields": ("fakes", "applies", "checks"), "scripts": guest_steps("apply", "check")},
+    "probe": {"fields": ("where", "privacy"), "scripts": probe_scripts},
 }
 COMMON = ("name", "version", "os", "fidelity")
 
@@ -63,7 +78,7 @@ def manifest(kind, path):
         raise ValueError(f"{path.name}/{kind}.toml names unknown systems {unknown}. Known: {', '.join(guest.GUESTS)}.")
     if info["name"] != path.name:
         raise ValueError(f"{path.name}/{kind}.toml is named {info['name']!r}; the folder and the name must match.")
-    scripts = {guest.GUESTS[system].script(step) for system in info["os"] for step in KINDS[kind]["steps"]}
+    scripts = KINDS[kind]["scripts"](info)
     if missing := sorted(s for s in scripts if not (path / s).exists()):
         raise ValueError(f"{path.name} has no {', '.join(missing)}.")
     return {**info, "values": info.get("values", {})}
@@ -101,7 +116,7 @@ def stage(run, kind, name, values):
                                   capture_output=True, text=True)
             if done.returncode:
                 raise Problem(f"{name}: host.sh failed: {(done.stdout + done.stderr).strip()[-800:]}")
-        target = folder(run, kind, name)
+        target = folder(run, kind, path.name)
         run.ssh(run.guest.fresh_folder(target), timeout=30)
         run.upload(str(copy), target.rsplit("/", 1)[0])
 

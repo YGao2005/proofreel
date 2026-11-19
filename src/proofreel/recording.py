@@ -3,7 +3,8 @@
 `start` makes the session folder and starts one detached recorder: `python -m proofreel.recording <folder> <server>
 <fps> <reduce>`, with the VNC password in the environment. The recorder holds an exclusive lock on
 `<folder>/recorder.lock` for as long as it lives, so "is it still recording?" never depends on a pid. It writes
-frames/<n>.jpg, times.txt (the unix time of each frame), and screen.txt (the screen size), until SIGTERM.
+frames/<n>.jpg, times.txt (the unix time of each frame), and screen.txt (the screen size), until SIGTERM. It also
+runs the session's probes (see probes) as its children, in its own process group, so `stop` ends them all.
 
 Some VNC servers (Apple Virtualization, so Tart macOS guests) send nothing while the screen stays the same. Each
 capture asks for a whole frame, and VNC_STREAMS connections take turns, because one full update takes a round trip.
@@ -21,7 +22,7 @@ import threading
 import time
 from pathlib import Path
 
-from . import HOME, Problem, session, vm
+from . import HOME, Problem, probes, session, vm
 
 SESSIONS = Path(os.environ.get("PROOFREEL_SESSIONS", HOME / "sessions"))
 POINTER = HOME / f"{vm.RUN}-session.json"
@@ -68,6 +69,7 @@ def start(name, server, password, info, fps=30, reduce=0, run=None):
     folder.mkdir(parents=True)
     if run:
         run.guest.mark(run)
+    probes.prepare(info.get("probes") or [], run)
     (folder / "session.json").write_text(json.dumps({"version": session.VERSION, **info, "os": run["os"] if run else None,
                                                     "run": run["id"] if run else None, "started": time.time()}))
     with open(folder / "recorder.log", "w") as out:
@@ -102,6 +104,7 @@ def stop(error=None, plain=False, width=None, keep_frames=False):
             time.sleep(0.1)
         if not recording(folder):
             break
+    probes.end_group(active["pid"])
     POINTER.unlink(missing_ok=True)
     (folder / "recorder.lock").unlink(missing_ok=True)
     info = json.loads((folder / "session.json").read_text())
@@ -199,6 +202,7 @@ def record(folder, server, password, fps, reduce=0):
     capturers = [threading.Thread(target=capture, args=(n / fps,), daemon=True) for n in range(VNC_STREAMS)]
     for thread in writers + capturers:
         thread.start()
+    started = probes.launch(folder)
     while not stop.is_set():
         stop.wait(0.5)
     for thread in capturers:
@@ -208,6 +212,7 @@ def record(folder, server, password, fps, reduce=0):
     for thread in writers:
         thread.join()
     times.close()
+    probes.finish(folder, started)
     api.shutdown()
 
 

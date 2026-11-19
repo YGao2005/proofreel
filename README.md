@@ -50,6 +50,7 @@ Checks:
 | `check cmd "<command>" [seconds]` | a shell command on the host exits 0. It runs again each second until it does or the seconds pass |
 | `check sh "<command>" [seconds]` | the same, but in the run VM over SSH (PowerShell on Windows) |
 | `check running <process>` | a process with this exact name runs in the run VM |
+| `check metric <series> <stat> --below N` (or `--above N`) | a budget on what a probe measured; see [Probes and budgets](#probes-and-budgets) |
 
 Give `--label` to say what a command check proves. The page shows the label, and the end of the command's output as
 the detail.
@@ -114,6 +115,34 @@ and an edge for each transition that a run took. Other flows and conditions add 
 is drawn strong, each node has a dot for its verdict in each run, and each edge shows how long the transition took.
 Click a state or a transition to play the video from there. Click a state again to go to its next visit. The node
 that the video is in lights up. Use the same state name in each flow for the same place in the app.
+
+### Probes and budgets
+
+A probe measures while a session records: the host's load, an app's CPU, request times. `host-load` is on for every
+recording. Add another with `start --probe <name>` or a flow line `probe <name>`; `--probe none` turns the defaults
+off. `proofreel probes` lists them, with what each can see and what it does not measure well.
+
+```
+probe host-load
+start sign-up
+...
+check metric host/cpu p95 --below 80          # the whole run so far
+check metric net/* p95 --below 0.5 --step     # since the last step or state
+check metric net/* failed --below 1 --last 30
+```
+
+A stat is `mean`, `min`, `max`, `p50`, `p90`, `p95`, `p99`, `last`, `count`, or `failed`. A budget waits up to
+`--wait` seconds (default 2) for a measure that came after it began. With no data in its window, it is a failed check
+that says which series there are. `stop` prints a line for each series, and `proofreel stats [session]` prints them
+again (`--json` for all the numbers).
+
+A probe is a folder like a condition (`probe.toml` and a script), found in the same places. It runs on the host
+(`run.py`) or in the guest (`run.sh`, `run.ps1`) and prints one JSON line for each measure:
+`{"m": "cpu/app", "v": 42}` is a sample, `{"m": "net/GET /items", "d": 0.31, "ok": true}` is a span (something that
+took `d` seconds), and `{"m": "app/ready"}` is a mark. A line can carry `t`, the time in the probe's own steady
+clock; proofreel moves it onto the host clock by the probe's smallest delay. `{"unavailable": "<why>"}` says the probe
+cannot measure here. Lines over 16 KB, over 200 a second, or past 64 series are counted and dropped. A probe never
+gets the guest password. See `src/proofreel/probes/__init__.py` for the whole contract.
 
 ### Crash and hang reports (macOS guests)
 
@@ -366,6 +395,8 @@ Any tool can write this folder and then run `proofreel render <dir>`. `src/proof
 |---|---|
 | `session.json` | `{"version": 2, "title", "about", "meta": {label: value}, "error", "app", "conditions", "os", "run", "started"}` |
 | `events.jsonl` | one event on each line: `{"t", "end", "kind", "text", "x", "y", "x2", "y2", "ok", "detail"}`, in unix seconds. `[t, end]` is when the action affected the screen: a click's press, the first and last key of `type`, `key`, `hold`, and `tap`, a drag's press and release, and a `wait`'s or `check`'s first look and its verdict. `end` is left out when the event has no length. The kinds are `state`, `step`, `note`, `click`, `double`, `right`, `move`, `drag`, `type`, `key`, `hold`, `tap`, `open`, `wait`, and `check` |
+| `metrics/<probe>.jsonl` | what each probe printed, one measure on each line, with `a`: the unix time it arrived |
+| `metrics/probes.json` | each probe's status (`ok`, `unavailable`, `silent`, `failed`), its note, and how many lines it kept and dropped |
 | `reports/` | the crash and hang reports of a macOS run VM |
 | `frames/*.jpg` | the screen, in name order |
 | `times.txt` | `<request> <arrival>`: when each frame was asked for and when it came, one frame on each line |
