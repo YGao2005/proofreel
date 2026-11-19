@@ -53,8 +53,9 @@ def load(path, values, parse):
 
 
 def run(flow, execute, abort):
-    """Run each line with execute(words), which returns 1 for a failed check. Any other failure calls
-    abort(message), so a recording stops with the line that failed, and then raises."""
+    """Run each line with execute(words), which returns 1 for a failed check. Returns 1 when a check failed. Any
+    other failure calls abort(message), so a recording stops with the line that failed, and then raises."""
+    failed = 0
     for number, words in flow.lines:
         where = f"{flow.name}:{number}: {shlex.join(words)}"
         print(where)
@@ -66,3 +67,5 @@ def run(flow, execute, abort):
         if code and words[0] != "check":
             abort(f"{where}: exit {code}")
             raise Problem(f"{where} failed (exit {code}).")
+        failed |= code
+    return failed

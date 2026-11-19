@@ -38,7 +38,7 @@ def test_a_failed_check_goes_on_and_any_other_failure_stops_the_recording(tmp_pa
 
     stopped = []
     ran = []
-    flow.run(flow.Flow("f.flow", [(1, ["check", "x"]), (2, ["note", "y"])]), execute, stopped.append)
+    assert flow.run(flow.Flow("f.flow", [(1, ["check", "x"]), (2, ["note", "y"])]), execute, stopped.append) == 1
     assert ran == ["check", "note"] and stopped == []
     with pytest.raises(Problem, match="exit 1"):
         flow.run(flow.Flow("f.flow", [(1, ["find", "x"]), (2, ["note", "y"])]), execute, stopped.append)

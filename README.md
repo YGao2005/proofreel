@@ -67,7 +67,8 @@ first one runs, so a typo or a missing value stops the flow before it changes an
 and the flow continues. A check that cannot run (no text recognition, no accessibility tree) is a failed check, and
 the page says why. Any other failure stops the flow and the recording, and the page shows where it stopped.
 
-Every command exits 0 when it is done, 1 for a failed check (or a `find` that finds nothing), and 2 for a problem.
+Every command exits 0 when it is done, 1 for a failed check (or a `find` that finds nothing, or a flow with a
+failed check), and 2 for a problem.
 A problem prints one line that says what to do.
 
 ```bash

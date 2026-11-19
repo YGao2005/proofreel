@@ -159,7 +159,7 @@ def run_flow(path, values):
             raise Problem(f"{steps.name} needs condition {', '.join(gaps)}, and the run VM's state {state or '(none)'} "
                           f"has {', '.join(conditions.names(have)) or 'no conditions'}. Make a state with it: proofreel "
                           f"vm build <state> --from <base> {' '.join('--condition ' + g for g in gaps)}.")
-    flow.run(steps, command, abort=lambda message: stop(error=message) if active() else None)
+    return flow.run(steps, command, abort=lambda message: stop(error=message) if active() else None)
 
 
 class Parser(argparse.ArgumentParser):
