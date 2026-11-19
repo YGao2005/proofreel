@@ -4,6 +4,9 @@ A state is a saved VM: a clean OS, an app installed with no permissions, a user 
 into a throwaway run VM in seconds (APFS copy on write), so each test starts from the same place. A warm state is
 saved while it runs (memory too), so `up` resumes it with the apps already open. A state built by a flow records the
 flow, so `build` makes it again when the app changes.
+
+A run VM is headless and isolated from the host: no window, no audio device, no shared clipboard. Nothing it does
+shows or plays on the host.
 """
 
 import json
@@ -106,7 +109,8 @@ def up(name, display=None, memory=None, cpu=None, warmable=False):
 def boot(info, name, suspendable=False):
     HOME.mkdir(parents=True, exist_ok=True)
     log = HOME / f"{RUN}.log"
-    args = ["tart", "run", RUN, "--no-graphics", "--vnc-experimental", *(["--suspendable"] if suspendable else [])]
+    args = ["tart", "run", RUN, "--no-graphics", "--vnc-experimental", "--no-clipboard",
+            *(["--suspendable"] if suspendable else ["--no-audio"])]
     with open(log, "w") as out:
         proc = subprocess.Popen(args, stdout=out, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
                                 start_new_session=True)
