@@ -110,9 +110,11 @@ warm VM.
 ### Windows 11 ARM and Linux (QEMU)
 
 ```bash
-brew install qemu
+brew install qemu llvm lld acpica
+firmware/build.sh                                       # once: UEFI firmware that takes any screen size
 proofreel vm base win11 win11.qcow2 --backend qemu      # once: a disk that boots Windows (see below)
-proofreel vm up win11                                   # PowerShell over SSH, the screen over VNC
+proofreel vm up win11                                   # PowerShell over SSH, the screen over VNC (1440x900)
+proofreel vm up win11 --display 1920x1080               # any WIDTHxHEIGHT
 proofreel vm sh 'Get-ComputerInfo -Property OsName'
 proofreel vm sh 'schtasks /create /tn open /tr notepad.exe /sc once /st 00:00 /it /f; schtasks /run /tn open'
 proofreel vm save notepad-open --warm                   # the memory too: Notepad stays open
@@ -128,6 +130,7 @@ other `vm` commands work as they do for Tart, and `--warmable` is not necessary.
   (`HKLM\SOFTWARE\OpenSSH\DefaultShell`).
 - Automatic sign-in for the user that you give to `base` (`--user`, `--guest-password`; the default is admin/admin),
   hibernation off (`powercfg /hibernate off`), and no sleep or lock screen.
+- The boot manager in the highest screen mode: `bcdedit /set "{globalsettings}" highestmode on`.
 
 A UTM Windows VM keeps its disk as a `.qcow2` in the bundle's `Data` folder. Give that file to `base` after you
 install the items above (`base` clones it, so UTM's copy does not change).
@@ -158,7 +161,13 @@ On an M-series Mac, with Windows 11 Pro 24H2 ARM64, 4 GB of memory, and 4 cores:
 
 Limits that are particular to QEMU:
 
-- The screen is 800x600 (the UEFI default for `ramfb`), and `up --display` has no effect.
+- Windows has no display driver for `ramfb`. It uses the screen mode that the UEFI firmware set. QEMU's own firmware
+  has only 640x480, 800x600, and 1024x768. `firmware/build.sh` builds edk2 with `firmware/ramfb-resolution.patch` and
+  installs it in `~/.proofreel/firmware`. This firmware uses the size from `up --display` in place of 1024x768 (default
+  1440x900; give a size larger than 800x600). Without it, the screen is 1024x768 at most and `up` says so.
+- Windows keeps the last screen size and scales it to fit a new size. A cold `save` deletes the saved size
+  (`HKLM\SYSTEM\CurrentControlSet\Control\GraphicsDrivers\Configuration`), so the next `up` fills the screen. A
+  cold state keeps the `--display` that it was saved with. A warm state always has the size that it was saved with.
 - A command from `vm sh` runs in the SSH session, which has no desktop. To open an app on the screen, run it as a
   scheduled task with `/it`, as in the example above.
 - After a warm `up`, the guest clock shows the time of the save until Windows syncs it again.

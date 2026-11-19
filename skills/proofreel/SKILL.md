@@ -6,6 +6,7 @@ description: "Use to test an app as a real user on a clean VM or VNC screen and 
 # proofreel
 
 1. Start the screen: `proofreel vm up <state>` (see `proofreel vm states`), or set `PROOFREEL_VNC` and `PROOFREEL_PASSWORD`. Use a macOS VM only when the test needs a native Mac app. Use a Linux VM for a web page, a server flow, or anything that a browser shows, or a Windows VM when the target is Windows: a Mac can run only 2 macOS VMs at the same time, and QEMU VMs are limited only by memory.
+   A Windows VM starts at 1440x900. To change the size, use `vm up <state> --display WIDTHxHEIGHT`. If `up` says the screen is 1024x768 at most, run `firmware/build.sh` from the proofreel repo once.
 2. `proofreel start <name> --title "<what this shows>" --about "<the user, and what must stay true>"`.
 3. Drive the screen as a person does. Begin each part with `proofreel step "<part>"`. Click by words (`click-text`), not coordinates; `proofreel find` prints the words and their click points. Use `click <x> <y> --label '<what it is>'` only for a control with no words.
 4. Check what the screen shows (`check text`, `check no-text`) or what the machine measures (`check cmd ... --label`). Never pass a check because a command ran. A failed check is a finding: report it; never run again to get a pass.

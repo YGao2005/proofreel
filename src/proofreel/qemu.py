@@ -9,6 +9,7 @@ QEMU runs headless: no display window, no audio device, no clipboard, VNC (QEMU'
 import json
 import os
 import platform
+import re
 import shutil
 import socket
 import subprocess
@@ -16,10 +17,11 @@ import sys
 import time
 from pathlib import Path
 
-from .vm import HOME, RUN, wait
+from .vm import HOME, RUN, ssh, wait
 
 FOLDER = HOME / "qemu"
-MACHINE = {"memory": 4096, "cpu": 4}
+MACHINE = {"memory": 4096, "cpu": 4, "display": "1440x900"}
+CUSTOM_FIRMWARE = HOME / "firmware" / "edk2-aarch64-code.fd"
 
 
 def folder(name):
@@ -40,7 +42,8 @@ def firmware():
     if not binary:
         sys.exit("The qemu backend needs qemu-system-aarch64 on PATH: brew install qemu.")
     share = Path(binary).resolve().parent.parent / "share" / "qemu"
-    return share / "edk2-aarch64-code.fd", share / "edk2-arm-vars.fd"
+    code = CUSTOM_FIRMWARE if CUSTOM_FIRMWARE.exists() else share / "edk2-aarch64-code.fd"
+    return code, share / "edk2-arm-vars.fd"
 
 
 def base(name, image):
@@ -74,7 +77,12 @@ def up(name, info, display=None, memory=None, cpu=None, warmable=False):
         clone(folder(name) / file, run / file)
     machine = {**MACHINE, **info.get("machine", {})}
     if not info.get("warm"):
-        machine.update({k: v for k, v in (("memory", memory), ("cpu", cpu)) if v})
+        machine.update({k: v for k, v in (("memory", memory), ("cpu", cpu), ("display", display)) if v})
+    if not re.fullmatch(r"\d{3,4}x\d{3,4}", machine["display"]):
+        sys.exit(f"--display must be WIDTHxHEIGHT, for example 1440x900, not {machine['display']!r}.")
+    if not CUSTOM_FIRMWARE.exists():
+        print(f"The screen is at most 1024x768, not {machine['display']}: the stock UEFI firmware has no other "
+              f"modes. To get it, run firmware/build.sh from the proofreel repo.", file=sys.stderr)
     return boot(machine, folder(name) / "memory.bin" if info.get("warm") else None)
 
 
@@ -87,7 +95,9 @@ def boot(machine, memory_file=None):
             "-audio", "none", "-vnc", f"127.0.0.1:{vnc - 5900}",
             "-drive", f"if=pflash,format=raw,readonly=on,file={firmware()[0]}",
             "-drive", f"if=pflash,format=raw,file={run / 'vars.fd'}",
-            "-device", "ramfb", "-device", "qemu-xhci", "-device", "usb-kbd", "-device", "usb-tablet",
+            "-device", "ramfb", *(["-fw_cfg", f"name=opt/org.proofreel/resolution,string={machine['display']}"]
+                                  if CUSTOM_FIRMWARE.exists() else []),
+            "-device", "qemu-xhci", "-device", "usb-kbd", "-device", "usb-tablet",
             "-drive", f"if=none,id=disk,format=qcow2,discard=unmap,file={run / 'disk.qcow2'}",
             "-device", "nvme,drive=disk,serial=proofreel",
             "-netdev", f"user,id=net,hostfwd=tcp:127.0.0.1:{port}-:22", "-device", "virtio-net-pci,netdev=net",
@@ -154,6 +164,9 @@ def save(name, run, warm):
         if done["status"] != "completed":
             sys.exit(f"The memory did not save: {done.get('error-desc', 'the migration failed')}.")
     else:
+        # WHY: Windows keeps the last screen size and scales it to a new one. With none saved, it fills the screen.
+        ssh(r"reg delete HKLM\SYSTEM\CurrentControlSet\Control\GraphicsDrivers\Configuration /f", check=False,
+            run=run)
         qmp(run, "system_powerdown")
         wait(lambda: not alive(run["pid"]), 180, "The VM did not shut down.")
     target = folder(name)

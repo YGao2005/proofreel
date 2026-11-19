@@ -1,0 +1,55 @@
+diff --git a/OvmfPkg/QemuRamfbDxe/QemuRamfb.c b/OvmfPkg/QemuRamfbDxe/QemuRamfb.c
+index 5a1044f..48a5745 100644
+--- a/OvmfPkg/QemuRamfbDxe/QemuRamfb.c
++++ b/OvmfPkg/QemuRamfbDxe/QemuRamfb.c
+@@ -234,6 +234,41 @@ STATIC EFI_GRAPHICS_OUTPUT_PROTOCOL  mQemuRamfbGraphicsOutput = {
+   &mQemuRamfbMode,
+ };
+ 
++STATIC
++VOID
++QemuRamfbReadResolution (
++  VOID
++  )
++{
++  FIRMWARE_CONFIG_ITEM  Item;
++  UINTN                 Size;
++  CHAR8                 Text[16];
++  CHAR8                 *End;
++  UINTN                 Width;
++  UINTN                 Height;
++
++  if (EFI_ERROR (QemuFwCfgFindFile ("opt/org.proofreel/resolution", &Item, &Size)) ||
++      (Size == 0) || (Size >= sizeof (Text)))
++  {
++    return;
++  }
++
++  ZeroMem (Text, sizeof (Text));
++  QemuFwCfgSelectItem (Item);
++  QemuFwCfgReadBytes (Size, Text);
++  if (RETURN_ERROR (AsciiStrDecimalToUintnS (Text, &End, &Width)) || (*End != 'x') ||
++      RETURN_ERROR (AsciiStrDecimalToUintnS (End + 1, &End, &Height)) ||
++      ((*End != '\0') && (*End != '\n')) ||
++      (Width < 640) || (Width > 7680) || (Height < 480) || (Height > 4320))
++  {
++    DEBUG ((DEBUG_ERROR, "Ramfb: bad opt/org.proofreel/resolution \"%a\"\n", Text));
++    return;
++  }
++
++  mQemuRamfbModeInfo[ARRAY_SIZE (mQemuRamfbModeInfo) - 1].HorizontalResolution = (UINT32)Width;
++  mQemuRamfbModeInfo[ARRAY_SIZE (mQemuRamfbModeInfo) - 1].VerticalResolution   = (UINT32)Height;
++}
++
+ EFI_STATUS
+ EFIAPI
+ InitializeQemuRamfb (
+@@ -272,6 +307,8 @@ InitializeQemuRamfb (
+     return EFI_PROTOCOL_ERROR;
+   }
+ 
++  QemuRamfbReadResolution ();
++
+   MaxFbSize = 0;
+   for (Index = 0; Index < ARRAY_SIZE (mQemuRamfbModeInfo); Index++) {
+     mQemuRamfbModeInfo[Index].PixelsPerScanLine =

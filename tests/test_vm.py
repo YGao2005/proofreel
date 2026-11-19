@@ -1,6 +1,8 @@
 import json
 
-from proofreel import vm
+import pytest
+
+from proofreel import qemu, vm
 
 
 def test_states_tree_survives_a_parent_cycle(tmp_path, monkeypatch, capsys):
@@ -25,3 +27,17 @@ def test_saving_over_the_run_state_keeps_its_parent(tmp_path, monkeypatch):
     monkeypatch.setattr(vm, "start", lambda info, name, run: run)
     vm.save("app")
     assert vm.state_info("app")["parent"] == "clean"
+
+
+def test_qemu_display_comes_from_up_then_the_state_then_the_default(tmp_path, monkeypatch):
+    monkeypatch.setattr(qemu, "FOLDER", tmp_path)
+    monkeypatch.setattr(qemu, "CUSTOM_FIRMWARE", tmp_path / "code.fd")
+    (tmp_path / "code.fd").touch()
+    monkeypatch.setattr(qemu, "clone", lambda source, target: None)
+    monkeypatch.setattr(qemu, "boot", lambda machine, memory_file=None: machine["display"])
+    assert qemu.up("s", {}) == "1440x900"
+    assert qemu.up("s", {"machine": {"display": "1280x800"}}) == "1280x800"
+    assert qemu.up("s", {"machine": {"display": "1280x800"}}, display="1920x1080") == "1920x1080"
+    assert qemu.up("s", {"warm": True, "machine": {"display": "1280x800"}}, display="1920x1080") == "1280x800"
+    with pytest.raises(SystemExit):
+        qemu.up("s", {}, display="big")
