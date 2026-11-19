@@ -4,7 +4,9 @@ import subprocess
 import sys
 import time
 
-from proofreel import recording
+import pytest
+
+from proofreel import Problem, recording
 
 
 def test_a_folder_records_while_its_recorder_holds_the_lock(tmp_path):
@@ -38,3 +40,13 @@ def test_clean_keeps_the_session_that_is_recording(home):
     recording.POINTER.write_text(json.dumps({"dir": str(live), "pid": 0}))
     assert recording.clean(7) == [old]
     assert live.exists() and not old.exists()
+
+
+def test_a_session_is_found_by_its_folder_or_its_bare_name(tmp_path, monkeypatch):
+    monkeypatch.setattr(recording, "SESSIONS", tmp_path)
+    (tmp_path / "sign-in-1").mkdir()
+    (tmp_path / "sign-in-1" / "session.json").write_text("{}")
+    assert recording.session_folder("sign-in-1") == tmp_path / "sign-in-1"
+    assert recording.session_folder(str(tmp_path / "sign-in-1")) == tmp_path / "sign-in-1"
+    with pytest.raises(Problem, match="No session 'gone'"):
+        recording.session_folder("gone")
