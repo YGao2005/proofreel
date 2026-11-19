@@ -7,11 +7,11 @@ import math
 from bisect import bisect_right
 from dataclasses import dataclass
 
-FPS = 24
+FPS = 30
 FAST = 8
 POINTED = {"click", "double", "right", "move", "drag"}
 FOCUSED = {"click", "double", "right", "drag", "type"}
-ZOOM = 1.7
+ZOOM = 1.25
 LEAD, HOLD, BRIDGE = 1.0, 1.6, 1.6
 FAR = 0.45
 

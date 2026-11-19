@@ -11,6 +11,7 @@ from .render import render
 
 W, H = 1440, 900
 EMAIL, NAME = "sam@example.com", "Sam"
+TYPO = "Sma"
 FIELD_EMAIL = (560, 380, 880, 420)
 FIELD_NAME = (560, 450, 880, 490)
 BUTTON = (560, 530, 880, 574)
@@ -43,7 +44,9 @@ def screen(state):
     return image
 
 
-def demo(folder):
+def demo(folder, broken=False):
+    """broken: the first name is typed wrong, so the final check fails."""
+    name = TYPO if broken else NAME
     if folder.exists():
         shutil.rmtree(folder)
     (folder / "frames").mkdir(parents=True)
@@ -74,9 +77,9 @@ def demo(folder):
     at(4.4, "click", 'click "First name"', x=mid(FIELD_NAME)[0], y=mid(FIELD_NAME)[1])
     hold(2.6 + (len(EMAIL) + 1) * 0.08, 4.5)
     state["focus"] = "First name"
-    at(4.8, "type", f'type "{NAME}"')
-    for i in range(len(NAME) + 1):
-        state["name"] = NAME[:i]
+    at(4.8, "type", f'type "{name}"')
+    for i in range(len(name) + 1):
+        state["name"] = name[:i]
         hold(4.8 + i * 0.1, 4.8 + (i + 1) * 0.1, 25)
     at(5.8, "click", 'click "Create account"', x=mid(BUTTON)[0], y=mid(BUTTON)[1])
     hold(5.2, 5.9)
@@ -87,8 +90,8 @@ def demo(folder):
         frames.append((float(t) + 0.2, dict(state)))
     state["busy"], state["done"] = False, True
     hold(14.0, 15.5)
-    at(14.6, "wait", 'wait for "Welcome, Sam"', ok=True, detail="seen after 8.6 s")
-    at(15.0, "check", '"Welcome, Sam" is on the screen', ok=True)
+    at(14.6, "wait", 'wait for "Welcome"', ok=True, detail="seen after 8.6 s")
+    at(15.0, "check", '"Welcome, Sam" is on the screen', ok=not broken)
     hold(15.5, 17.0)
 
     cache = {}
@@ -102,8 +105,8 @@ def demo(folder):
     (folder / "screen.txt").write_text(f"{W} {H}\n")
     (folder / "events.jsonl").write_text("".join(json.dumps(e) + "\n" for e in events))
     (folder / "session.json").write_text(json.dumps({
-        "title": "Sign up: a new user makes an account",
-        "about": "A made-up app, drawn frame by frame, to show what proofreel makes. The wait for the server plays fast.",
-        "meta": {"": "proofreel demo"}}))
+        "title": "Sign-up demo",
+        "about": "A new user makes an account in a made-up app, drawn frame by frame to show what proofreel makes. The wait for the server plays fast.",
+        "meta": {"": "proofreel demo, run with a typo" if broken else "proofreel demo"}}))
     verdict, length, real, size = render(folder)
     print(f"{verdict}. {real:.0f} s of screen in a {length:.0f} s video, {size:.1f} MB. Page: {folder / 'index.html'}")

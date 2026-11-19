@@ -23,6 +23,7 @@ from . import draw, page
 from .motion import FAST, FPS, Camera, Pointer, ease, fit, spans
 
 CHANGED = 1.5
+INSET = 0.88
 CHIP_KINDS = {"click", "double", "right", "drag", "type", "key", "open", "scroll", "wait", "check"}
 SHOT_KINDS = CHIP_KINDS - {"scroll"}
 
@@ -33,7 +34,8 @@ def load(folder):
     events = [json.loads(line) for line in log.read_text().splitlines() if line.strip()] if log.exists() else []
     frames = sorted((folder / "frames").glob("*.jpg"))
     times = [float(t) for t in (folder / "times.txt").read_text().split()][: len(frames)]
-    frames = frames[: len(times)]
+    pairs = sorted(zip(times, frames[: len(times)]))
+    times, frames = [t for t, _ in pairs], [f for _, f in pairs]
     if not frames:
         sys.exit(f"No frames in {folder / 'frames'}")
     return info, events, frames, times
@@ -77,7 +79,7 @@ class Scene:
         self.events = events
         self.out = out_size
         self.ui = out_size[0] / 1440
-        inset = 0.88 if framed else 1.0
+        inset = INSET if framed else 1.0
         self.k = inset * min(out_size[0] / size[0], out_size[1] / size[1])
         self.screen = (int(size[0] * self.k) // 2 * 2, int(size[1] * self.k) // 2 * 2)
         self.offset = ((out_size[0] - self.screen[0]) // 2, (out_size[1] - self.screen[1]) // 2)
@@ -177,33 +179,44 @@ def _init(frames, size, out_size, events, framed):
 
 def _frame(job):
     index, now, speed, box = job
+    scene = _worker["scene"]
     if _worker["cached"][0] != index:
         image = Image.open(_worker["frames"][index]).convert("RGB")
         if image.size != _worker["size"]:
             image = image.resize(_worker["size"])
-        _worker["cached"] = (index, _worker["scene"].compose(image))
-    return _worker["scene"].render(_worker["cached"][1], now, speed, box).tobytes()
+        _worker["cached"] = (index, scene.compose(image))
+    canvas = _worker["cached"][1]
+    return (scene.render(canvas, now, speed, box).tobytes(),
+            scene.render(canvas, now, speed, (0, 0, *scene.out)).tobytes())
+
+
+def encoder(path, size, crf):
+    return subprocess.Popen(
+        ["ffmpeg", "-loglevel", "error", "-y", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{size[0]}x{size[1]}",
+         "-r", str(FPS), "-i", "-", "-c:v", "libx264", "-preset", "medium", "-crf", str(crf), "-tune", "animation",
+         "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(path)], stdin=subprocess.PIPE)
 
 
 def video(folder, events, frames, times, start, end, framed, width, crf, target):
+    """Writes session.mp4, which zooms in on each action, and session-wide.mp4, which shows the whole screen."""
     first = Image.open(frames[-1])
-    out_w = even(width or first.width)
+    screen_w = first.width / INSET if framed else first.width
+    out_w = even(width or min(1920, max(1280, screen_w)))
     out_size = (out_w, even(out_w * first.height / first.width))
     plan = fit(spans(screen_changes(frames, times, start), events), end, target)
     scene = Scene(first.size, out_size, events, framed)
     real = [t - start for t in times]
     jobs = [(max(0, bisect_right(real, now) - 1), now, speed, scene.camera.step(now, 1 / FPS)) for now, speed in plan]
-    ffmpeg = subprocess.Popen(
-        ["ffmpeg", "-loglevel", "error", "-y", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{out_size[0]}x{out_size[1]}",
-         "-r", str(FPS), "-i", "-", "-c:v", "libx264", "-preset", "medium", "-crf", str(crf), "-pix_fmt", "yuv420p",
-         "-movflags", "+faststart", str(folder / "session.mp4")], stdin=subprocess.PIPE)
+    zoomed, wide = encoder(folder / "session.mp4", out_size, crf), encoder(folder / "session-wide.mp4", out_size, crf)
     workers = max(1, min(8, (os.cpu_count() or 2) - 1))
     with multiprocessing.get_context("spawn").Pool(workers, _init, (frames, first.size, out_size, events, framed)) as pool:
-        for data in pool.imap(_frame, jobs, chunksize=12):
-            ffmpeg.stdin.write(data)
-    ffmpeg.stdin.close()
-    if ffmpeg.wait():
-        sys.exit("ffmpeg failed")
+        for near, far in pool.imap(_frame, jobs, chunksize=12):
+            zoomed.stdin.write(near)
+            wide.stdin.write(far)
+    for ffmpeg in (zoomed, wide):
+        ffmpeg.stdin.close()
+        if ffmpeg.wait():
+            sys.exit("ffmpeg failed")
     starts = [now for now, _ in plan]
     for e in events:
         e["v"] = min(bisect_right(starts, e["t"]), len(starts)) / FPS
@@ -228,7 +241,7 @@ def shots(folder, events, frames, times, start):
         e["shot"] = f"shots/{n}.jpg"
 
 
-def render(folder, framed=True, width=None, crf=28, target=30):
+def render(folder, framed=True, width=None, crf=20, target=30):
     folder = Path(folder)
     info, events, frames, times = load(folder)
     start = times[0]

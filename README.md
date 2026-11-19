@@ -44,6 +44,21 @@ proofreel stop                               # makes session.mp4, index.html, po
 Each command is one action, so an agent can drive the screen with the commands alone. To find words on the screen,
 proofreel uses Apple Vision on macOS hosts and Tesseract on other hosts.
 
+### Review on claude.ai
+
+`proofreel publish <session> --out <review folder>` adds a run to a review folder: one page that holds every run of
+one journey, so the link in a pull request never changes. It prints the files of the new run and the page's runtime
+capabilities. Claude then publishes the page as a claude.ai Artifact (the same file path or URL each time). On
+claude.ai the page also has:
+
+- **Comment** on any step: the comment pins to that step.
+- **Send to Claude** on any step: the note goes to the Claude session that published the page, which can fix the
+  problem, run the flow again, and publish the next run to the same page.
+- **Review**: Approve or Needs work for each run, kept in the page's database, so Claude can read the verdict.
+- **Ask about this moment**: Claude answers a question from the current video frame and the run's log.
+
+Opened as a plain file, the page is a static review page.
+
 ### Flows
 
 A flow is a text file with one proofreel command on each line. Use `#` for comments, and `${NAME}` or

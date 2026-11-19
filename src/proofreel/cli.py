@@ -11,6 +11,7 @@
   shot <png>                                            Save the screen.
   run <flow> [--set NAME=VALUE]                         Run a flow file: one proofreel command per line.
   render <dir> [--plain] [--width W]                    Make the video and page of a session folder again.
+  publish <session> --out <dir>                         Add a run to a review folder: one page, every run, one URL.
   demo [dir]                                            Render a made-up session (no VNC needed).
   clean [--days 7]                                      Delete sessions older than this.
   vm base|up|save|build|states|drop|down|sh|put|get     Tart VMs and their saved states (see: proofreel vm -h).
@@ -156,8 +157,8 @@ def parser():
     s.add_argument("--title")
     s.add_argument("--about", default="")
     s.add_argument("--meta", action="append", default=[])
-    s.add_argument("--fps", type=float, default=24)
-    s.add_argument("--reduce", type=int, default=2, help="keep 1/N of the pixels per side (2 = half size)")
+    s.add_argument("--fps", type=float, default=30)
+    s.add_argument("--reduce", type=int, default=0, help="keep 1/N of the pixels per side (0 = at most 1920 px wide)")
     s = sub.add_parser("stop")
     s.add_argument("--keep-frames", action="store_true")
     s.add_argument("--plain", action="store_true")
@@ -204,8 +205,12 @@ def parser():
     s.add_argument("dir")
     s.add_argument("--plain", action="store_true")
     s.add_argument("--width", type=int)
+    s = sub.add_parser("publish", help="add a session to a review folder (all runs of one journey) for one artifact URL")
+    s.add_argument("session")
+    s.add_argument("--out", required=True, help="the review folder; keep it the same for every run of this journey")
     s = sub.add_parser("demo")
     s.add_argument("dir", nargs="?", default=str(SESSIONS / "demo"))
+    s.add_argument("--broken", action="store_true", help="type the name wrong, so the last check fails")
     s = sub.add_parser("clean")
     s.add_argument("--days", type=float, default=7)
     s = sub.add_parser("vm")
@@ -291,9 +296,14 @@ def command(argv):
             from .render import render
             verdict, length, real, size = render(a.dir, framed=not a.plain, width=a.width)
             return print(f"{verdict}. {real:.0f} s in a {length:.0f} s video, {size:.1f} MB. Page: {Path(a.dir) / 'index.html'}")
+        case "publish":
+            from .page import CAPABILITIES, publish
+            page, files, runs = publish(a.session, a.out)
+            return print(json.dumps({"page": str(page.resolve()), "runs": runs, "files": files,
+                                     "capabilities": CAPABILITIES}, indent=2))
         case "demo":
             from .demo import demo
-            return demo(Path(a.dir))
+            return demo(Path(a.dir), a.broken)
         case "clean": return clean(a.days)
         case "vm": return vm(a)
         case "check" if a.kind == "cmd":
