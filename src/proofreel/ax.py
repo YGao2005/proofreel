@@ -5,22 +5,16 @@ starts (/usr/libexec/sshd-keygen-wrapper), so the app under test needs no permis
 """
 
 import json
-import shlex
 import sys
 import time
 
-from . import swift_tool, vm
+from . import guest
 
 
 def tree(app=None):
     """The AX tree of the app's windows (the front app by default), and the main screen size in points. The helper
     is compiled on the host and copied to the guest the first time."""
-    binary = swift_tool("ax.swift", "-target", "arm64-apple-macos14")
-    command = shlex.join([f"./.{binary.name}", *(["--app", app] if app else [])])
-    result = vm.ssh(command, check=False, timeout=60)
-    if result.returncode == 127:
-        vm.put(str(binary), f".{binary.name}")
-        result = vm.ssh(command, check=False, timeout=60)
+    result = guest.GUESTS["macos"].helper("ax.swift", *(["--app", app] if app else []))
     if result.returncode:
         sys.exit(f"AX: {result.stderr.strip() or f'the helper failed ({result.returncode})'}")
     return json.loads(result.stdout)

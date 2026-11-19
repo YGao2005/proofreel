@@ -69,16 +69,30 @@ class Screen:
             self.client.keyPress(key)
             time.sleep(delay)
 
+    def name(self, keys):
+        """A key or a combo such as command-a, in the names that this screen's VNC server needs."""
+        return "-".join(self.keys.get(part, part) for part in keys.split("-"))
+
     def key(self, *keys):
         for key in keys:
-            self.client.keyPress(key)
+            self.client.keyPress(self.name(key))
             time.sleep(0.05)
 
     def hold(self, key, seconds):
-        key = self.keys.get(key, key)
-        self.client.keyDown(key)
+        self.press(key, True)
         time.sleep(seconds)
-        self.client.keyUp(key)
+        self.press(key, False)
+
+    def tap(self, key, count, press, gap):
+        for index in range(count):
+            if index:
+                time.sleep(gap)
+            self.press(key, True)
+            time.sleep(press)
+            self.press(key, False)
+
+    def press(self, key, down):
+        (self.client.keyDown if down else self.client.keyUp)(self.name(key))
 
     def size(self):
         """The framebuffer size in pixels. pause(0) waits for the connection, which sets it."""

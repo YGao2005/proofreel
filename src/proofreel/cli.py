@@ -6,7 +6,9 @@
                                                         run VM, new crash and hang reports go to reports/ and the log.
   step <text> | note <text>                             Name the next part (a caption in the video), or add a note.
   click <x> <y> [--double|--right] | move <x> <y> | drag <x1> <y1> <x2> <y2> | type <text> | key <keys...>
-  hold <key> <seconds>                                  Hold a key down, such as option (Left Option in a macOS VM).
+  hold <key> <seconds|down|up> | tap <key> [count]      Hold a key, or only press or release it; tap it count times.
+                                                        A macOS run VM posts modifiers (fn, option, command, control,
+                                                        shift; r... for the right key) in the guest.
   click-text <text> [--nth N] [--timeout S] [--if-shown]   Find the words on the screen, then click them.
   ax [--app NAME] [--find TEXT] [--json] | click-ax <label> [--role R] [--app NAME] [--nth N] [--timeout S]
                                                         Read the accessibility tree of a run VM, or click by label.
@@ -234,7 +236,10 @@ def parser():
     s.add_argument("keys", nargs="+")
     s = sub.add_parser("hold")
     s.add_argument("key")
-    s.add_argument("seconds", type=float)
+    s.add_argument("seconds", help="seconds, or down or up: only press or release the key")
+    s = sub.add_parser("tap")
+    s.add_argument("key")
+    s.add_argument("count", type=int, nargs="?", default=1)
     s = sub.add_parser("check")
     s.add_argument("kind", choices=["text", "no-text", "ax", "no-ax", "cmd"])
     s.add_argument("args", nargs="+")
@@ -383,10 +388,10 @@ def command(argv):
     if (a.command in ("ax", "click-ax") or a.command == "check" and a.kind.endswith("ax")) and not (system and system.ax):
         sys.exit("AX reads a macOS run VM over SSH (proofreel vm up <state>), not a --vnc screen or another system.")
     with Screen(server, password, system.keys if system else None) as screen:
-        act(a, screen)
+        act(a, screen, system or guest.Guest())
 
 
-def act(a, screen):
+def act(a, screen, system):
     match a.command:
         case "click":
             label = a.label or f"click {a.x}, {a.y}"
@@ -406,9 +411,19 @@ def act(a, screen):
         case "key":
             log("key", " ".join(a.keys))
             screen.key(*a.keys)
+        case "hold" if a.seconds in ("down", "up"):
+            log("hold", f"{'press' if a.seconds == 'down' else 'release'} {a.key}")
+            system.press(screen, a.key, a.seconds == "down")
         case "hold":
-            log("hold", f"hold {a.key} for {a.seconds:g} s", dur=a.seconds)
-            screen.hold(a.key, a.seconds)
+            try:
+                seconds = float(a.seconds)
+            except ValueError:
+                sys.exit(f"hold takes seconds, down, or up, not {a.seconds!r}.")
+            log("hold", f"hold {a.key} for {seconds:g} s", dur=seconds)
+            system.hold(screen, a.key, seconds)
+        case "tap":
+            log("tap", f"tap {a.key}" + (f" {a.count} times" if a.count > 1 else ""))
+            system.tap(screen, a.key, a.count)
         case "shot": screen.capture(a.text)
         case "find":
             lines = find(screen, a.text) if a.text else screen_text(screen)
