@@ -74,7 +74,7 @@ li.now .row { background: var(--panel); border-color: var(--accent); }
 li.more > details > summary { list-style: none; cursor: pointer; padding: 2px 10px 2px 72px; color: var(--muted);
   font: 12px/1.6 var(--sans); border-radius: 6px; }
 li.more > details > summary::-webkit-details-marker { display: none; }
-li.more > details > summary::before { content: "\25B8"; display: inline-block; width: 1.2em; transition: transform .15s; }
+li.more > details > summary::before { content: "\\25B8"; display: inline-block; width: 1.2em; transition: transform .15s; }
 li.more > details[open] > summary::before { transform: rotate(90deg); }
 li.more > details > summary:hover { color: var(--fg); }
 li.more.now > details > summary { color: var(--accent); }
@@ -135,10 +135,11 @@ function render() {
   const video = $("video", { controls: "", playsinline: "", muted: "", preload: "metadata", poster: r.base + "poster.jpg",
     src: source() });
   const zoomButton = r.wide ? $("button", { type: "button", class: "btn small", "aria-pressed": String(zoom),
-    text: "Zoom", title: "Zoom in on each action", onclick: () => {
+    text: zoom ? "Zoom on" : "Zoom off", title: "Zoom in on each action", onclick: () => {
       zoom = !zoom;
       try { localStorage.setItem("proofreel-zoom", zoom ? "1" : "0"); } catch (err) {}
       zoomButton.setAttribute("aria-pressed", String(zoom));
+      zoomButton.textContent = zoom ? "Zoom on" : "Zoom off";
       const at = video.currentTime, playing = !video.paused;
       video.src = source();
       video.addEventListener("loadedmetadata", () => { video.currentTime = at; if (playing) video.play().catch(() => {}); }, { once: true });
