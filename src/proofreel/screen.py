@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import tempfile
 import time
+import unicodedata
 from pathlib import Path
 
 from vncdotool import api
@@ -185,12 +186,22 @@ def wrapped(lines):
     return lines + joined
 
 
+# WHY: Apple Vision can read Latin words as Cyrillic or Greek letters that look the same ("Acme" as "Асте"), even with
+# English as its only language (a lower-case "т" for "m"). Matching folds both sides, so the look of the text decides.
+LOOKALIKE = str.maketrans("аВсеЕһіјКМНорРСТтхуАΑΒΕΗΙΚΜΝΟΡΤΧΥΖνοτ", "aBceEhijKMHopPCTmxyAABEHIKMNOPTXYZvot")
+
+
+def fold(text):
+    return unicodedata.normalize("NFKC", text).translate(LOOKALIKE).lower().strip()
+
+
 def find(screen, text):
-    """Lines that are the text, then lines that contain it. Case is ignored. A phrase may wrap onto a second line."""
+    """Lines that are the text, then lines that contain it. Case and look-alike letters are ignored. A phrase may wrap
+    onto a second line."""
     lines = wrapped(screen_text(screen))
-    want = text.lower().strip()
-    exact = [line for line in lines if line["text"].strip().lower() == want]
-    return exact + [line for line in lines if want in line["text"].lower() and line not in exact]
+    want = fold(text)
+    exact = [line for line in lines if fold(line["text"]) == want]
+    return exact + [line for line in lines if want in fold(line["text"]) and line not in exact]
 
 
 def wait_for(screen, text, seconds, present=True):
