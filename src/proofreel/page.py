@@ -1,8 +1,8 @@
 """The review page. One template for a single run and for a run history published to one URL.
 
-The page draws itself from embedded run data. On claude.ai it also lights up the Artifact runtime: comments on a
-step, "Send to Claude" on a step, a shared Approve / Needs work review, and questions about the current frame.
-Opened as a plain file, it is a static review page.
+The page draws itself from embedded run data. The list shows the steps and checks; the actions between them fold
+under one line. On claude.ai, the artifact's own comments work on any row, and the page adds a shared
+Approve / Needs work review and questions about the current frame. Opened as a plain file, it is a static page.
 """
 
 import html
@@ -13,7 +13,7 @@ from pathlib import Path
 from .draw import clock
 from .motion import FAST
 
-CAPABILITIES = {"comments": {}, "db": {}, "user": {"scopes": ["profile"]}, "sample": {"images": True}}
+CAPABILITIES = {"db": {}, "user": {"scopes": ["profile"]}, "sample": {"images": True}}
 
 CSS = """
 :root { --bg: #f6f7f9; --panel: #ffffff; --fg: #16181d; --muted: #5d6470; --line: #dfe2e8; --accent: #0a6cdf;
@@ -71,15 +71,20 @@ li .row:hover { background: var(--panel); border-color: var(--line); }
 li .row:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 li.step .row { margin-top: 10px; } li.step .text { font-weight: 600; font-size: 15px; }
 li.now .row { background: var(--panel); border-color: var(--accent); }
-li .tools { display: none; gap: 6px; padding: 0 10px 6px 72px; flex-wrap: wrap; }
-li.now .tools, li:hover .tools, li:focus-within .tools { display: flex; }
-li .send { display: none; padding: 0 10px 8px 72px; flex-direction: column; gap: 6px; }
-li .send.open { display: flex; }
+li.more > details > summary { list-style: none; cursor: pointer; padding: 2px 10px 2px 72px; color: var(--muted);
+  font: 12px/1.6 var(--sans); border-radius: 6px; }
+li.more > details > summary::-webkit-details-marker { display: none; }
+li.more > details > summary::before { content: "\25B8"; display: inline-block; width: 1.2em; transition: transform .15s; }
+li.more > details[open] > summary::before { transform: rotate(90deg); }
+li.more > details > summary:hover { color: var(--fg); }
+li.more.now > details > summary { color: var(--accent); }
+li.more ol { margin: 4px 0 2px; gap: 2px; } li.more .row { padding: 4px 10px; } li.more .text { font-size: 13px; }
+.view { display: flex; justify-content: flex-end; gap: 6px; padding: 8px 14px 0; }
 .t { font: 12px/1.6 var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
 .text { min-width: 0; overflow-wrap: anywhere; } .kind { color: var(--muted); font: 12px var(--mono); }
 .detail { display: block; color: var(--muted); font: 12px/1.4 var(--mono); margin-top: 2px; white-space: pre-wrap; }
 li img { width: 96px; border-radius: 4px; border: 1px solid var(--line); }
-@media (max-width: 480px) { li img { width: 64px; } li .tools, li .send { padding-left: 10px; } }
+@media (max-width: 480px) { li img { width: 64px; } li.more > details > summary { padding-left: 10px; } }
 footer { margin-top: 28px; color: var(--muted); font-size: 12px; }
 """
 
@@ -97,6 +102,9 @@ const $ = (tag, attrs = {}, ...kids) => {
 const clock = s => `${Math.floor(s / 60)}:${(s % 60).toFixed(1).padStart(4, "0")}`;
 const caps = {};
 let run = RUNS.length - 1;
+const KEY_KINDS = ["step", "check", "wait", "note", "error"];
+let zoom = true;
+try { zoom = localStorage.getItem("proofreel-zoom") !== "0"; } catch (err) {}
 const fromHash = () => {
   const m = /^#run-(\d+)$/.exec(location.hash);
   if (m && +m[1] >= 1 && +m[1] <= RUNS.length) run = +m[1] - 1;
@@ -123,8 +131,18 @@ function render() {
       $("span", { text: `Run ${i + 1}` }), chip(x.verdict, x.verdict_css), $("span", { class: "when", text: x.when }))));
     app.append(tabs);
   }
+  const source = () => r.base + (r.wide && !zoom ? "session-wide.mp4" : "session.mp4");
   const video = $("video", { controls: "", playsinline: "", muted: "", preload: "metadata", poster: r.base + "poster.jpg",
-    src: r.base + "session.mp4" });
+    src: source() });
+  const zoomButton = r.wide ? $("button", { type: "button", class: "btn small", "aria-pressed": String(zoom),
+    text: "Zoom", title: "Zoom in on each action", onclick: () => {
+      zoom = !zoom;
+      try { localStorage.setItem("proofreel-zoom", zoom ? "1" : "0"); } catch (err) {}
+      zoomButton.setAttribute("aria-pressed", String(zoom));
+      const at = video.currentTime, playing = !video.paused;
+      video.src = source();
+      video.addEventListener("loadedmetadata", () => { video.currentTime = at; if (playing) video.play().catch(() => {}); }, { once: true });
+    } }) : null;
   const done = $("div", { class: "done" });
   const bar = $("div", { class: "bar" }, $("div", { class: "track" }), done);
   const shown = r.events.filter(e => e.kind !== "move");
@@ -139,17 +157,31 @@ function render() {
   });
   const place = () => { if (video.duration) bar.querySelectorAll("i").forEach(m => m.style.left = (m.dataset.t / video.duration * 100) + "%"); };
   video.addEventListener("loadedmetadata", place);
-  const player = $("div", { class: "panel player" }, video, bar,
+  const player = $("div", { class: "panel player" }, zoomButton ? $("div", { class: "view" }, zoomButton) : null, video, bar,
     $("p", { text: `Recorded from the screen as the agent drove it. Blue rings are clicks. The video is sped up to about 30 s; a badge shows the speed (up to ${r.fast}x with no change on the screen). The clock is real time. Click a row or a mark to jump to it.` }));
   const side = $("div", { class: "side" }, player, reviewPanel(r), askPanel(r, video));
   const list = $("ol");
-  shown.forEach(e => list.append(row(r, e, seek)));
+  let actions = null, summary = null;
+  for (const e of shown) {
+    if (KEY_KINDS.includes(e.kind)) { list.append(row(r, e, seek)); actions = null; continue; }
+    if (!actions) {
+      actions = $("ol");
+      summary = $("summary");
+      list.append($("li", { class: "more" }, $("details", {}, summary, actions)));
+    }
+    actions.append(row(r, e, seek));
+    const n = actions.children.length;
+    summary.textContent = `${n} action${n === 1 ? "" : "s"}`;
+  }
   app.append($("div", { class: "grid" }, side, list));
   video.addEventListener("timeupdate", () => {
     if (video.duration) done.style.width = (video.currentTime / video.duration * 100) + "%";
     let current = null;
-    for (const li of list.children) if (+li.dataset.t <= video.currentTime + 0.05) current = li;
-    for (const li of list.children) li.classList.toggle("now", li === current);
+    const rows = list.querySelectorAll("li[data-t]");
+    for (const li of rows) if (+li.dataset.t <= video.currentTime + 0.05) current = li;
+    const folded = current && current.closest("details:not([open])");
+    const mark = folded ? folded.parentElement : current;
+    for (const li of list.querySelectorAll("li")) li.classList.toggle("now", li === mark);
   });
   place();
   watchReview(r);
@@ -167,29 +199,6 @@ function row(r, e, seek) {
   const go = () => seek(e.v - 0.4);
   body.addEventListener("click", go);
   body.addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); go(); } });
-  if (caps.comments) {
-    const tools = $("div", { class: "tools" });
-    tools.append($("button", { type: "button", class: "btn small", text: "Comment",
-      onclick: () => caps.comments.openComposer({ element: body }).catch(() => {}) }));
-    if (caps.canSend === "available") {
-      const box = $("textarea", { "aria-label": "What should Claude do about this step?", placeholder: "What should Claude look at or fix here?" });
-      const note = $("span", { class: "who" });
-      const send = $("div", { class: "send" }, box, $("div", { class: "choices" },
-        $("button", { type: "button", class: "btn small", text: "Send", onclick: async () => {
-          const words = box.value.trim();
-          if (!words) return;
-          try {
-            const anchor = await caps.comments.anchorFor(body);
-            await caps.comments.sendToClaude({ anchor, text: `[${r.title} · run ${run + 1} · ${clock(e.t)} · ${e.kind} "${e.text}"] ${words}` });
-            box.value = ""; send.classList.remove("open"); note.textContent = "Sent to Claude. The reply comes in the comment thread.";
-          } catch (err) { note.textContent = err && err.code === "rate_limited" ? "Too fast. Try again in a moment." : "Could not send. Use Comment instead."; }
-        } }), note));
-      tools.append($("button", { type: "button", class: "btn small", text: "Send to Claude", onclick: () => { send.classList.toggle("open"); box.focus(); } }));
-      li.append(tools, send);
-      return li;
-    }
-    li.append(tools);
-  }
   return li;
 }
 
@@ -276,10 +285,9 @@ window.addEventListener("hashchange", () => { fromHash(); render(); });
 render();
 (async () => {
   const use = name => (window.claude && window.claude.use ? window.claude.use(name) : Promise.resolve(null)).catch(() => null);
-  const [comments, db, user, sample] = await Promise.all([use("comments"), use("db"), use("user"), use("sample")]);
-  Object.assign(caps, { comments, db, user, sample });
-  if (comments) caps.canSend = await comments.canSendToClaude().catch(() => "off");
-  if (comments || db || user || sample) render();
+  const [db, user, sample] = await Promise.all([use("db"), use("user"), use("sample")]);
+  Object.assign(caps, { db, user, sample });
+  if (db || user || sample) render();
   if (sample) document.getElementById("ask").hidden = false;
 })();
 """
@@ -302,6 +310,7 @@ def run_data(folder, info, events, length, real):
     return {"id": folder.name, "title": info.get("title") or folder.name, "about": info.get("about", ""),
             "error": info.get("error", ""), "verdict": label, "verdict_css": css, "meta": [m for m in meta if m],
             "when": (info.get("meta") or {}).get("", ""), "fast": FAST, "base": "",
+            "wide": (folder / "session-wide.mp4").exists(),
             "events": [{k: e[k] for k in keep if k in e} for e in events]}
 
 
@@ -334,8 +343,9 @@ def publish(session, out):
     if target.exists():
         shutil.rmtree(target)
     (target / "shots").mkdir(parents=True)
-    for name in ("session.mp4", "poster.jpg"):
-        shutil.copy2(session / name, target / name)
+    for name in ("session.mp4", "session-wide.mp4", "poster.jpg"):
+        if (session / name).exists():
+            shutil.copy2(session / name, target / name)
     for shot in (session / "shots").glob("*.jpg"):
         shutil.copy2(shot, target / "shots" / shot.name)
     manifest = out / "runs.json"
