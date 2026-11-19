@@ -346,9 +346,10 @@ def act(a, screen):
 
 
 def clean(days):
-    cutoff = time.time() - days * 86400
+    cutoff = time.time() - max(days, 1) * 86400
+    recording = (active() or {}).get("dir")
     for folder in SESSIONS.glob("*/") if SESSIONS.exists() else []:
-        if folder.stat().st_mtime < cutoff:
+        if str(folder.resolve()) != str(Path(recording or "/").resolve()) and folder.stat().st_mtime < cutoff:
             shutil.rmtree(folder)
             print(f"Deleted {folder}")
 
