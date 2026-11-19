@@ -57,3 +57,13 @@ def test_qemu_display_comes_from_up_then_the_state_then_the_default(tmp_path, mo
     assert qemu.up("s", {"warm": True, "machine": {"display": "1280x800"}}, display="1920x1080") == "1280x800"
     with pytest.raises(SystemExit):
         qemu.up("s", {}, display="big")
+
+
+def test_the_guest_password_never_goes_to_disk(tmp_path, monkeypatch):
+    monkeypatch.setattr(vm, "HOME", tmp_path)
+    env = vm.askpass("s3cret")
+    assert env["PROOFREEL_GUEST_PASSWORD"] == "s3cret"
+    assert "s3cret" not in (tmp_path / "askpass.sh").read_text()
+    import subprocess
+    assert subprocess.run([env["SSH_ASKPASS"]], env=env, capture_output=True, text=True).stdout == "s3cret\n"
+    assert vm.askpass("other")["SSH_ASKPASS"] == env["SSH_ASKPASS"]

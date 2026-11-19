@@ -18,11 +18,9 @@ import os
 import subprocess
 import sys
 import time
-from pathlib import Path
 
-from . import guest
+from . import HOME, guest
 
-HOME = Path(os.environ.get("PROOFREEL_HOME", Path.home() / ".proofreel"))
 STATES = HOME / "states"
 RUN = os.environ.get("PROOFREEL_VM", "pr-run")
 CURRENT = HOME / f"{RUN}.json"
@@ -37,7 +35,7 @@ def backend(name):
 
 def current():
     if not CURRENT.exists():
-        sys.exit(f"No run VM. Start one: proofreel vm up <state>.")
+        sys.exit("No run VM. Start one: proofreel vm up <state>.")
     return json.loads(CURRENT.read_text())
 
 
@@ -71,10 +69,15 @@ def wait(test, seconds, error):
 
 
 def askpass(password):
+    """The environment that gives ssh the guest password. The password stays in this environment, never on disk, so
+    run VMs with different passwords can work at the same time."""
     script = HOME / "askpass.sh"
-    script.write_text(f"#!/bin/sh\necho {json.dumps(password)}\n")
-    script.chmod(0o700)
-    return {**os.environ, "SSH_ASKPASS": str(script), "SSH_ASKPASS_REQUIRE": "force", "DISPLAY": ":0"}
+    if not script.exists():
+        HOME.mkdir(parents=True, exist_ok=True)
+        script.write_text('#!/bin/sh\nprintf "%s\\n" "$PROOFREEL_GUEST_PASSWORD"\n')
+        script.chmod(0o700)
+    return {**os.environ, "SSH_ASKPASS": str(script), "SSH_ASKPASS_REQUIRE": "force", "DISPLAY": ":0",
+            "PROOFREEL_GUEST_PASSWORD": password}
 
 
 def ssh(command, check=True, capture=True, timeout=None, run=None):

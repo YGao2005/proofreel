@@ -4,37 +4,18 @@ A small helper (ax.swift) runs in the guest over SSH. macOS gives the Accessibil
 starts (/usr/libexec/sshd-keygen-wrapper), so the app under test needs no permission of its own.
 """
 
-import hashlib
 import json
 import shlex
-import shutil
-import subprocess
 import sys
 import time
-from importlib import resources
 
-from . import vm
-
-SOURCE = resources.files("proofreel").joinpath("ax.swift")
-
-
-def helper():
-    """The guest helper, compiled once on the host. The name holds a hash of the source, so a change rebuilds it."""
-    source = SOURCE.read_bytes()
-    binary = vm.HOME / "bin" / f"proofreel-ax-{hashlib.sha256(source).hexdigest()[:12]}"
-    if not binary.exists():
-        if not shutil.which("swiftc"):
-            sys.exit("The AX helper is built with swiftc, so it needs a macOS host with Xcode or the Command Line Tools.")
-        binary.parent.mkdir(parents=True, exist_ok=True)
-        with resources.as_file(SOURCE) as path:
-            subprocess.run(["swiftc", "-O", "-target", "arm64-apple-macos14", str(path), "-o", str(binary)],
-                           check=True, capture_output=True)
-    return binary
+from . import swift_tool, vm
 
 
 def tree(app=None):
-    """The AX tree of the app's windows (the front app by default), and the main screen size in points."""
-    binary = helper()
+    """The AX tree of the app's windows (the front app by default), and the main screen size in points. The helper
+    is compiled on the host and copied to the guest the first time."""
+    binary = swift_tool("ax.swift", "-target", "arm64-apple-macos14")
     command = shlex.join([f"./.{binary.name}", *(["--app", app] if app else [])])
     result = vm.ssh(command, check=False, timeout=60)
     if result.returncode == 127:

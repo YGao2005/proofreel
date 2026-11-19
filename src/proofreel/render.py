@@ -20,7 +20,7 @@ from pathlib import Path
 from PIL import Image, ImageChops, ImageStat
 
 from . import draw, page
-from .motion import FAST, FPS, Camera, Pointer, ease, fit, spans
+from .motion import FPS, Camera, Pointer, ease, fit, spans
 
 CHANGED = 1.5
 INSET = 0.88

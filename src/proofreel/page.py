@@ -10,7 +10,6 @@ import json
 import shutil
 from pathlib import Path
 
-from .draw import clock
 from .motion import FAST
 
 CAPABILITIES = {"db": {}, "user": {"scopes": ["profile"]}, "sample": {"images": True}}

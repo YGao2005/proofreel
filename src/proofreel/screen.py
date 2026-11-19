@@ -9,15 +9,13 @@ import shutil
 import subprocess
 import tempfile
 import time
-from importlib import resources
 from pathlib import Path
 
 from vncdotool import api
 
-from . import __version__
+from . import swift_tool
 
 SHIFTED = dict(zip('~!@#$%^&*()_+{}|:"<>?', "`1234567890-=[]\\;',./"))
-HOME = Path.home() / ".proofreel"
 
 
 class Screen:
@@ -96,13 +94,7 @@ class Screen:
 def ocr_helper():
     """Apple Vision text recognition on macOS (compiled once), else Tesseract."""
     if platform.system() == "Darwin" and shutil.which("swiftc"):
-        binary = HOME / f"bin/proofreel-ocr-{__version__}"
-        source = resources.files("proofreel").joinpath("ocr.swift")
-        if not binary.exists():
-            binary.parent.mkdir(parents=True, exist_ok=True)
-            with resources.as_file(source) as path:
-                subprocess.run(["swiftc", "-O", str(path), "-o", str(binary)], check=True, capture_output=True)
-        return [str(binary)]
+        return [str(swift_tool("ocr.swift"))]
     if shutil.which("tesseract"):
         return None
     raise SystemExit("Text recognition needs macOS (swiftc) or tesseract on PATH.")
