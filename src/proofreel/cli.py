@@ -52,11 +52,11 @@ def active():
     return json.loads(ACTIVE.read_text()) if ACTIVE.exists() else None
 
 
-def log(kind, text, **fields):
+def log(kind, text, t=None, **fields):
     session = active()
     if session:
         with open(Path(session["dir"]) / "events.jsonl", "a") as out:
-            out.write(json.dumps({"t": time.time(), "kind": kind, "text": text, **fields}) + "\n")
+            out.write(json.dumps({"t": t or time.time(), "kind": kind, "text": text, **fields}) + "\n")
 
 
 def start(args):
@@ -267,6 +267,16 @@ def vm(a):
 
 
 def main(argv=None):
+    if argv is not None:
+        return command(argv)
+    try:
+        return command(None)
+    finally:
+        from vncdotool import api
+        api.shutdown()
+
+
+def command(argv):
     a = parser().parse_args(argv)
     HOME.mkdir(parents=True, exist_ok=True)
     match a.command:
@@ -309,8 +319,9 @@ def act(a, screen):
             log("drag", f"drag {a.x1}, {a.y1} to {a.x2}, {a.y2}", x=a.x1, y=a.y1, x2=a.x2, y2=a.y2)
             screen.drag(a.x1, a.y1, a.x2, a.y2)
         case "type":
-            log("type", f'type "{a.text}"')
+            started = time.time()
             screen.type(a.text)
+            log("type", f'type "{a.text}"', t=started, dur=round(time.time() - started, 2))
         case "key":
             log("key", " ".join(a.keys))
             screen.key(*a.keys)

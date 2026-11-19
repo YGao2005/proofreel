@@ -148,11 +148,11 @@ class Scene:
             alpha = ease((now - step["t"]) / 0.3)
             sprite = draw.pill(step["text"], int(22 * ui), lead=str(step_index + 1))
             draw.paste(view, sprite, (self.out[0] - sprite.width) / 2, self.out[1] - sprite.height - margin, alpha)
-        recent = [e for e in self.chips if 0 <= now - e["t"] < 1.8]
+        recent = [e for e in self.chips if 0 <= now - e["t"] < 1.8 + e.get("dur", 0)]
         if recent:
             e = recent[-1]
             age = now - e["t"]
-            alpha = ease(age / 0.15) * (1 - ease((age - 1.5) / 0.3))
+            alpha = ease(age / 0.15) * (1 - ease((age - 1.5 - e.get("dur", 0)) / 0.3))
             color = {True: draw.PASS + (235,), False: draw.FAIL + (235,)}.get(e.get("ok") if e["kind"] in ("check", "wait") else None,
                                                                                 draw.INK + (215,))
             sprite = draw.pill(chip_text(e), int(18 * ui), fill=color)

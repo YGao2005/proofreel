@@ -4,7 +4,8 @@ version = "0.1.0"
 description = "Record an agent driving a screen as a review video and page: a gliding pointer, click rings, auto zoom, captions, and checks."
 readme = "README.md"
 requires-python = ">=3.11"
-license = "MIT"
+license = "PolyForm-Noncommercial-1.0.0"
+license-files = ["LICENSE"]
 dependencies = ["pillow>=10.1,<13", "vncdotool==1.2.0"]
 
 [project.scripts]

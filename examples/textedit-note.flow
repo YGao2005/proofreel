@@ -1,0 +1,10 @@
+# A note typed into TextEdit on a clean macOS VM. Run: proofreel run examples/textedit-note.flow
+start textedit-note --title "${TITLE:-Type a note in TextEdit}" --about "A new user types a note. The note must show on the screen."
+step "Open TextEdit"
+vm sh "open -a TextEdit"
+wait-text "Untitled" 20
+step "Type the note"
+click 525 500 --label 'click the page'
+type "${NOTE:-Remember: the warm state keeps this text.}"
+check text "${NOTE:-Remember: the warm state keeps this text.}" 8
+stop

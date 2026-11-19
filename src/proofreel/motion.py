@@ -27,7 +27,8 @@ WAITING = 3
 def spans(changes, events):
     """Real time by how fast it plays: 1x around each action; WAITING while the agent waits for the screen (model
     output, animations); 1x around other screen changes; FAST for the rest."""
-    actions = sorted((e["t"] - 1.2, e["t"] + 2.0) for e in events if e["kind"] not in ("move", "note", "wait"))
+    actions = sorted((e["t"] - 1.2, e["t"] + e.get("dur", 0) + 2.0) for e in events
+                     if e["kind"] not in ("move", "note", "wait"))
     waits = sorted((e["t"] - e["waited"] + 0.6, e["t"] - 0.4) for e in events if e.get("waited", 0) > 1.5)
     shown = sorted([(t - 0.4, t + 1.0) for t in changes] +
                    [(e["t"] - 0.4, e["t"] + 1.6) for e in events if e["kind"] == "wait"])
@@ -117,17 +118,18 @@ class Camera:
                 continue
             x, y = pointer.at(e["t"]) if e["kind"] == "type" else (e["x"], e["y"])
             last = self.groups[-1] if self.groups else None
-            if last and e["t"] - LEAD - last[-1][0] - HOLD < BRIDGE and \
+            end = e["t"] + e.get("dur", 0)
+            if last and e["t"] - LEAD - last[-1][3] - HOLD < BRIDGE and \
                     math.hypot(x - last[-1][1], y - last[-1][2]) < FAR * diagonal:
-                last.append((e["t"], x, y))
+                last.append((e["t"], x, y, end))
             else:
-                self.groups.append([(e["t"], x, y)])
+                self.groups.append([(e["t"], x, y, end)])
         self.state = [size[0] / 2, size[1] / 2, 1.0]
         self.velocity = [0.0, 0.0, 0.0]
 
     def target(self, now):
         for group in self.groups:
-            if group[0][0] - LEAD <= now <= group[-1][0] + HOLD:
+            if group[0][0] - LEAD <= now <= group[-1][3] + HOLD:
                 current = group[0]
                 for point in group:
                     if point[0] - 0.55 <= now:

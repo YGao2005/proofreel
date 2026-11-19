@@ -7,6 +7,8 @@ review video and a page that a person can check in a minute.
   presses and sends out a ring. The camera zooms in before each action, pans to the next one when it is near, and
   zooms out when the work moves on. Each step is a caption, and each action and check is a chip. Time with no
   change on the screen plays at up to 8x, with a smooth ramp in and out.
+- **The video fits about 30 s.** Busy time plays at up to 2.5x when the session is long, a wait for the screen plays
+  at 3x, and a badge shows the speed whenever it is above 1x.
 - **The page is the review.** It has the video, a scrub bar with a mark for each step and check, and the list of
   actions with thumbnails. A click on a row jumps the video to that moment. A failed check marks the page *Problem*.
 - **Saved states for VMs.** Save a VM as a named state, such as `clean-os`, `app-installed`, or
@@ -16,8 +18,10 @@ review video and a page that a person can check in a minute.
 - **Any VNC screen.** This includes macOS and Linux VMs in Tart or UTM, QEMU, and Docker desktops with x11vnc.
   Another tool can also make the frames: give proofreel a folder of timestamped screenshots and an event log.
 
+![A made-up sign-up session: the pointer glides to each field, the camera zooms in and pans, a 8x badge shows over the wait, and the check passes.](docs/demo.gif)
+
 ```bash
-pip install proofreel        # Python 3.11+, and ffmpeg on PATH
+pip install git+https://github.com/YGao2005/proofreel   # Python 3.11+, and ffmpeg on PATH
 proofreel demo               # a made-up session, no VNC needed: open the index.html it prints
 ```
 
@@ -78,7 +82,9 @@ proofreel vm build app-installed --from macos-26 --flow flows/install.flow --set
 proofreel vm down
 ```
 
-A clone is copy on write (APFS), so a state costs only the disk blocks that it changes. A warm state needs a run VM
+A clone is copy on write (APFS), so a state costs only the disk blocks that it changes. On an M-series Mac with a
+macOS 26 guest: `up` from a cold state takes about 18 s to SSH ready, a warm `up` about 12 s with the apps as they
+were, and `save --warm` about 60 s. A warm state needs a run VM
 that was started with `--warmable`. Tart then turns off the VM's audio devices, so do not test a microphone in a
 warm VM.
 
@@ -111,10 +117,13 @@ Any tool can write this folder and then run `proofreel render <dir>`:
 
 ## Limits
 
+- A run VM is headless and isolated: no window, no audio device (`--no-audio`), no shared clipboard. Nothing it
+  does shows or plays on the host.
 - One run VM at a time for each `PROOFREEL_VM` name. macOS lets a Mac run at most 2 macOS VMs at once.
 - A VNC server sends keys as keysyms. Some apps read hardware key codes or modifier-only keys, such as a key that
   you hold down. Send those keys from in the guest instead, and log them with `proofreel event key ...`.
 
 ## License
 
-MIT
+[PolyForm Noncommercial 1.0.0](LICENSE): free to use, change, and share for any noncommercial purpose (personal
+projects, research, education, nonprofits). For commercial use, ask the author.

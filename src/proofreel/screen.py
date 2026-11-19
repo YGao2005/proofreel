@@ -14,6 +14,8 @@ from pathlib import Path
 
 from vncdotool import api
 
+from . import __version__
+
 SHIFTED = dict(zip('~!@#$%^&*()_+{}|:"<>?', "`1234567890-=[]\\;',./"))
 HOME = Path.home() / ".proofreel"
 
@@ -70,13 +72,15 @@ class Screen:
             time.sleep(0.05)
 
     def capture(self, path):
-        self.client.captureScreen(str(path))
+        """A full frame. captureScreen waits for an update, and some servers send none on a still screen."""
+        self.client.refreshScreen(incremental=False)
+        self.client.screen.save(str(path))
 
 
 def ocr_helper():
     """Apple Vision text recognition on macOS (compiled once), else Tesseract."""
     if platform.system() == "Darwin" and shutil.which("swiftc"):
-        binary = HOME / "bin/proofreel-ocr"
+        binary = HOME / f"bin/proofreel-ocr-{__version__}"
         source = resources.files("proofreel").joinpath("ocr.swift")
         if not binary.exists():
             binary.parent.mkdir(parents=True, exist_ok=True)
