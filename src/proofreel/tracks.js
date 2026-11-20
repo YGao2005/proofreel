@@ -95,13 +95,22 @@ const Tracks = (() => {
     return { rows, names: [...new Set(rows.flatMap(r => Object.keys(r.phases)))], from, to };
   }
 
+  // One formatter for every number on the page: under 1 s "9 ms", under 60 s "2.4 s", then "1 m 12 s"; memory in MB or GB;
+  // CPU in %.
+  function duration(v) {
+    if (v < 1) return `${Math.round(v * 1000)} ms`;
+    if (v < 59.95) return `${v.toFixed(1)} s`;
+    const total = Math.round(v);
+    return `${Math.floor(total / 60)} m ${total % 60} s`;
+  }
   function format(v, unit) {
     if (v === null || v === undefined) return "–";
-    if (unit === "s") return v < 1 ? `${Math.round(v * 1000)} ms` : `${+v.toFixed(2)} s`;
+    if (unit === "s") return duration(v);
+    if (unit === "MB" && Math.abs(v) >= 1024) return `${+(v / 1024).toPrecision(3)} GB`;
     const n = Math.abs(v) >= 100 ? Math.round(v) : +v.toPrecision(3);
     return unit === "%" ? `${n}%` : unit ? `${n} ${unit}` : String(n);
   }
 
-  return { along, timemap, bin, pack, valueAt, waterfall, format };
+  return { along, timemap, bin, pack, valueAt, waterfall, duration, format };
 })();
 if (typeof module === "object") module.exports = Tracks;

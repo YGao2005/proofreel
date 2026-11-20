@@ -137,7 +137,7 @@ const Machine = (() => {
   function sections(run) {
     const events = (run.events || []).filter(e => e.kind !== "state"), states = run.states || [];
     const part = (visit, from, to, back) => {
-      const mine = events.filter(e => e.t >= from && e.t < to), checks = mine.filter(e => e.kind === "check");
+      const mine = events.filter(e => e.t >= from && e.t < to), checks = mine.filter(e => e.kind === "check" && !e.budget);
       return { visit, name: visit ? visit.name : null, t: from, ok: visit ? visit.ok : null, back, events: mine,
         passed: checks.filter(e => e.ok).length, total: checks.length };
     };

@@ -93,7 +93,9 @@ def test_a_suite_page_is_titled_by_the_suite_and_keeps_each_journey(tmp_path):
     runs = page.load_runs(out)
     assert [(r["journey"], r["suite"]["id"], r.get("video", True)) for r in runs] == [
         ("drag", suite["id"], True), ("browse", suite["id"], False)]
-    assert (out / "index.html").read_text().startswith("<title>Upload</title>")
+    document = (out / "index.html").read_text()
+    assert "<title>Upload</title>" in document
+    assert '<html lang="en">' in document and '<meta charset="utf-8">' in document
 
 
 def test_every_journey_of_the_newest_suite_run_keeps_its_curves(tmp_path):
@@ -106,3 +108,8 @@ def test_every_journey_of_the_newest_suite_run_keeps_its_curves(tmp_path):
                                     metrics={"series": [series], "budgets": [], "probes": {}}))
     runs = page.load_runs(out)
     assert [("points" in r["metrics"]["series"][0]) for r in runs] == [False] * (page.CURVES + 1) + [True] * (page.CURVES + 1)
+
+
+def test_a_run_published_before_the_page_counted_checks_loses_that_meta():
+    run = {"id": "x", "version": page.VERSION, "events": [], "meta": ["from state linux", "3/4 checks pass", "7 s of screen in a 7 s video"]}
+    assert page.upgrade(run)["meta"] == ["from state linux"]
