@@ -27,12 +27,12 @@ def guest_steps(*steps):
 
 
 def probe_scripts(info):
-    """A host probe is run.py, run with this Python. A guest probe is run, in the guest's own script language."""
-    if info["where"] == "host":
-        return {"run.py"}
-    if info["where"] != "guest":
+    """A host probe is run.py, run with this Python. A guest probe is run, in the guest's own script language. A
+    probe with setup also has a guest start and stop."""
+    if info["where"] not in ("host", "guest"):
         raise ValueError(f"{info['name']}/probe.toml: where is host or guest, not {info['where']!r}.")
-    return guest_steps("run")(info)
+    scripts = {"run.py"} if info["where"] == "host" else guest_steps("run")(info)
+    return scripts | (guest_steps("start", "stop")(info) if info.get("setup") else set())
 
 
 KINDS = {

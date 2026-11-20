@@ -50,6 +50,12 @@ def boot(suspendable=False):
             "suspendable": bool(suspendable)}
 
 
+def host_address(run):
+    """Shared networking: the host is the first address of the guest's subnet, on the bridge."""
+    host = run["ip"].rsplit(".", 1)[0] + ".1"
+    return host, host, run["ip"]
+
+
 def save(name, run, warm):
     if exists(name):
         tart("delete", PREFIX + name)

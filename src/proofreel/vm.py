@@ -92,15 +92,19 @@ class Run(dict):
     def forward(self, guest_port):
         """(host port, ssh process): while the process runs, 127.0.0.1:<host port> reaches 127.0.0.1:<guest_port>
         in the guest. It has its own connection, so the forward ends with the process."""
-        with socket.socket() as free:
-            free.bind(("127.0.0.1", 0))
-            port = free.getsockname()[1]
+        port = free_port()
         process = subprocess.Popen(
             ["ssh", *SSH_OPTS, *(["-p", str(self["port"])] if self.get("port") else []), "-N",
              "-o", "ExitOnForwardFailure=yes", "-L", f"127.0.0.1:{port}:127.0.0.1:{guest_port}", self.target],
             env=askpass(self["password"]), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL)
         return port, process
+
+    @property
+    def host_address(self):
+        """(the address a host server binds, the host's address as the guest sees it, the guest's address as that
+        server sees it), so a host server can serve this run VM and refuse everyone else."""
+        return backend(self["backend"]).host_address(self)
 
     def upload(self, host, guest_path):
         self._scp(host, f"{self.target}:{guest_path}")
@@ -110,6 +114,17 @@ class Run(dict):
 
     def close(self):
         subprocess.run(["ssh", *self._options("-p"), "-O", "exit", self.target], capture_output=True, check=False)
+
+
+def free_port(first=0, host="127.0.0.1"):
+    for port in range(first, first + 100) if first else [0]:
+        with socket.socket() as s:
+            try:
+                s.bind((host, port))
+                return s.getsockname()[1]
+            except OSError:
+                continue
+    raise Problem(f"No free port on {host}.")
 
 
 def backend(name):
@@ -200,7 +215,12 @@ def save(name, warm=False, note="", flow=None, values=None, conditions=None):
     """Save the run VM as a state, then keep it running. Warm keeps memory: apps stay open. The state keeps the
     conditions of the state the run VM came from, and the ones given."""
     check_name(name)
+    from . import probes, recording
+    if recording.current():
+        raise Problem("A session is recording. Stop it first: proofreel stop.")
     run = Run.current()
+    for line in probes.recover(run):
+        print(line)
     kind = run["backend"]
     parent = state_info(name).get("parent") if run["state"] == name else run["state"]
     kept = {c["name"]: c for c in [*run["conditions"], *(conditions or [])]}

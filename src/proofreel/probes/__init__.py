@@ -16,11 +16,23 @@ The protocol: a probe prints one JSON object on each line.
 The recorder keeps each measure in metrics/<probe>.jsonl with "a", the unix time it arrived, and the probe's status
 in metrics/probes.json. A line over a limit (LINE bytes, RATE lines a second, SERIES ids) is counted and dropped;
 control lines skip the rate limit.
+
+More manifest fields:
+  extras = "<command>"   a command it needs. Without it, the probe is unavailable, with the command that installs it.
+  port = true            the host gives it a free port, in PROOFREEL_PORT.
+  setup = true           guest start and stop scripts change the run VM for the recording (a proxy, a trusted CA).
+                         start runs once the host run runs; stop must work after a start that stopped half way.
+                         Each reset is written to the run record before its start, so recover() undoes it after a
+                         crash: at the next start and at `vm save`.
+A host probe for a run VM gets PROOFREEL_BIND (the address to listen on), PROOFREEL_HOST_FOR_GUEST (that address as
+the guest sees it), and PROOFREEL_GUEST_IP (the guest as the host sees it); start and stop get PROOFREEL_PORT and
+PROOFREEL_HOST_FOR_GUEST.
 """
 
 import json
 import math
 import os
+import shutil
 import signal
 import subprocess
 import sys
@@ -29,6 +41,7 @@ import time
 from pathlib import Path
 
 from .. import Problem, plugins
+from ..vm import free_port
 
 LINE = 16_384
 RATE = 200
@@ -52,10 +65,20 @@ def select(requested, run):
         source = plugins.find("probe", name)
         info = plugins.manifest("probe", source)
         usable(info, system)
-        records.append({"name": info["name"], "version": info["version"], "where": info["where"], "source": str(source),
-                        "values": plugins.resolve(info, given), "tracks": info.get("tracks", {}),
-                        "tunnel": info.get("tunnel")})
+        record = {"name": info["name"], "version": info["version"], "where": info["where"], "source": str(source),
+                  "values": plugins.resolve(info, given), "tracks": info.get("tracks", {}),
+                  "setup": bool(info.get("setup")), "tunnel": info.get("tunnel")}
+        if info.get("port"):
+            record["port"] = free_port(0, run.host_address[0] if run else "127.0.0.1")
+        if info.get("extras") and not tool(info["extras"]):
+            record["unavailable"] = f"{info['extras']} is not installed. Install it: pip install {info['extras']}"
+        records.append(record)
     return records
+
+
+def tool(command):
+    """The path of a command next to this Python (a venv) or on PATH, or None."""
+    return shutil.which(command, path=os.pathsep.join([str(Path(sys.executable).parent), os.environ.get("PATH", "")]))
 
 
 def manifest(name):
@@ -63,10 +86,11 @@ def manifest(name):
 
 
 def usable(info, system, quiet=False):
-    """A guest probe needs a run VM of one of its systems. A host probe works with any screen."""
-    if info["where"] == "host" and (system is None or system in info["os"]):
+    """A guest probe, or one that sets up the guest, needs a run VM of one of its systems. A host probe works with any
+    screen."""
+    if info["where"] == "host" and not info.get("setup") and (system is None or system in info["os"]):
         return True
-    if info["where"] == "guest" and system in info["os"]:
+    if (info["where"] == "guest" or info.get("setup")) and system in info["os"]:
         return True
     if quiet:
         return False
@@ -75,19 +99,58 @@ def usable(info, system, quiet=False):
 
 
 def prepare(records, run):
-    """Copy each guest probe into the run VM, before the recorder starts it."""
+    """Copy each guest probe, and each probe that sets up the guest, into the run VM, before the recorder starts."""
     for record in records:
-        if record["where"] == "guest":
+        if (record["where"] == "guest" or record.get("setup")) and not record.get("unavailable"):
             plugins.stage(run, "probe", record["source"], record["values"])
+
+
+def begin(records, run):
+    """Run each probe's guest start, once the recorder runs its host side. Its reset goes into the run record first.
+    A start that fails is undone, with every start before it."""
+    for record in records:
+        if record.get("setup") and not record.get("unavailable"):
+            values = {**record["values"], "PROOFREEL_PORT": str(record.get("port") or ""),
+                      "PROOFREEL_HOST_FOR_GUEST": run.host_address[1]}
+            resets(lambda pending: [*pending, {"name": record["name"], "values": values}])
+            code, output = plugins.script(run, "probe", record["name"], "start", values, timeout=90)
+            if code:
+                failed = recover(run)
+                raise Problem(f"Probe {record['name']}: its start in the run VM failed: {output[-400:] or code}"
+                              + "".join(f" {line}" for line in failed))
+
+
+def resets(change=None):
+    """The run record's pending resets, after an optional change to them."""
+    from ..vm import CURRENT
+    record = json.loads(CURRENT.read_text())
+    if change:
+        record["pending"] = change(record.get("pending", []))
+        CURRENT.write_text(json.dumps(record))
+    return record.get("pending", [])
+
+
+def recover(run):
+    """Run the pending resets, last first, and clear them. Returns a line for each reset that failed."""
+    failed = []
+    for reset in reversed(resets()):
+        code, output = plugins.script(run, "probe", reset["name"], "stop", reset["values"], timeout=90)
+        if code:
+            failed.append(f"Probe {reset['name']}: its stop in the run VM failed: {output[-400:] or code}")
+    resets(lambda pending: [])
+    return failed
 
 
 def process(record, folder, info, run, tunnel=None):
     """(command line, environment) of a probe. A probe is told its values and where it runs, never the password."""
     told = {**record["values"], "PROOFREEL_APP": info.get("app") or "", "PROOFREEL_OS": (run or {}).get("os") or ""}
     if record["where"] == "host":
+        bind, seen, guest_ip = run.host_address if run else ("127.0.0.1", "", "")
         return ([sys.executable, "-u", str(Path(record["source"]) / "run.py")],
                 {**os.environ, **told, "PROOFREEL_SESSION": str(folder),
-                 "PROOFREEL_VM_PID": str((run or {}).get("pid") or ""), "PROOFREEL_TUNNEL": str(tunnel or "")})
+                 "PROOFREEL_VM_PID": str((run or {}).get("pid") or ""), "PROOFREEL_PORT": str(record.get("port") or ""),
+                 "PROOFREEL_BIND": bind, "PROOFREEL_HOST_FOR_GUEST": seen, "PROOFREEL_GUEST_IP": guest_ip,
+                 "PROOFREEL_TUNNEL": str(tunnel or "")})
     from ..vm import askpass
     script = run.guest.run_script(plugins.folder(run, "probe", record["name"]), "run", told)
     return run.argv(script, tty=True), {**os.environ, **askpass(run["password"])}
@@ -187,6 +250,9 @@ def launch(folder):
     (folder / "metrics").mkdir(exist_ok=True)
     started = []
     for record in info["probes"]:
+        if record.get("unavailable"):
+            write_status(folder, {record["name"]: {"status": "unavailable", "note": record["unavailable"]}})
+            continue
         try:
             started.append(Probe(record, folder, info, run))
         except OSError as error:
