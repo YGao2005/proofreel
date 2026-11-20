@@ -15,14 +15,12 @@ const toReal = (r, video) => Tracks.along(r.clock, 1, 0, video);
 const fastest = r => Math.round(Math.max(1, ...Tracks.timemap(r.clock).stretches(1).map(s => s.speed)));
 const caps = {};
 let run = RUNS.length - 1;
-let zoom = true, view = "timeline", selected = null;
-try { zoom = localStorage.getItem("proofreel-zoom") !== "0"; view = localStorage.getItem("proofreel-view") || view; } catch (err) {}
-const MACHINE = RUNS.some(x => x.states && x.states.length);
+let zoom = true, view = null;
+try { zoom = localStorage.getItem("proofreel-zoom") !== "0"; } catch (err) {}
 const SUITE = RUNS.some(x => x.suite);
 const suiteOf = x => x.suite ? x.suite.id : "";
 if (SUITE && !location.hash) view = "journeys";
 const VISITS = { ok: ["Pass", "ok"], bad: ["Fail", "bad"], unchecked: ["Not checked", "info"] };
-const visitAt = (r, real) => (r.states || []).find(v => v.t <= real && real < v.end) || null;
 const visitVerdict = v => v.ok === false ? "bad" : v.ok ? "ok" : "unchecked";
 const fromHash = () => {
   const m = /^#run-(\d+)$/.exec(location.hash);
@@ -43,7 +41,7 @@ const icon = name => {
   p.setAttribute("d", ICONS[name]); s.append(p);
   return s;
 };
-const VIEWS = [["journeys", "Journeys"], ["timeline", "Timeline"], ["machine", "State machine"], ["stats", "Stats"], ["network", "Network"], ["compare", "Compare", true]];
+const VIEWS = [["journeys", "Journeys"], ["timeline", "Timeline"], ["stats", "Stats"], ["network", "Network"], ["compare", "Compare", true]];
 const placeholder = text => $("div", { class: "soon-pane" }, $("p", { class: "placeholder", text }));
 
 // A suite page switches between the journeys of the suite run on show; any other page, between the runs of one journey.
@@ -104,8 +102,10 @@ function render() {
   const screen = $("div", { class: "screen" }, video, overlay);
   const update = () => {
     stage(r, video, overlay);
-    tracks.readout(toReal(r, video.currentTime));
-    if (video.duration) timebar.style.setProperty("--at", (video.currentTime / video.duration * 100) + "%");
+    const real = toReal(r, video.currentTime);
+    tracks.readout(real);
+    flow.now(real);
+    if (video.duration) stack.style.setProperty("--at", (video.currentTime / video.duration * 100) + "%");
     time.textContent = `${clock(Math.max(0, toReal(r, video.currentTime)))} / ${clock(r.real)}`;
   };
   const toggle = (label, name, on, title, flip) => {
@@ -144,22 +144,12 @@ function render() {
   });
   const help = $("details", { class: "help" }, $("summary", { class: "btn tool icon-only", "aria-label": "About this video", title: "About this video" }, icon("help")),
     $("div", { class: "pop", text: `Recorded from the screen as the agent drove it. Blue rings are clicks. The video is sped up to about 30 s; a badge shows the speed (up to ${fastest(r)}x with no change on the screen). The clock is real time. Click a row or a mark to jump to it.` }));
-  const lanes = $("div", { class: "lanes" });
-  const statesLane = $("div", { class: "lane states", "aria-label": "States" });
-  for (const v of r.states || []) statesLane.append($("button", { type: "button", class: `seg-state ${VISITS[visitVerdict(v)][1]}`,
-    "data-t": toVideo(r, v.t), "data-end": toVideo(r, v.end), title: `${v.name}: ${VISITS[visitVerdict(v)][0]}`,
-    onclick: () => seek(toVideo(r, v.t) - 0.2) }, $("span", { text: v.name })));
-  if (r.states && r.states.length) lanes.append($("span", { class: "lane-label", text: "States" }), statesLane, $("span"));
-  const tracks = metricTracks(r, lanes, statesLane, live, t => seek(t));
-  const timebar = $("div", { class: "timebar" },
-    $("div", { class: "lead" }, play, time), bar, $("div", { class: "tools" }, zoomButton, fullButton, help), lanes);
+  const tracks = metricTracks(r, live, seek);
+  const flow = flowView(r, seek);
+  const timebar = $("div", { class: "timebar" }, $("div", { class: "lead" }, play, time), bar, $("div", { class: "tools" }, zoomButton, fullButton, help));
   const place = () => {
     if (!video.duration) return;
     bar.querySelectorAll("i").forEach(m => m.style.left = (m.dataset.t / video.duration * 100) + "%");
-    statesLane.querySelectorAll(".seg-state").forEach(s => {
-      s.style.left = (s.dataset.t / video.duration * 100) + "%";
-      s.style.width = (Math.max(0, s.dataset.end - s.dataset.t) / video.duration * 100) + "%";
-    });
     if (video.videoWidth) document.documentElement.style.setProperty("--ratio", video.videoWidth / video.videoHeight);
   };
   video.addEventListener("loadedmetadata", place);
@@ -179,29 +169,33 @@ function render() {
     const n = actions.children.length;
     summary.textContent = `${n} action${n === 1 ? "" : "s"}`;
   }
-  const machine = MACHINE ? machineView(r, seek) : null;
-  const panes = { journeys: journeysView(), timeline: list, machine: machine && machine.element, stats: statsView(r, seek), network: networkView(r, seek),
+  const panes = { journeys: journeysView(), timeline: list, stats: statsView(r, seek), network: networkView(r, seek),
     compare: placeholder("Two runs side by side: the same state in each, with the frame, the checks, and the time they took.") };
   const views = VIEWS.filter(([name]) => panes[name]);
-  if (!panes[view]) view = "timeline";
-  const tabs = $("div", { class: "tabs", role: "tablist", "aria-label": "View" });
+  if (!panes[view]) view = null;
+  const tabs = $("div", { class: "tabs", role: "tablist", "aria-label": "Details" });
+  const body = $("div", { class: "body" }, ...Object.values(panes).filter(Boolean));
   const show = () => {
     for (const [name, pane] of Object.entries(panes)) if (pane) pane.hidden = name !== view;
+    body.hidden = !view;
     tabs.querySelectorAll("[role=tab]").forEach(b => b.setAttribute("aria-selected", String(b.dataset.view === view)));
   };
   for (const [name, label, soon] of views) tabs.append($("button", { type: "button", role: "tab", "data-view": name, class: soon ? "soon" : "",
-    onclick: () => { view = name; try { localStorage.setItem("proofreel-view", view); } catch (err) {} show(); } },
+    onclick: () => { view = view === name ? null : name; show(); } },
     document.createTextNode(label), soon ? $("span", { class: "badge", text: "soon" }) : null));
   show();
-  const body = $("div", { class: "body scroll" }, ...Object.values(panes).filter(Boolean));
   const viewsPanel = $("section", { class: "panel views" }, $("div", { class: "head" }, tabs), body);
   const dock = $("aside", { class: "panel dock", "aria-label": "Review" }, reviewPanel(r), askPanel(r, video));
-  app.append($("div", { class: "grid" }, stagePanel, viewsPanel, dock));
-  const grid = app.lastChild;
-  const fit = () => app.style.setProperty("--fit-h", Math.max(160, grid.clientHeight - timebar.offsetHeight - 2) + "px");
-  if (window.ResizeObserver) { const watch = new ResizeObserver(fit); watch.observe(grid); watch.observe(timebar); }
+  const stack = $("div", { class: "stack", style: "--at:0%" }, stagePanel, flow.element, tracks.panel, viewsPanel, dock);
+  app.append(stack);
+  const anchor = flow.element || stagePanel;
+  const fit = () => {
+    const media = stagePanel.querySelector(".media");
+    if (media) app.style.setProperty("--fit-h", Math.max(160, Math.floor(innerHeight - (anchor.getBoundingClientRect().bottom + scrollY - media.getBoundingClientRect().height) - 16)) + "px");
+  };
+  window.onresize = fit;
+  if (window.ResizeObserver) { const watch = new ResizeObserver(fit); [document.body, anchor, timebar].forEach(el => watch.observe(el)); }
   video.addEventListener("timeupdate", () => {
-    if (machine) machine.now(toReal(r, video.currentTime));
     let current = null;
     const rows = list.querySelectorAll("li[data-t]");
     for (const li of rows) if (+li.dataset.t <= video.currentTime + 0.05) current = li;
@@ -246,22 +240,27 @@ const budgetText = (b, unit) => `${b.stat} ${b.below !== null && b.below !== und
 
 // One row on the video's time axis for each series, the way its record looks: samples as a line in their lo-hi
 // envelope, spans in rows (+N when more do not fit), marks as ticks. Sped-up stretches are hatched and labelled.
-// A chip per group hides its rows; a pin per series puts it in the readout on the video.
-function metricTracks(r, lanes, statesLane, live, seek) {
+// A chip per group hides its rows; a pin per series puts it in the readout on the video. The panel is one row until it
+// is opened (a failed budget opens it), and the readout on the video shows only while it is open.
+function metricTracks(r, live, seek) {
   const series = metricsOf(r).filter(s => s.points || s.spans || s.marks);
   const map = Tracks.timemap(r.clock), length = r.length || map.video(r.real) || 1;
   const x = t => map.video(t) / length * W, pct = v => `${v / W * 100}%`;
   const pins = () => PREFS.pins || [...new Set(series.map(groupOf))].map(g => series.find(s => groupOf(s) === g).m).slice(0, 3);
+  let open = false, at = 0;
   const readout = real => {
+    at = real;
     const shown = series.filter(s => pins().includes(s.m));
-    live.hidden = !shown.length;
+    live.hidden = !shown.length || !open;
     live.replaceChildren(...shown.map(s => $("span", {}, $("b", { text: nameOf(s) }), Tracks.format(Tracks.valueAt(s, real), s.unit))));
   };
-  if (!series.length) return { readout };
+  if (!series.length) return { readout, panel: null };
   const stretches = map.stretches();
   const hatch = lane => stretches.forEach(st => lane.append($("span", { class: "stretch", style: `left:${st.from / length * 100}%;width:${(st.to - st.from) / length * 100}%`,
-    title: `Plays at up to ${Math.round(st.speed)}x` }, $("span", { text: `${Math.round(st.speed)}x` }))));
-  hatch(statesLane);
+    title: `Plays at up to ${Math.round(st.speed)}x` })));
+  const failed = ((r.metrics && r.metrics.budgets) || []).some(b => b.ok === false);
+  open = failed || !!PREFS.open;
+  const lanes = $("div", { class: "lanes" });
   const hidden = new Set(PREFS.hidden || crowded(r, series)), rows = [];
   const chips = $("div", { class: "chips metric" });
   for (const g of new Set(series.map(groupOf))) {
@@ -275,7 +274,6 @@ function metricTracks(r, lanes, statesLane, live, seek) {
     });
     chips.append(b);
   }
-  lanes.append($("span", { class: "lane-label metric", text: "Tracks" }), chips, $("span", { class: "metric" }));
   for (const s of series) {
     const lane = $("div", { class: `lane metric ${s.kind}`, title: `${s.m}: ${statLine(s)}` });
     lane.addEventListener("click", ev => {
@@ -298,7 +296,18 @@ function metricTracks(r, lanes, statesLane, live, seek) {
   }
   const show = () => rows.forEach(([g, ...els]) => els.forEach(el => { el.hidden = hidden.has(g); }));
   show();
-  return { readout };
+  const fold = $("button", { type: "button", class: "fold", "aria-expanded": String(open), title: "Show the metric rows" },
+    $("span", { class: "caret" }), $("span", { text: "Tracks" }));
+  const panel = $("section", { class: `panel tracks${failed ? " bad" : ""}`, "aria-label": "Tracks" },
+    $("div", { class: "head" }, fold, chips, failed ? chip("Budget failed", "bad") : null, $("span", { class: "count", text: `${series.length} rows` })), lanes);
+  const paint = () => {
+    fold.setAttribute("aria-expanded", String(open));
+    lanes.hidden = !open;
+    readout(at);
+  };
+  fold.addEventListener("click", () => { open = !open; PREFS.open = open; savePrefs(); paint(); });
+  paint();
+  return { readout, panel };
 }
 
 // WHY: many series would push the video off a short window, so past ROWS rows a group starts hidden. Groups with a
@@ -418,7 +427,7 @@ function stage(r, video, overlay) {
   const real = toReal(r, at), speed = Tracks.timemap(r.clock).speed(at);
   const [clockPill, statePill, speedPill] = ["clock", "state", "speed"].map(name => overlay.querySelector(".top ." + name));
   clockPill.textContent = clock(Math.max(0, real));
-  const visit = visitAt(r, real);
+  const visit = Machine.at(r, real);
   statePill.hidden = !visit;
   if (visit) {
     statePill.textContent = visit.name;
@@ -455,109 +464,56 @@ function row(r, e, seek, visit) {
   return li;
 }
 
-// Every run's states as one graph. The run on show is drawn strong: its path, a verdict on each node it visited, and
-// how long each step took. A dot under a node is its verdict in each run. The node the video is in lights up.
-function machineView(r, seek) {
+function flowView(r, seek) {
+  const graph = Machine.flow(r);
+  if (!graph.nodes.length) return { element: null, now: () => {} };
   const NS = "http://www.w3.org/2000/svg";
-  const svg = (tag, attrs = {}, ...kids) => {
+  const svg = (tag, attrs = {}) => {
     const el = document.createElementNS(NS, tag);
-    for (const [k, v] of Object.entries(attrs)) if (k.startsWith("on")) el.addEventListener(k.slice(2), v); else el.setAttribute(k, v);
-    for (const kid of kids) if (kid) el.append(kid);
+    for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
     return el;
   };
-  const graph = Machine.build(RUNS), current = RUNS.indexOf(r), many = RUNS.length > 1, states = r.states || [];
-  const measure = document.createElement("canvas").getContext("2d");
-  measure.font = "600 13px Inter, system-ui, sans-serif";
-  const name = id => id.length > 32 ? id.slice(0, 31) + "…" : id;
-  const size = id => id === Machine.START ? [measure.measureText(id).width + 26, 26]
-    : [Math.max(64, measure.measureText(name(id)).width + 30), many ? 46 : 34];
-  const box = Machine.layout(graph, size);
-  const pad = 8;
-  const drawing = svg("svg", { role: "img", "aria-label": "State machine of the runs" },
-    svg("defs", {}, svg("marker", { id: "arrow", viewBox: "0 0 10 10", refX: "9", refY: "5", markerWidth: "7",
-      markerHeight: "7", orient: "auto-start-reverse" }, svg("path", { d: "M0,0 L10,5 L0,10 z", class: "head" }))));
-  const start = (run, visit) => visit ? RUNS[run].states[visit - 1].t : 0;
-  const small = document.createElement("canvas").getContext("2d");
-  small.font = "11px Inter, system-ui, sans-serif";
-  let left = 0, right = box.width;
-  for (const e of box.edges) {
-    const mine = e.takes.filter(x => x.run === current);
-    const steps = mine.map(x => r.events.find(ev => ev.kind === "step" && ev.t >= start(current, x.visit) && ev.t < states[x.visit].t));
-    const took = mine.map(x => states[x.visit].t - start(current, x.visit));
-    const label = mine.length ? `${took[0].toFixed(1)} s${mine.length > 1 ? ` ×${mine.length}` : ""}${steps[0] ? " · " + steps[0].text : ""}` : "";
-    const runs = [...new Set(e.takes.map(x => x.run + 1))];
-    const g = svg("g", { class: "edge" + (mine.length ? " on" : "") + (e.back ? " back" : ""),
-      onclick: () => { if (mine.length) seek(toVideo(r, start(current, mine[0].visit)) - 0.2); } },
-      svg("title", {}, `${e.from} → ${e.to}${many ? ` (run ${runs.join(", ")})` : ""}${steps[0] ? ": " + steps[0].text : ""}`),
-      svg("path", { d: e.d, class: "hit" }), svg("path", { d: e.d, class: "line", "marker-end": "url(#arrow)" }));
-    if (label && e.label) {
-      const text = label.length > 34 ? label.slice(0, 33) + "…" : label;
-      const [x, y, anchor] = e.label, width = small.measureText(text).width, at = anchor === "end" ? x - 7 : x + 7;
-      g.append(svg("text", { x: at, y: y + 4, "text-anchor": anchor, class: "label" }, text));
-      left = Math.min(left, anchor === "end" ? at - width : at);
-      right = Math.max(right, anchor === "end" ? at : at + width);
-    }
-    drawing.append(g);
-  }
-  const nodes = new Map();
+  const buttons = new Map(), steps = $("ol", { class: "steps" });
   let playing = -1;
-  for (const n of box.nodes) {
-    const here = Machine.verdict(states, n.id), first = n.id === Machine.START;
-    const g = svg("g", { class: `node ${first ? "start" : here ? VISITS[here][1] : "away"}`, tabindex: "0", role: "button",
-      transform: `translate(${n.x},${n.y})`, "aria-label": `${n.id}${here ? ": " + VISITS[here][0] : ""}` },
-      svg("rect", { width: n.w, height: n.h, rx: first ? n.h / 2 : 8 }),
-      svg("text", { x: n.w / 2, y: many && !first ? 19 : n.h / 2 + 4.5, class: "name" }, first ? n.id : name(n.id)));
-    if (many && !first) RUNS.forEach((x, i) => {
-      const v = Machine.verdict(x.states, n.id);
-      g.append(svg("circle", { cx: n.w / 2 + (i - (RUNS.length - 1) / 2) * 11, cy: 33, r: i === current ? 4 : 3.2,
-        class: `dot ${v ? VISITS[v][1] : "away"}${i === current ? " mine" : ""}` }, svg("title", {}, `Run ${i + 1}: ${v ? VISITS[v][0] : "not visited"}`)));
-    });
-    // A state the run visits more than once: each click goes to its next visit.
-    const pick = () => {
-      selected = n.id;
-      details();
-      const visits = states.filter(v => v.name === n.id);
-      const v = visits.find(v => v.t > playing + 0.3) || visits[0];
-      if (v) seek(toVideo(r, v.t) - 0.2);
+  graph.nodes.forEach((n, i) => {
+    const next = graph.edges.some(e => e.next && e.from === n.id);
+    const checks = n.total ? `${n.passed}/${n.total} checks` : "No checks";
+    const go = () => {
+      const v = n.visits.find(v => v.t > playing + 0.3) || n.visits[0];
+      seek(toVideo(r, v.t) - 0.2);
     };
-    g.addEventListener("click", pick);
-    g.addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); pick(); } });
-    drawing.append(g);
-    nodes.set(n.id, g);
-  }
-  drawing.setAttribute("viewBox", `${left - pad} ${-pad} ${right - left + 2 * pad} ${box.height + 2 * pad}`);
-  drawing.setAttribute("width", right - left + 2 * pad);
-  const info = $("div", { class: "visit" });
-  const details = () => {
-    nodes.forEach((g, id) => g.classList.toggle("picked", id === selected));
-    info.replaceChildren();
-    if (!selected || selected === Machine.START || !nodes.has(selected)) {
-      info.append($("p", { class: "hint", text: "Click a state to see its checks, or a step to jump to it." }));
-      return;
+    const button = $("button", { type: "button", class: `node ${VISITS[n.verdict][1]}`, title: `${n.id}: ${VISITS[n.verdict][0]}, ${checks}`, onclick: go },
+      $("span", { class: "name", text: n.id }), $("span", { class: "checks", text: checks }));
+    buttons.set(n.id, button);
+    steps.append($("li", { class: next ? "next" : "" }, button));
+  });
+  const arcs = svg("svg", { class: "arcs", "aria-hidden": "true" });
+  arcs.append(svg("defs"));
+  arcs.firstChild.append(svg("marker", { id: "arc-head", viewBox: "0 0 10 10", refX: "9", refY: "5", markerWidth: "7", markerHeight: "7", orient: "auto" }));
+  arcs.firstChild.firstChild.append(svg("path", { d: "M0,0 L10,5 L0,10 z", class: "head" }));
+  const draw = () => {
+    arcs.querySelectorAll("path.arc").forEach(p => p.remove());
+    let depth = 0;
+    for (const e of graph.edges) {
+      if (e.next) continue;
+      const [a, b] = [buttons.get(e.from), buttons.get(e.to)], span = Math.abs(graph.nodes.findIndex(n => n.id === e.from) - graph.nodes.findIndex(n => n.id === e.to));
+      const [x1, x2] = a === b ? [a.offsetLeft + a.offsetWidth * .65, a.offsetLeft + a.offsetWidth * .35] : [a.offsetLeft + a.offsetWidth / 2, b.offsetLeft + b.offsetWidth / 2];
+      const y = a.offsetTop + a.offsetHeight, h = 16 + 8 * Math.min(span, 4);
+      depth = Math.max(depth, h);
+      const path = svg("path", { class: "arc", d: `M${x1},${y} C${x1},${y + h} ${x2},${y + h} ${x2},${y + 4}`, "marker-end": "url(#arc-head)" });
+      path.append(svg("title"));
+      path.firstChild.textContent = `${e.from} to ${e.to}${e.takes > 1 ? ` (${e.takes} times)` : ""}`;
+      arcs.append(path);
     }
-    const here = Machine.verdict(states, selected);
-    info.append($("h3", {}, document.createTextNode(selected + " "), here ? chip(...VISITS[here]) : chip("Not in this run", "info")));
-    const visits = states.filter(v => v.name === selected);
-    const checks = r.events.filter(e => ["wait", "check"].includes(e.kind) && visits.some(v => e.t >= v.t && e.t < v.end));
-    if (visits.length && !checks.length) info.append($("p", { class: "hint", text: "No wait or check ran in this state." }));
-    if (checks.length) { const ol = $("ol"); checks.forEach(e => ol.append(row(r, e, seek))); info.append(ol); }
-    if (r.error && visits.includes(states[states.length - 1])) info.append($("p", { class: "hint" }, chip("Stopped", "bad"), document.createTextNode(" " + r.error)));
-    if (many) {
-      const others = $("div", { class: "choices" });
-      RUNS.forEach((x, i) => {
-        const v = Machine.verdict(x.states, selected);
-        if (v && i !== current) others.append($("button", { type: "button", class: "btn small", onclick: () => { location.hash = `run-${i + 1}`; } },
-          $("span", { text: `Run ${i + 1}` }), chip(...VISITS[v])));
-      });
-      if (others.children.length) info.append($("p", { class: "hint", text: "In other runs:" }), others);
-    }
+    steps.style.paddingBottom = depth ? depth + 8 + "px" : "";
   };
-  details();
-  const element = $("div", { class: "machine" }, $("div", { class: "graph" }, drawing), info);
+  const track = $("div", { class: "track" }, $("div", { class: "inner" }, steps, arcs));
+  if (window.ResizeObserver) new ResizeObserver(draw).observe(steps);
+  const element = $("section", { class: "panel flow", "aria-label": "User flow" }, $("h2", { text: "User flow" }), track);
   const now = real => {
     playing = real;
-    const v = visitAt(r, real);
-    nodes.forEach((g, id) => g.classList.toggle("now", !!v && v.name === id));
+    const v = Machine.at(r, real);
+    buttons.forEach((b, id) => b.classList.toggle("now", !!v && v.name === id));
   };
   return { element, now };
 }

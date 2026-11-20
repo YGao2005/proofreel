@@ -141,12 +141,12 @@ state "Sign in"
 check text "Sign in to Acme"
 ```
 
-`stop` prints the run's path, such as `States: Home ok → Sign in ok → Welcome FAIL`. On the page, the
-State machine tab draws the states of every run in the review folder as one graph: a node for each state
-and an edge for each transition that a run took. Other flows and conditions add branches and loops. The run on show
-is drawn strong, each node has a dot for its verdict in each run, and each edge shows how long the transition took.
-Click a state or a transition to play the video from there. Click a state again to go to its next visit. The node
-that the video is in lights up. Use the same state name in each flow for the same place in the app.
+`stop` prints the run's path, such as `States: Home ok → Sign in ok → Welcome FAIL`. On the page, the user flow sits
+under the video: a node for each state in the order the run reached it, with an arrow for each transition, and a
+transition that skips ahead or goes back drawn as an arc under the nodes. A node shows its checks passed of total, and
+it is green when they pass, red when one fails, and grey with no checks. The node that the video is in lights up. Click
+a node to play the video from there. Click it again to go to its next visit. A run with no `state` lines has no flow.
+Use the same state name in each flow for the same place in the app.
 
 ### Probes and budgets
 
