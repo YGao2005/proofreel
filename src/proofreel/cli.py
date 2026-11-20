@@ -98,7 +98,7 @@ def start(args):
 
 def stop(**options):
     """Exit 1 when a budget that waited for the end of the run failed."""
-    folder = Path(recording.current()["dir"]) if recording.current() else None
+    folder = Path(recording.unstopped()["dir"]) if recording.unstopped() else None
     print(recording.stop(**options))
     run = json.loads((folder / "run.json").read_text())
     return 1 if any(e.get("late") and not e.get("ok") for e in run["events"]) else 0
@@ -265,7 +265,7 @@ def play(steps, execute=None):
     added = [f"--probe={p}" for p in steps.probes] + [f"--condition={c}" for c in applied]
     line = execute or command
     return flow.run(steps, lambda words: line(words + added if words[0] == "start" else words),
-                    abort=lambda message: stop(error=message) if recording.current() else None)
+                    abort=lambda message: stop(error=message) if recording.unstopped() else None)
 
 
 class Parser(argparse.ArgumentParser):
