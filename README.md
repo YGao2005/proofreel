@@ -1,14 +1,17 @@
 # proofreel
 
-Review proof for computer-use agents. proofreel records an agent as it drives a real screen, then makes a short
-review video and a page that a person can check in a minute.
+Video proof that your coding agent's change works. proofreel lets Claude Code drive your app in a clean VM as a user
+would, record it, and publish a review page that a person can check in a minute.
+
+**[See a real review page →](https://claude.ai/artifact/PeehtyBLEMVUsxokb5FqbT)** (the Acme Notes example: three
+journeys that pass and one with a failed network budget)
 
 [![A tour of the review page: the video plays, the flow lights each state, a click jumps the video, Tracks open, and a failed run shows its failed budget, request, and numbers.](https://raw.githubusercontent.com/YGao2005/proofreel/main/docs/tour.gif)](https://raw.githubusercontent.com/YGao2005/proofreel/main/docs/tour.mp4)
 
 ## Install
 
 ```bash
-pip install "proofreel[network,browser] @ git+https://github.com/YGao2005/proofreel"   # Python 3.11+
+pip install "proofreel[network,browser]"   # Python 3.11+, on an Apple Silicon Mac
 proofreel demo               # a made-up session, no VM needed: open the index.html it prints
 ```
 
@@ -20,11 +23,11 @@ Install the tools for the guests you use:
 
 The `network` and `browser` extras add the network and browser probes that the Acme Notes budgets use.
 
-To let Claude Code drive it, add the skill:
+To let Claude Code drive it, add the plugin in Claude Code:
 
-```bash
-mkdir -p ~/.claude/skills/proofreel
-curl -fsSL https://raw.githubusercontent.com/YGao2005/proofreel/main/skills/proofreel/SKILL.md -o ~/.claude/skills/proofreel/SKILL.md
+```text
+/plugin marketplace add YGao2005/proofreel
+/plugin install proofreel@proofreel
 ```
 
 ## Quickstart
