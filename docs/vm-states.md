@@ -174,6 +174,7 @@ proofreel vm sh 'setsid -f xfce4-terminal'              # any app: SSH sessions 
 - `browse` starts Chromium maximized, or opens a new tab when Chromium runs. The page shows about 1.5 s later.
 - Chromium listens for DevTools on the guest's 127.0.0.1:9222, for the `browser` probe.
 - Chromium shows no first-run pages. Policies turn off the password, autofill, translate, and sign-in prompts.
+- Chromium makes no background requests. The quiet flags turn off most of them. The component updater and the account check run at start whatever the flags say, so both point at a closed local port (see `images/debian-desktop.sh`).
 - The guest has no screen lock, no screensaver, no screen blank, and no automatic updates.
 - The screen size is the `--display` size: the kernel takes the largest firmware mode (`video=efifb:auto`).
 - The state disk is about 2.1 GB. The state is cold only: a cold `up` is already fast.

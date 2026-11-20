@@ -14,6 +14,6 @@ click-text "Sign in"
 state "Notes"
 wait-text "Your notes" 20
 check text "Signed in as sam@example.com"
-check metric net/10.0.2.2 p95 --below 0.5
-check metric net/10.0.2.2 failed --below 1
+check metric net/* p95 --below 0.5
+check metric net/* failed --below 1
 stop

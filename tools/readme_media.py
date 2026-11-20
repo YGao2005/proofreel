@@ -60,7 +60,7 @@ addEventListener('DOMContentLoaded', () => {
     .pr-ring { position: fixed; z-index: 2147483646; pointer-events: none; width: 14px; height: 14px; margin: -7px 0 0 -7px;
       border-radius: 50%; border: 2px solid #3b82f6; animation: pr-ring .5s ease-out forwards; }
     @keyframes pr-ring { to { transform: scale(3.2); opacity: 0; } }
-    .pr-caption { position: fixed; left: 50%; bottom: 18px; translate: -50% 0; z-index: 2147483647; pointer-events: none;
+    .pr-caption { position: fixed; left: 34.5%; top: 50%; translate: -50% 0; z-index: 2147483647; pointer-events: none;
       padding: 9px 20px; border-radius: 999px; background: rgba(17,17,20,.92); color: #fff; font: 500 19px/1.2 Inter, system-ui, sans-serif; }
     .pr-hidden { display: none !important; }`;
   document.head.append(css);

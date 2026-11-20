@@ -17,6 +17,6 @@ click-text "Save note"
 wait-text "Note saved" 10
 state "Saved"
 check text "Trip plan: Book the train on Friday"
-check metric net/10.0.2.2 p95 --below 0.5
-check metric net/10.0.2.2 failed --below 1
+check metric net/* p95 --below 0.5
+check metric net/* failed --below 1
 stop

@@ -13,6 +13,6 @@ type "milk"
 wait-text "Milk, eggs" 10
 check text "Groceries: Milk, eggs, and bread."
 check no-text "Welcome: Your first note" 5
-check metric net/10.0.2.2 p95 --below 0.5
-check metric net/10.0.2.2 failed --below 1
+check metric net/* p95 --below 0.5
+check metric net/* failed --below 1
 stop
