@@ -1,0 +1,7 @@
+{
+  "name": "proofreel",
+  "description": "Record a coding agent driving an app in a VM, and turn the run into a review video and review page as proof that a change works.",
+  "author": {
+    "name": "YGao2005"
+  }
+}

@@ -1,0 +1,41 @@
+name: Bug
+description: Something does not work.
+labels: [bug]
+body:
+  - type: textarea
+    id: ran
+    attributes:
+      label: What did you run?
+      description: The commands, or the flow file.
+    validations:
+      required: true
+  - type: textarea
+    id: happened
+    attributes:
+      label: What happened?
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: proofreel --version
+    validations:
+      required: true
+  - type: input
+    id: host
+    attributes:
+      label: Host OS and chip
+      placeholder: macOS 26, Apple M3
+    validations:
+      required: true
+  - type: input
+    id: guest
+    attributes:
+      label: Guest state and backend
+      placeholder: linux state, Tart
