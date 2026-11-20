@@ -39,7 +39,7 @@ def run_data(folder, info, events, length, real, clock, camera, measured=None):
     checks = [e for e in events if e["kind"] == "check"]
     passed = sum(1 for e in checks if e.get("ok"))
     meta = [f"{k} {v}" for k, v in (info.get("meta") or {}).items() if k and k != "conditions" and v]
-    meta += [f"conditions {', '.join(c['name'] for c in info['conditions'])}" if info.get("conditions") else "",
+    meta += [f"conditions {', '.join(map(condition, info['conditions']))}" if info.get("conditions") else "",
              f"{passed}/{len(checks)} checks pass" if checks else "", f"{real:.0f} s of screen in a {length:.0f} s video"]
     started = info.get("started")
     keep = ("t", "dur", "kind", "text", "ok", "detail", "shot", "row", "chip", "late")
@@ -52,6 +52,13 @@ def run_data(folder, info, events, length, real, clock, camera, measured=None):
             "states": visits(events, info.get("error", ""), round(real, 2)),
             "events": [{k: e[k] for k in keep if k in e} for e in map(shown, events) if e],
             **({"metrics": measured} if measured and (measured["series"] or measured["budgets"]) else {})}
+
+
+def condition(record):
+    """A condition as the meta line names it, with its values when it lasted this recording only."""
+    # WHY: a state's values can be host paths, such as DMG.
+    values = " ".join(f"{k}={v}" for k, v in record.get("values", {}).items()) if record.get("recording") else ""
+    return f"{record['name']} ({values})" if values else record["name"]
 
 
 def shown(event):

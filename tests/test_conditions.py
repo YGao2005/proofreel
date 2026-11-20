@@ -42,10 +42,9 @@ def test_a_manifest_needs_every_field_its_folder_name_and_each_script(tmp_path):
         plugins.manifest("condition", write_condition(tmp_path, "e", os=["beos"]))
 
 
-def test_a_condition_refuses_a_run_vm_of_another_system(home, monkeypatch):
-    monkeypatch.setattr(vm.Run, "ssh", lambda *a, **k: pytest.fail("nothing runs in the guest"))
+def test_a_condition_refuses_a_run_vm_of_another_system():
     with pytest.raises(Problem, match="works on macos, and the VM is linux"):
-        conditions.apply(vm.Run({"id": "x", "state": "s", "os": "linux", "conditions": []}), "offline", {})
+        conditions.record("offline", {}, "linux", recording=False)
 
 
 def test_values_take_the_default_and_a_value_with_no_default_is_required(tmp_path):

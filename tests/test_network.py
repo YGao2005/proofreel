@@ -152,13 +152,17 @@ def test_a_missing_extra_makes_the_probe_unavailable_and_it_never_starts(home, m
     probes.begin([record], run)
 
 
+def pending():
+    return json.loads(vm.CURRENT.read_text()).get("pending", [])
+
+
 def test_a_reset_is_pending_before_its_start_and_a_failed_start_is_undone(home, monkeypatch):
     vm.CURRENT.write_text(json.dumps({"backend": "qemu", "os": "linux", "id": "x"}))
     run = vm.Run.current()
     steps = []
 
     def script(run, kind, name, step, values, timeout=300):
-        steps.append((name, step, [r["name"] for r in probes.resets()]))
+        steps.append((name, step, [r["name"] for r in pending()]))
         return (1, "no sudo") if (name, step) == ("b", "start") else (0, "")
 
     monkeypatch.setattr(plugins, "script", script)
@@ -167,4 +171,4 @@ def test_a_reset_is_pending_before_its_start_and_a_failed_start_is_undone(home, 
         probes.begin(records, run)
     assert steps == [("a", "start", ["a"]), ("b", "start", ["a", "b"]), ("b", "stop", ["a", "b"]),
                      ("a", "stop", ["a", "b"])]
-    assert probes.resets() == [] and probes.recover(run) == []
+    assert pending() == [] and plugins.undo(run) == []

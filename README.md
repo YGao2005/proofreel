@@ -176,7 +176,7 @@ clock; proofreel moves it onto the host clock by the probe's smallest delay. `{"
 cannot measure here. Lines over 16 KB, over 200 a second, or past 64 series are counted and dropped. A probe never
 gets the guest password. A probe can also change the guest for the recording with `start` and `stop` scripts (a proxy,
 a trusted CA). proofreel writes each reset into the run record before its `start` runs, so a crash is undone at the
-next `start` or `vm save`. See `src/proofreel/probes/__init__.py` for the whole contract.
+next `start`, at `vm save`, or at `stop`. A condition that lasts one recording uses the same list. See `src/proofreel/probes/__init__.py` for the whole contract.
 
 ### Crash and hang reports (macOS guests)
 
@@ -292,10 +292,10 @@ were, and `save --warm` about 60 s. A warm state needs a run VM
 that was started with `--warmable`. Tart then turns off the VM's audio devices, so do not test a microphone in a
 warm VM.
 
-### Conditions: fake hardware and setups (macOS guests)
+### Conditions: fake hardware and setups
 
-A condition makes the guest look like a setup that you do not have, such as a Bluetooth headset or a Mac with no
-microphone. It is a plugin folder: `condition.toml` says what it fakes, how it applies, how it checks, and what it
+A condition makes the guest look like a setup that you do not have, such as a Bluetooth headset, a Mac with no
+microphone, or a choppy network. It is a plugin folder: `condition.toml` says what it fakes, how it applies, how it checks, and what it
 does not reproduce. `apply` and `check` run in the guest (`.sh` on macOS and Linux, `.ps1` on Windows). An optional
 `host.sh` runs on the host first, for example to build a driver. proofreel looks for a condition (and later a probe)
 by name in this order: a folder path, `./.proofreel/conditions/` in the project you work in, then
@@ -313,6 +313,18 @@ conditions, and a state built from it keeps them too. `vm up` runs the checks ag
 holds stops the run. A flow line `condition <name>` makes `proofreel run` refuse a run VM whose state does not have
 it. The page lists the conditions of the run in its header.
 
+A condition with a remove step (`removes` in its manifest) lasts one recording instead of a state. `start --condition
+<name>[:KEY=VALUE,...]`, or a flow line `condition <name>[:KEY=VALUE,...]`, applies it before the recorder starts.
+`stop` removes it and logs a check that it is gone. The remove is written to the run record before the apply, so a crash is undone at the next `start`. Its values go in
+`session.json` and in the page header. A condition can name sets of values in `[profiles]`: the value `profile`
+picks one, and a value that you give replaces the profile's.
+
+```bash
+proofreel start slow-load --condition slow-network                    # profile=3g
+proofreel start slow-load --condition slow-network:profile=lossy-wifi,loss=20%
+proofreel start slow-load --condition slow-network:profile=none,latency=200ms
+```
+
 | Condition | Fakes | Check |
 |---|---|---|
 | `bluetooth-headset-call-mode` | the only microphone is a Bluetooth headset; when input starts, its rate drops from 48 kHz to `RATE` (24000 or 16000) | the default input is Bluetooth at 48 kHz, is `RATE` while input runs, and is 48 kHz again after |
@@ -320,6 +332,7 @@ it. The page lists the conditions of the run in its header.
 | `offline` | no internet (pf refuses all traffic but SSH from the host) | pf is on; a TCP connection and DNS fail |
 | `run-from-dmg` | the app runs from its mounted DMG (`DMG=<host path>`) | the DMG is mounted with an app at its top |
 | `quarantined-download` | the app is in `~/Downloads` with the quarantine flag and download record a browser makes, so the first open shows Gatekeeper and translocates it | the flag is set, not yet approved, and has a download record |
+| `slow-network` | one recording on a slow, choppy network (Linux and macOS): `latency` and `jitter` (round trip), `loss` and `rate` (each way). Profiles: `3g` (300ms, 50ms, 1%, 1mbit), `edge` (800ms, 100ms, 2%, 200kbit), `lossy-wifi` (60ms, 40ms, 10%, 10mbit), `none` | netem (Linux) or dummynet (macOS) shapes all traffic but SSH |
 
 The headset is a small Core Audio driver (`headset.c`, an AudioServerPlugIn), built on the host with clang. It
 reports Bluetooth transport. When input starts, it asks Core Audio for a configuration change to the call rate, as a

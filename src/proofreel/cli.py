@@ -1,9 +1,12 @@
 """proofreel: record an agent driving a screen as a review video and page.
 
-  start <name> [--title T] [--about A] [--meta K=V] [--app NAME] [--probe NAME[:K=V,...]]   Start recording. Every
-                                                        later action and check is logged. --app names the app under
-                                                        test: its crash fails the run. --probe adds a probe (none: no
-                                                        default probes). A flow line `probe <name>` does the same.
+  start <name> [--title T] [--about A] [--meta K=V] [--app NAME] [--probe NAME[:K=V,...]] [--condition NAME[:K=V,...]]
+                                                        Start recording. Every later action and check is logged. --app
+                                                        names the app under test: its crash fails the run. --probe adds
+                                                        a probe (none: no default probes). --condition applies a
+                                                        condition that lasts one recording (slow-network); stop
+                                                        removes it. Flow lines `probe <name>` and `condition <name>`
+                                                        do the same.
   stop [--keep-frames] [--plain] [--width W]            Stop, then make session.mp4, index.html, and shots/. In a macOS
                                                         run VM, new crash and hang reports go to reports/ and the log.
   state <name>                                          Say where the app should be now. The waits and checks after
@@ -32,7 +35,8 @@
   event <kind> <text> [--x X --y Y] [--ok|--fail] [--detail D] [--t T --end E]   Log what another tool did.
   shot <png>                                            Save the screen.
   run <flow> [--set NAME=VALUE]                         Run a flow file: one proofreel command per line. A line
-                                                        `condition <name>` refuses a run VM whose state lacks it.
+                                                        `condition <name>` refuses a run VM whose state lacks it, or
+                                                        applies a condition that lasts one recording.
   render <session> [--plain] [--width W]                Make the video and page of a session again. A session is
                                                         its folder or its name in the sessions folder.
   publish <session> --out <dir>                         Add a run to a review folder: one page, every run, one URL.
@@ -75,7 +79,10 @@ def target(args):
 def start(args):
     server, password, run = target(args)
     meta = dict(item.split("=", 1) for item in args.meta)
-    faked = run["conditions"] if run else []
+    if args.condition and not run:
+        raise Problem("A condition needs a run VM: proofreel vm up <state>.")
+    faked = [*(run["conditions"] if run else []),
+             *(conditions.record(*plugins.spec(item), run["os"], recording=True) for item in args.condition)]
     if run:
         meta.setdefault("from state", run["state"])
     info = {"title": args.title or args.name, "about": args.about, "meta": meta, "app": args.app, "conditions": faked,
@@ -171,14 +178,16 @@ def run_check(args, screen, run=None):
 
 def run_flow(path, values):
     steps = flow.load(path, values, parse=parse)
-    if steps.conditions:
+    kept, applied = conditions.split(steps.conditions)
+    if kept:
         run = vms.Run.current() if vms.CURRENT.exists() else {}
         state, have = run.get("state"), run.get("conditions", [])
-        if gaps := conditions.missing(steps.conditions, have):
+        if gaps := conditions.missing(kept, have):
             raise Problem(f"{steps.name} needs condition {', '.join(gaps)}, and the run VM's state {state or '(none)'} "
                           f"has {', '.join(conditions.names(have)) or 'no conditions'}. Make a state with it: proofreel "
                           f"vm build <state> --from <base> {' '.join('--condition ' + g for g in gaps)}.")
-    execute = lambda words: command(words + [f"--probe={p}" for p in steps.probes] if words[0] == "start" else words)
+    added = [f"--probe={p}" for p in steps.probes] + [f"--condition={c}" for c in applied]
+    execute = lambda words: command(words + added if words[0] == "start" else words)
     return flow.run(steps, execute, abort=lambda message: stop(error=message) if recording.current() else None)
 
 
@@ -201,6 +210,7 @@ def parser():
     s.add_argument("--fps", type=float, default=30)
     s.add_argument("--reduce", type=int, default=0, help="keep 1/N of the pixels per side (0 = at most 1920 px wide)")
     s.add_argument("--probe", action="append", default=[])
+    s.add_argument("--condition", action="append", default=[])
     s = sub.add_parser("stop")
     s.add_argument("--keep-frames", action="store_true")
     s.add_argument("--plain", action="store_true")
@@ -362,10 +372,11 @@ def vm(a):
             if not (a.flow or a.condition):
                 raise Problem("Give --flow, --condition, or both.")
             values = dict(v.split("=", 1) for v in a.set)
-            for name in a.condition:
-                plugins.resolve(plugins.fits("condition", name, vms.state_info(a.parent)["os"]), values)
+            system = vms.state_info(a.parent)["os"]
+            applied = [conditions.record(name, values, system, recording=False) for name in a.condition]
             run = vms.up(a.parent, warmable=a.warm)
-            applied = [conditions.apply(run, name, values) for name in a.condition]
+            for each in applied:
+                conditions.apply(run, each)
             if a.flow:
                 run_flow(a.flow, values)
             vms.save(a.state, a.warm, a.note, flow=str(Path(a.flow).resolve()) if a.flow else None, values=values,
@@ -375,8 +386,10 @@ def vm(a):
             for name, source in plugins.known("condition").items():
                 info = plugins.manifest("condition", plugins.find("condition", name))
                 values = " ".join(f"{k}={v or '...'}" for k, v in info["values"].items())
-                print(f"{name}  ({', '.join(info['os'])}{', ' + source if source else ''})"
-                      f"{'  ' + values if values else ''}\n  {info['fakes']}\n  Not faked: {info['fidelity']}")
+                lasts = "; one recording" if conditions.lasts_one_recording(info) else ""
+                profiles = f"\n  Profiles: {', '.join(info['profiles'])}" if info["profiles"] else ""
+                print(f"{name}  ({', '.join(info['os'])}{lasts}{', ' + source if source else ''})"
+                      f"{'  ' + values if values else ''}\n  {info['fakes']}{profiles}\n  Not faked: {info['fidelity']}")
         case "drop": vms.drop(a.state)
         case "down": vms.down()
         case "sh": return vms.Run.current().ssh(shlex.join(a.cmd) if len(a.cmd) > 1 else a.cmd[0], check=False,

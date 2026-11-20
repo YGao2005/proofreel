@@ -1,7 +1,8 @@
 """Flow files: one proofreel command on each line.
 
 `#` starts a comment. `${NAME}` and `${NAME:-default}` take their values from `--set NAME=VALUE`. A line
-`condition <name>` says that the run VM's state must have that condition. A line `probe <name>[:KEY=VALUE,...]` adds
+`condition <name>` says that the run VM's state must have that condition; for a condition that lasts one recording,
+`condition <name>[:KEY=VALUE,...]` applies it with the flow's `start`. A line `probe <name>[:KEY=VALUE,...]` adds
 a probe to the flow's recording. Every line is read and parsed before the
 first one runs, so a typo stops the flow before it changes anything. A line `state <name>` says where the app should
 be; the waits and checks after it prove it (see session.visits). A failed check is recorded and the flow goes

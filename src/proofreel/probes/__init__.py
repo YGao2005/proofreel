@@ -22,8 +22,8 @@ More manifest fields:
   port = true            the host gives it a free port, in PROOFREEL_PORT.
   setup = true           guest start and stop scripts change the run VM for the recording (a proxy, a trusted CA).
                          start runs once the host run runs; stop must work after a start that stopped half way.
-                         Each reset is written to the run record before its start, so recover() undoes it after a
-                         crash: at the next start and at `vm save`.
+                         Each reset is written to the run record before its start, so plugins.undo() undoes it
+                         after a crash: at the next start, at `vm save`, and at `stop`.
 A host probe for a run VM gets PROOFREEL_BIND (the address to listen on), PROOFREEL_HOST_FOR_GUEST (that address as
 the guest sees it), and PROOFREEL_GUEST_IP (the guest as the host sees it); start and stop get PROOFREEL_PORT and
 PROOFREEL_HOST_FOR_GUEST.
@@ -58,8 +58,8 @@ def select(requested, run):
         if (info := manifest(name)).get("default") and usable(info, system, quiet=True)}
     for item in requested:
         if item != "none":
-            name, _, pairs = item.partition(":")
-            chosen[name] = dict(pair.split("=", 1) for pair in pairs.split(",") if pair)
+            name, given = plugins.spec(item)
+            chosen[name] = given
     records = []
     for name, given in chosen.items():
         source = plugins.find("probe", name)
@@ -112,33 +112,12 @@ def begin(records, run):
         if record.get("setup") and not record.get("unavailable"):
             values = {**record["values"], "PROOFREEL_PORT": str(record.get("port") or ""),
                       "PROOFREEL_HOST_FOR_GUEST": run.host_address[1]}
-            resets(lambda pending: [*pending, {"name": record["name"], "values": values}])
+            plugins.pending(run, "probe", record["name"], "stop", values)
             code, output = plugins.script(run, "probe", record["name"], "start", values, timeout=90)
             if code:
-                failed = recover(run)
+                failed = plugins.failed(plugins.undo(run))
                 raise Problem(f"Probe {record['name']}: its start in the run VM failed: {output[-400:] or code}"
                               + "".join(f" {line}" for line in failed))
-
-
-def resets(change=None):
-    """The run record's pending resets, after an optional change to them."""
-    from ..vm import CURRENT
-    record = json.loads(CURRENT.read_text())
-    if change:
-        record["pending"] = change(record.get("pending", []))
-        CURRENT.write_text(json.dumps(record))
-    return record.get("pending", [])
-
-
-def recover(run):
-    """Run the pending resets, last first, and clear them. Returns a line for each reset that failed."""
-    failed = []
-    for reset in reversed(resets()):
-        code, output = plugins.script(run, "probe", reset["name"], "stop", reset["values"], timeout=90)
-        if code:
-            failed.append(f"Probe {reset['name']}: its stop in the run VM failed: {output[-400:] or code}")
-    resets(lambda pending: [])
-    return failed
 
 
 def process(record, folder, info, run, tunnel=None):
