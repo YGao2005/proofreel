@@ -35,7 +35,7 @@ const ICONS = {
   play: "M7 5v14l11-7z", pause: "M7 5h4v14H7zM13 5h4v14h-4z", full: "M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5",
   zoom: "M11 4a7 7 0 1 0 0 14a7 7 0 1 0 0-14zM20 20l-4-4M8 11h6M11 8v6",
   help: "M12 21a9 9 0 1 0 0-18a9 9 0 1 0 0 18zM9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6M12 17h.01",
-  pin: "M9 4h6M10 4v5l-3 4h10l-3-4V4M12 13v7",
+  pin: "M9 4h6M10 4v5l-3 4h10l-3-4V4M12 13v7", chevron: "M9 6l6 6-6 6",
 };
 const icon = name => {
   const s = document.createElementNS("http://www.w3.org/2000/svg", "svg"), p = document.createElementNS("http://www.w3.org/2000/svg", "path");
@@ -55,7 +55,7 @@ function runSwitch() {
   for (const [x, i] of shown) {
     nav.append($("button", { type: "button", "aria-pressed": String(i === run),
       title: `${x.title}: ${VERDICTS[x.verdict][0]}, ${x.when}`, onclick: () => { location.hash = `run-${i + 1}`; } },
-      $("span", { class: `dot ${VERDICTS[x.verdict][1]}` }), $("span", { text: x.title }), SUITE ? null : $("span", { class: "when", text: x.when.slice(5) })));
+      $("span", { class: x.verdict === "problem" ? "bad" : "", text: x.title }), SUITE ? null : $("span", { class: "when", text: x.when.slice(5) })));
   }
   return nav;
 }
@@ -84,14 +84,7 @@ function journeysView() {
   return box;
 }
 
-const metaLine = r => {
-  const sum = Verdict.summary(r), words = [];
-  if (sum.checks.total) words.push(`${sum.checks.passed}/${sum.checks.total} checks`);
-  if (sum.budgets.failed) words.push(`${Verdict.plural(sum.budgets.failed, "budget")} failed`);
-  else if (sum.budgets.total) words.push(`${Verdict.plural(sum.budgets.total, "budget")} passed`);
-  if (r.video !== false) words.push(Tracks.format(r.real, "s"));
-  return [...words, ...r.meta];
-};
+const metaLine = r => [...Verdict.words(Verdict.tally(r.events)), ...(r.video !== false ? [Tracks.format(r.real, "s")] : []), ...r.meta];
 
 let keys = null;
 
@@ -155,7 +148,7 @@ function render() {
     const step = { ArrowLeft: -1, ArrowRight: 1, PageDown: -5, PageUp: 5 }[ev.key];
     if (step && video.duration) { ev.preventDefault(); video.currentTime = Math.min(video.duration, Math.max(0, video.currentTime + step)); }
   });
-  const shortcuts = [["Space", "Play or pause"], ["\u2190 \u2192", "Back or forward 1 s (Shift: 5 s)"], ["J K", "Previous or next step"],
+  const shortcuts = [["Space", "Play or pause"], ["Left, Right", "Back or forward 1 s (Shift: 5 s)"], ["J K", "Previous or next step"],
     ["N", "Next failure"], ["Esc", "Close a tab or unpin a state"]];
   const help = $("details", { class: "help" }, $("summary", { class: "btn tool icon-only", "aria-label": "About this video", title: "About this video" }, icon("help")),
     $("div", { class: "pop" },
@@ -206,6 +199,8 @@ function render() {
     list[to].focus();
   });
   show();
+  const fade = () => tabs.classList.toggle("overflow", tabs.scrollWidth > tabs.clientWidth + 1);
+  if (window.ResizeObserver) new ResizeObserver(fade).observe(tabs);
   const open = (name, t) => {
     view = name;
     show();
@@ -275,6 +270,7 @@ window.addEventListener("keydown", ev => {
   else if (key === "n" || key === "N") { const t = near(keys.failures, true) ?? keys.failures[0]; if (t !== undefined) keys.jump(t); }
 });
 
+const calm = window.matchMedia("(prefers-reduced-motion: reduce)");
 const ease = x => { x = Math.min(Math.max(x, 0), 1); return x * x * (3 - 2 * x); };
 function cameraAt(camera, video) {
   let i = 1;
@@ -349,13 +345,13 @@ function metricTracks(r, live, seek) {
     });
     drawLane(r, s, lane, x, pct, seek, map);
     hatch(lane);
-    const pin = $("button", { type: "button", class: "pin metric", "aria-pressed": String(pins().includes(s.m)),
+    const pin = $("button", { type: "button", class: "pin-btn", "aria-pressed": String(pins().includes(s.m)),
       title: `Show ${nameOf(s)} on the video`, "aria-label": `Pin ${nameOf(s)}` }, icon("pin"));
     pin.addEventListener("click", () => {
       const now = pins();
       PREFS.pins = now.includes(s.m) ? now.filter(m => m !== s.m) : [...now, s.m];
       savePrefs();
-      lanes.querySelectorAll(".pin").forEach((b, i) => b.setAttribute("aria-pressed", String(PREFS.pins.includes(series[i].m))));
+      lanes.querySelectorAll(".pin-btn").forEach((b, i) => b.setAttribute("aria-pressed", String(PREFS.pins.includes(series[i].m))));
     });
     const label = $("span", { class: "lane-label metric", text: nameOf(s), title: s.m });
     rows.push([groupOf(s), label, lane, pin]);
@@ -364,7 +360,7 @@ function metricTracks(r, live, seek) {
   const show = () => rows.forEach(([g, ...els]) => els.forEach(el => { el.hidden = hidden.has(g); }));
   show();
   const fold = $("button", { type: "button", class: "fold", "aria-expanded": String(open), title: "Show the metric rows" },
-    $("span", { class: "caret" }), $("span", { text: "Tracks" }));
+    icon("chevron"), $("span", { text: "Tracks" }));
   const panel = $("section", { class: `panel tracks${failed ? " bad" : ""}`, "aria-label": "Tracks" },
     $("div", { class: "head" }, fold, chips, failed ? chip("Budget failed", "bad") : null, $("span", { class: "count", text: Verdict.plural(series.length, "row") })), lanes);
   const paint = () => {
@@ -526,7 +522,7 @@ function row(r, e, seek) {
     $("span", { class: "t", text: clock(e.t) }),
     $("span", { class: "text" },
       ["step", "check", "note"].includes(e.kind) || e.text.startsWith(e.kind) ? null : $("span", { class: "kind", text: e.kind + " " }),
-      document.createTextNode(text + " "), status, detail ? $("span", { class: "detail", text: detail }) : null));
+      document.createTextNode(text), detail ? $("span", { class: "detail", text: detail }) : null), status);
   const li = $("li", { class: e.kind + (failed ? " bad" : "") }, body);
   const go = () => seek(toVideo(r, e.t) - 0.4);
   body.addEventListener("click", go);
@@ -538,7 +534,7 @@ function row(r, e, seek) {
 // of that visit. A run with no states is one list of steps. The node and step at the video's time are lit, and the
 // column follows them except for 4 s after the person scrolls it.
 // Every run's states as one graph. The run on show is drawn strong: its path, a verdict on each node it visited, and
-// how long each step took. A dot under a node is its verdict in each run. The node the video is in lights up.
+// how long each step took. The node the video is in lights up, and the page shows the details of a state under the drawing.
 function machineView(r, seek) {
   const NS = "http://www.w3.org/2000/svg";
   const svg = (tag, attrs = {}, ...kids) => {
@@ -549,39 +545,38 @@ function machineView(r, seek) {
   };
   const graph = Machine.build(RUNS), current = RUNS.indexOf(r), many = RUNS.length > 1, states = r.states || [];
   const measure = document.createElement("canvas").getContext("2d");
-  measure.font = "600 14px Inter, system-ui, sans-serif";
+  measure.font = "600 14px 'IBM Plex Sans', system-ui, sans-serif";
   const name = id => id.length > 32 ? id.slice(0, 31) + "…" : id;
-  const size = id => id === Machine.START ? [measure.measureText(id).width + 26, 26]
-    : [Math.max(64, measure.measureText(name(id)).width + 30), many ? 46 : 34];
-  const box = Machine.layout(graph, size);
+  const size = id => id === Machine.START ? [measure.measureText(id).width + 24, 24] : [Math.max(64, measure.measureText(name(id)).width + 28), 40];
+  const box = Machine.layout(graph, size, { x: 28, y: 64, lane: 16 });
   const pad = 8;
+  const marker = (id, css) => svg("marker", { id, viewBox: "0 0 10 10", refX: "9", refY: "5", markerWidth: "8", markerHeight: "8", orient: "auto-start-reverse" },
+    svg("path", { d: "M0,0 L10,5 L0,10 z", class: css }));
   const drawing = svg("svg", { role: "group", "aria-label": "State machine of the runs" },
-    svg("defs", {}, svg("marker", { id: "arrow", viewBox: "0 0 10 10", refX: "9", refY: "5", markerWidth: "7",
-      markerHeight: "7", orient: "auto-start-reverse" }, svg("path", { d: "M0,0 L10,5 L0,10 z", class: "head" }))));
+    svg("defs", {}, marker("arrow", "head"), marker("arrow-on", "head on")));
   const start = (run, visit) => visit ? RUNS[run].states[visit - 1].t : 0;
   const small = document.createElement("canvas").getContext("2d");
-  small.font = "12px Inter, system-ui, sans-serif";
+  small.font = "12px 'IBM Plex Mono', ui-monospace, monospace";
   let left = 0, right = box.width;
   for (const e of box.edges) {
     const mine = e.takes.filter(x => x.run === current);
     const steps = mine.map(x => r.events.find(ev => ev.kind === "step" && ev.t >= start(current, x.visit) && ev.t < states[x.visit].t));
     const took = mine.map(x => states[x.visit].t - start(current, x.visit));
-    const label = mine.length ? `${Tracks.format(took[0], "s")}${mine.length > 1 ? ` ×${mine.length}` : ""}${steps[0] ? " · " + steps[0].text : ""}` : "";
-    const runs = [...new Set(e.takes.map(x => x.run + 1))];
+    const label = mine.length ? `${Tracks.format(took[0], "s")}${mine.length > 1 ? ` ×${mine.length}` : ""}` : "";
+    const runs = [...new Set(e.takes.map(x => x.run))];
     const g = svg("g", { class: "edge" + (mine.length ? " on" : "") + (e.back ? " back" : ""),
       onclick: () => { if (mine.length) seek(toVideo(r, start(current, mine[0].visit)) - 0.2); } },
-      svg("title", {}, `${e.from} → ${e.to}${many ? ` (${runs.map(i => RUNS[i - 1].title).join(", ")})` : ""}${steps[0] ? ": " + steps[0].text : ""}`),
-      svg("path", { d: e.d, class: "hit" }), svg("path", { d: e.d, class: "line", "marker-end": "url(#arrow)" }));
+      svg("title", {}, `${e.from} to ${e.to}${many ? ` (${runs.map(i => RUNS[i].title).join(", ")})` : ""}${steps[0] ? ": " + steps[0].text : ""}`),
+      svg("path", { d: e.d, class: "hit" }), svg("path", { d: e.d, class: "line", "marker-end": mine.length ? "url(#arrow-on)" : "url(#arrow)" }));
     if (label && e.label) {
-      const text = label.length > 34 ? label.slice(0, 33) + "…" : label;
-      const [x, y, anchor] = e.label, width = small.measureText(text).width, at = anchor === "end" ? x - 7 : x + 7;
-      g.append(svg("text", { x: at, y: y + 4, "text-anchor": anchor, class: "label" }, text));
+      const [x, y, anchor, slope] = e.label, width = small.measureText(label).width, gap = 8 + slope * 7, at = anchor === "end" ? x - gap : x + gap;
+      g.append(svg("text", { x: at, y: y + 4, "text-anchor": anchor, class: "label" }, label));
       left = Math.min(left, anchor === "end" ? at - width : at);
       right = Math.max(right, anchor === "end" ? at : at + width);
     }
     drawing.append(g);
   }
-  const nodes = new Map();
+  const nodes = new Map(), halos = new Map();
   let pinned = null, following = null;
   const failing = states.find(v => v.ok === false);
   const shown = () => pinned || (failing ? failing.name : following);
@@ -591,16 +586,12 @@ function machineView(r, seek) {
   };
   for (const n of box.nodes) {
     const here = Machine.verdict(states, n.id), first = n.id === Machine.START;
+    const halo = svg("rect", { class: "halo", x: n.x - 4, y: n.y - 4, width: n.w + 8, height: n.h + 8, rx: 10 });
     const g = svg("g", { class: `node ${first ? "start" : here ? VISITS[here][1] : "away"}`, tabindex: first ? "-1" : "0", role: first ? "presentation" : "button",
       transform: `translate(${n.x},${n.y})` },
-      svg("rect", { width: n.w, height: n.h, rx: first ? n.h / 2 : 8 }),
-      svg("text", { x: n.w / 2, y: many && !first ? 19 : n.h / 2 + 4.5, class: "name" }, first ? n.id : name(n.id)));
+      svg("rect", { width: n.w, height: n.h, rx: 6 }),
+      svg("text", { x: n.w / 2, y: n.h / 2 + 4.5, class: "name" }, first ? n.id : name(n.id)));
     if (!first) g.setAttribute("aria-label", `${n.id}, ${here ? `${{ ok: "passed", bad: "failed", unchecked: "not checked" }[here]}, ${sum(n.id)}` : "not in this run"}`);
-    if (many && !first) RUNS.forEach((x, i) => {
-      const v = Machine.verdict(x.states, n.id);
-      g.append(svg("circle", { cx: n.w / 2 + (i - (RUNS.length - 1) / 2) * 11, cy: 33, r: i === current ? 4 : 3.2,
-        class: `dot ${v ? VISITS[v][1] : "away"}${i === current ? " mine" : ""}` }, svg("title", {}, `${x.title}: ${v ? VISITS[v][0] : "not visited"}`)));
-    });
     if (!first) {
       const pick = () => {
         pinned = pinned === n.id ? null : n.id;
@@ -611,8 +602,9 @@ function machineView(r, seek) {
       g.addEventListener("click", pick);
       g.addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); pick(); } });
     }
-    drawing.append(g);
+    drawing.append(halo, g);
     nodes.set(n.id, g);
+    halos.set(n.id, halo);
   }
   drawing.setAttribute("viewBox", `${left - pad} ${-pad} ${right - left + 2 * pad} ${box.height + 2 * pad}`);
   drawing.setAttribute("width", right - left + 2 * pad);
@@ -644,7 +636,7 @@ function machineView(r, seek) {
   const element = $("div", { class: "machine body" }, $("div", { class: "graph" }, drawing), info);
   const now = real => {
     const v = Machine.at(r, real);
-    nodes.forEach((g, id) => g.classList.toggle("now", !!v && v.name === id));
+    nodes.forEach((g, id) => { const on = !!v && v.name === id; g.classList.toggle("now", on); halos.get(id).classList.toggle("on", on); });
     following = v ? v.name : states.length ? states[0].name : null;
     if (shown() !== detailed) details();
   };
@@ -663,26 +655,24 @@ function flowView(r, seek) {
   list.forEach((s, i) => {
     const tone = VISITS[visitVerdict(s)][1], item = $("li", { class: `visit ${tone}` });
     if (s.visit) {
-      const checks = s.total ? `${s.passed}/${s.total} checks` : "No checks";
-      const node = $("button", { type: "button", class: "visit-node", title: `${s.name}: ${VISITS[visitVerdict(s)][0]}, ${checks}`,
+      const node = $("button", { type: "button", class: "visit-node", title: `${s.name}: ${VISITS[visitVerdict(s)][0]}`,
         onclick: () => seek(toVideo(r, s.t) - 0.2) },
         $("span", { class: "name", text: s.name }), $("span", { class: "t", text: clock(s.t) }),
-        $("span", { class: "checks", text: checks }), s.ok === null ? null : chip(...VISITS[tone]));
+        $("span", { class: "checks", text: Verdict.words(Verdict.tally(s.events)).join(" \u00b7 ") }), s.total || s.ok === false ? chip(...VISITS[tone]) : null);
       nodes.push(node);
       item.append(node);
-      if (i > 0 && list[i - 1].visit) items.append($("li", { class: "link", text: s.back ? `back to ${s.back}` : "" }));
     } else nodes.push(null);
     const ol = $("ol", { class: "steps" }), mine = [];
     let group = null, summary = null;
     for (const e of s.events) {
       if (e.row === "key") { const li = row(r, e, seek); ol.append(li); mine.push(li); group = null; continue; }
       if (!group) {
-        group = $("ol"); summary = $("summary");
+        group = $("ol"); summary = $("summary", {}, icon("chevron"), $("span"));
         ol.append($("li", { class: "more" }, $("details", {}, summary, group)));
       }
       const li = row(r, e, seek);
       group.append(li); mine.push(li);
-      summary.textContent = Verdict.plural(group.children.length, "action");
+      summary.lastChild.textContent = Verdict.plural(group.children.length, "action");
     }
     item.append(ol);
     items.append(item);
@@ -694,7 +684,7 @@ function flowView(r, seek) {
   for (const name of ["wheel", "touchstart", "pointerdown", "keydown"]) body.addEventListener(name, () => { touched = Date.now(); }, { passive: true });
   const reveal = (el, pad) => {
     const box = body.getBoundingClientRect(), at = el.getBoundingClientRect();
-    if (at.top < box.top + pad || at.bottom > box.bottom - 8) body.scrollTo({ top: body.scrollTop + at.top - box.top - body.clientHeight / 3, behavior: "smooth" });
+    if (at.top < box.top + pad || at.bottom > box.bottom - 8) body.scrollTo({ top: body.scrollTop + at.top - box.top - body.clientHeight / 3, behavior: calm.matches ? "auto" : "smooth" });
   };
   const now = real => {
     const { section, event } = Machine.now(list, real), key = `${section}:${event}`;
@@ -807,8 +797,10 @@ function askPanel(r, video) {
 }
 
 window.addEventListener("hashchange", () => { fromHash(); render(); });
-render();
+const fonts = document.fonts ? Promise.race([Promise.all([document.fonts.load("600 14px 'IBM Plex Sans'"), document.fonts.load("12px 'IBM Plex Mono'")]), new Promise(done => setTimeout(done, 1500))]).catch(() => {}) : Promise.resolve();
 (async () => {
+  await fonts;
+  render();
   const use = name => (window.claude && window.claude.use ? window.claude.use(name) : Promise.resolve(null)).catch(() => null);
   const [db, user, sample] = await Promise.all([use("db"), use("user"), use("sample")]);
   Object.assign(caps, { db, user, sample });

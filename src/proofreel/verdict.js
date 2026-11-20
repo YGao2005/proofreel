@@ -32,13 +32,24 @@ const Verdict = (() => {
 
   const budgetOf = (run, e) => budgetText(e.budget, run, e.detail);
 
-  // Screen checks passed of total, budgets failed of total, and the run's verdict in page words.
-  function summary(run) {
-    const checks = run.events.filter(e => e.kind === "check" && !e.budget), budgets = run.events.filter(isBudget);
+  // Screen checks passed of total and budgets failed of total, for a run or for part of it.
+  const tally = events => {
+    const checks = events.filter(e => e.kind === "check" && !e.budget), budgets = events.filter(isBudget);
     return { checks: { passed: checks.filter(e => e.ok).length, total: checks.length },
-      budgets: { failed: budgets.filter(e => e.ok === false).length, total: budgets.length },
-      verdict: { works: "pass", problem: "fail", shown: "none" }[run.verdict] };
+      budgets: { failed: budgets.filter(e => e.ok === false).length, total: budgets.length } };
+  };
+
+  // The tally in words: "3/3 checks", "1 budget failed" (or "2 budgets passed").
+  function words(count) {
+    const out = [];
+    if (count.checks.total) out.push(`${count.checks.passed}/${count.checks.total} checks`);
+    if (count.budgets.failed) out.push(`${plural(count.budgets.failed, "budget")} failed`);
+    else if (count.budgets.total) out.push(`${plural(count.budgets.total, "budget")} passed`);
+    return out;
   }
+
+  // The tally of a run and its verdict in page words.
+  const summary = run => ({ ...tally(run.events), verdict: { works: "pass", problem: "fail", shown: "none" }[run.verdict] });
 
   const request = label => {
     const [, method, url] = /^(\S+) (\S+)$/.exec(label || "") || [];
@@ -82,6 +93,6 @@ const Verdict = (() => {
     return found.sort((a, b) => a.t - b.t)[0] || null;
   }
 
-  return { RUN, VISIT, plural, sentence, isBudget, matches, budgetText, budgetOf, summary, cause };
+  return { RUN, VISIT, plural, sentence, isBudget, matches, budgetText, budgetOf, tally, words, summary, cause };
 })();
 if (typeof module === "object") module.exports = Verdict;
