@@ -1,0 +1,31 @@
+name = "processes"
+version = "1"
+os = ["linux", "macos"]
+where = "guest"
+default = true
+fidelity = "CPU is each process's CPU time, read each INTERVAL seconds, as a % of one core; a process that starts and ends between two reads is not seen. The app is each process named PROOFREEL_APP (start --app: a process name, not a bundle ID) and every process under it. Memory is PSS on Linux and RSS on macOS, which counts shared pages in each process. The guest's CPU and memory (cpu/system, mem/system) are Linux only. It needs python3 in the guest. The macos-26 state has none, so the probe says it is unavailable there; its ps reader was tried on a macOS host only, not in a guest."
+privacy = "Reads the name, parent, CPU time, and memory of each guest process. Only the app's totals leave the guest: no process names, command lines, or arguments."
+
+[values]
+INTERVAL = "1"
+
+[tracks."cpu/app"]
+label = "App CPU, % of one core"
+unit = "%"
+better = "lower"
+
+[tracks."mem/app"]
+label = "App memory"
+unit = "MB"
+better = "lower"
+
+[tracks."cpu/system"]
+label = "Guest CPU (all cores)"
+unit = "%"
+better = "lower"
+max = 100
+
+[tracks."mem/system"]
+label = "Guest memory in use"
+unit = "MB"
+better = "lower"

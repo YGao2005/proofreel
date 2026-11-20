@@ -121,7 +121,8 @@ that the video is in lights up. Use the same state name in each flow for the sam
 ### Probes and budgets
 
 A probe measures while a session records: the host's load, an app's CPU, request times. `host-load` is on for every
-recording. Add another with `start --probe <name>` or a flow line `probe <name>`; `--probe none` turns the defaults
+recording. `processes` is on for every Linux or macOS run VM: the CPU (`cpu/app`, % of one core) and memory (`mem/app`, MB)
+of the process that `start --app` names and every process under it. Add another with `start --probe <name>` or a flow line `probe <name>`; `--probe none` turns the defaults
 off. `proofreel probes` lists them, with what each can see and what it does not measure well.
 
 ```
