@@ -52,8 +52,8 @@ const Verdict = (() => {
   const summary = run => ({ ...tally(run.events), verdict: { works: "pass", problem: "fail", shown: "none" }[run.verdict] });
 
   const request = label => {
-    const [, method, url] = /^(\S+) (\S+)$/.exec(label || "") || [];
-    return method ? `${method} ${url.includes("/") ? url.slice(url.indexOf("/")) : url}` : label;
+    const { method, path } = T.request(label);
+    return method ? `${method} ${path || "/"}` : label;
   };
 
   // The worst moment of the series a budget judged: the highest value (the lowest for a minimum).
