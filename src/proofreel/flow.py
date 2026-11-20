@@ -3,7 +3,8 @@
 `#` starts a comment. `${NAME}` and `${NAME:-default}` take their values from `--set NAME=VALUE`. A line
 `condition <name>` says that the run VM's state must have that condition; for a condition that lasts one recording,
 `condition <name>[:KEY=VALUE,...]` applies it with the flow's `start`. A line `probe <name>[:KEY=VALUE,...]` adds
-a probe to the flow's recording. Every line is read and parsed before the
+a probe to the flow's recording. A line `from <state>` names the saved VM state the flow starts from: `run` refuses a
+run VM from another saved state, and `suite` starts a new clone of it. Every line is read and parsed before the
 first one runs, so a typo stops the flow before it changes anything. A line `state <name>` says where the app should
 be; the waits and checks after it prove it (see session.visits). A failed check is recorded and the flow goes
 on. Any other failure stops the flow.
@@ -25,6 +26,7 @@ class Flow:
     lines: list = field(default_factory=list)
     conditions: list = field(default_factory=list)
     probes: list = field(default_factory=list)
+    state: str | None = None
 
 
 def expand(line, values):
@@ -48,6 +50,10 @@ def load(path, values, parse):
                 if len(words) != 2:
                     raise Problem(f"Write one {words[0]} on each line: {words[0]} <name>.")
                 (flow.conditions if words[0] == "condition" else flow.probes).append(words[1])
+            elif words and words[0] == "from":
+                if len(words) != 2 or flow.state:
+                    raise Problem("Write one line from <state> in a flow.")
+                flow.state = words[1]
             elif words:
                 parse(words)
                 flow.lines.append((number, words))

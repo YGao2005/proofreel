@@ -258,6 +258,7 @@ li.more .text { color: var(--fg-2); }
 .numbers td .m.bad { color: var(--bad); }
 .numbers tbody tr { cursor: pointer; } .numbers tbody tr:hover { background: var(--hover); }
 .numbers tr.bad td:first-child { box-shadow: inset 2px 0 var(--bad); }
+.numbers tr[aria-current="true"] td { background: var(--accent-bg); }
 .net { padding-bottom: var(--s2); }
 .legend { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1) var(--s3); padding: var(--s3) var(--s4) var(--s2); color: var(--fg-2); font-size: var(--fs-xs); }
 .legend i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: var(--s1); vertical-align: -1px; }

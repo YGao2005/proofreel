@@ -22,3 +22,7 @@ description: "Use to test an app as a real user on a clean VM or VNC screen and 
 9. Start each recording of a macOS app with `--app <name>`. A crash of the app then fails the run and the page shows its stack. Never call a run good when the app window went away: read `reports/`.
 
 Write repeat journeys as flow files (one proofreel command per line, `${NAME:-default}` values) and run them with `proofreel run`. Use made-up data only.
+
+For many journeys of one feature, put `from <state>` (a saved VM state) at the top of each flow and run `proofreel suite <folder> --out <scratchpad>/review-<feature>`. Each flow gets a new clone of its state, so each starts from the same place. Publish the suite's `index.html` as in step 6: its Journeys tab lists every journey with its result. One publish takes at most 255 files: for a bigger folder, publish `new` first, then the rest in batches to the same `url`.
+
+When the same words show twice (a dialog title and its button), use `click-text <text> --role AXButton` in a macOS VM, or `--in x,y,w,h`. Use `--in` on `check text` so that it reads only the part of the screen that you mean.

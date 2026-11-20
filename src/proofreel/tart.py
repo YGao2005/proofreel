@@ -38,8 +38,9 @@ def up(name, info, display=None, memory=None, cpu=None, warmable=False):
 
 def boot(suspendable=False):
     log = HOME / f"{MACHINE}.log"
-    args = ["tart", "run", MACHINE, "--no-graphics", "--vnc-experimental", "--no-clipboard",
-            *(["--suspendable"] if suspendable else ["--no-audio"])]
+    # WHY: Tart 2.41 gives a suspendable VM a sinkless speaker and no microphone; --no-audio keeps that if Tart changes.
+    args = ["tart", "run", MACHINE, "--no-graphics", "--vnc-experimental", "--no-clipboard", "--no-audio",
+            *(["--suspendable"] if suspendable else [])]
     with open(log, "w") as out:
         proc = subprocess.Popen(args, stdout=out, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
                                 start_new_session=True)

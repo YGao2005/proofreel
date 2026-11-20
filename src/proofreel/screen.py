@@ -18,19 +18,22 @@ from vncdotool.client import KEYMAP
 from . import Problem, swift_tool
 
 SHIFTED = dict(zip('~!@#$%^&*()_+{}|:"<>?', "`1234567890-=[]\\;',./"))
-
-
 GLIDE, GLIDE_STEPS, GLIDE_SECONDS = (40, 24), 10, 0.15
+FRAME_WAITS = (2, 4, 8)
 
 
 class Screen:
     def __init__(self, server, password=None, keys=None):
         """keys: key names that this screen's VNC server needs as other names (see guest.py)."""
         self.server, self.password, self.keys = server, password, keys or {}
+        self.fresh = False
 
     def __enter__(self):
-        self.client = api.connect(self.server, password=self.password or None, timeout=30)
+        self.connect()
         return self
+
+    def connect(self):
+        self.client = api.connect(self.server, password=self.password or None, timeout=30)
 
     def __exit__(self, *_):
         self.client.disconnect()
@@ -139,9 +142,33 @@ class Screen:
         return self.client.protocol.width, self.client.protocol.height
 
     def capture(self, path):
-        """A full frame. captureScreen waits for an update, and some servers send none on a still screen."""
-        self.client.refreshScreen(incremental=False)
+        """A full frame. Apple Virtualization's VNC server (Tart and UTM macOS guests) answers a full-frame request
+        on a connection only once while the screen stays still, as it does with a menu or a file dialog open. A new
+        connection always gets a frame, so after a request that gets nothing, each capture uses a new connection."""
+        error = None
+        for wait in FRAME_WAITS:
+            try:
+                if self.fresh or error:
+                    self.reconnect()
+                self.client.timeout = wait
+                self.client.refreshScreen(incremental=False)
+                break
+            except Exception as problem:
+                self.fresh, error = True, problem
+                time.sleep(wait / 4)
+        else:
+            raise Problem(f"The VNC screen {self.server} sent no frame in {len(FRAME_WAITS)} tries ({error!r}). "
+                          f"Check that the VM runs (proofreel vm up <state>), then run the step again.")
+        self.client.timeout = 30
         self.client.screen.save(str(path))
+
+    def reconnect(self):
+        """Drop the connection, with any late answer on it, and open a new one."""
+        try:
+            self.client.disconnect()
+        except Exception:
+            pass
+        self.connect()
 
 
 def ocr_helper():
@@ -154,7 +181,7 @@ def ocr_helper():
 
 
 def read_text(png):
-    """The text lines in a screenshot: [{text, x, y, w, h}] in pixels, top to bottom."""
+    """The text lines in a screenshot: [{text, x, y, w, h, words: [{text, x, y, w, h}]}] in pixels, top to bottom."""
     helper = ocr_helper()
     if helper:
         lines = json.loads(subprocess.run([*helper, str(png)], check=True, capture_output=True, text=True).stdout)
@@ -207,13 +234,18 @@ def fold(text):
     return unicodedata.normalize("NFKC", text).translate(LOOKALIKE).lower().strip()
 
 
-def find(screen, text):
-    """Lines that are the text, then lines that contain it. Case and look-alike letters are ignored. A phrase may wrap
-    onto a second line."""
-    lines = wrapped(screen_text(screen))
+def inside(point, box):
+    return box[0] <= point[0] < box[0] + box[2] and box[1] <= point[1] < box[1] + box[3]
+
+
+def matches(lines, text, box=None):
+    """Lines that are the text, then lines that contain it, cut to the words that hold it. Case and look-alike
+    letters are ignored. A phrase may wrap onto a second line. box (x, y, w, h) keeps the matches in it."""
+    lines = wrapped(lines)
     want = fold(text)
     exact = [line for line in lines if fold(line["text"]) == want]
-    return exact + [narrowed(line, want) for line in lines if want in fold(line["text"]) and line not in exact]
+    found = exact + [narrowed(line, want) for line in lines if want in fold(line["text"]) and line not in exact]
+    return [match for match in found if box is None or inside(center(match), box)]
 
 
 def narrowed(line, want):
@@ -232,13 +264,30 @@ def narrowed(line, want):
             "w": max(w["x"] + w["w"] for w in hit) - x, "h": max(w["y"] + w["h"] for w in hit) - y}
 
 
-def wait_for(screen, text, seconds, present=True):
+def find(screen, text, within=None):
+    """matches() on the screen now. within() gives the box to look in, or raises Problem when it has none."""
+    return matches(screen_text(screen), text, within() if within else None)
+
+
+def poll(look, seconds, present=True):
+    """Call look() until it finds something (or nothing, when present is False) or the seconds pass. A Problem from
+    look() counts as nothing found until the end, when it is raised: a box that is not there is not a pass."""
     end = time.time() + seconds
     while True:
-        found = find(screen, text)
-        if bool(found) == present or time.time() > end:
+        missing = None
+        try:
+            found = look()
+        except Problem as problem:
+            found, missing = [], problem
+        if bool(found) == present and not missing or time.time() > end:
+            if missing:
+                raise missing
             return found
         time.sleep(0.8)
+
+
+def wait_for(screen, text, seconds, present=True, within=None):
+    return poll(lambda: find(screen, text, within), seconds, present)
 
 
 def center(line):
