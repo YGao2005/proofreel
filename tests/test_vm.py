@@ -82,3 +82,37 @@ def test_every_command_shares_one_ssh_connection_for_each_boot(home, monkeypatch
     assert calls[0][-3:] == ["ControlPersist=600", "-fN", "u@10.0.0.2"]
     assert calls[1][-4:] == ["-o", "ControlMaster=no", "u@10.0.0.2", "true"]
     assert all(f"ControlPath={run._socket}" in args for args in calls)
+
+
+def warm_run(tmp_path, monkeypatch, restore):
+    vm.write_state("base", user="u", password="p", warm=False, backend="tart", os="macos")
+    (tmp_path / "run.json").write_text(json.dumps({"id": "r1", "state": "base", "backend": "tart", "os": "macos",
+                                                   "user": "u", "password": "p", "conditions": []}))
+    dropped = []
+
+    class Backend:
+        save = staticmethod(lambda name, run, warm: None)
+        resume = staticmethod(restore)
+        drop = staticmethod(dropped.append)
+
+    monkeypatch.setattr(vm, "backend", lambda kind: Backend)
+    monkeypatch.setattr(vm, "start", lambda info, name, fields: fields)
+    return dropped
+
+
+def test_a_warm_save_in_a_sandbox_is_refused_before_anything_changes(home, tmp_path, monkeypatch):
+    dropped = warm_run(tmp_path, monkeypatch, lambda name, run, warm: {})
+    monkeypatch.setattr(vm, "sandboxed", lambda: True)
+    with pytest.raises(Problem, match="outside the sandbox"):
+        vm.save("app", warm=True)
+    assert not (vm.STATES / "app.json").exists() and dropped == []
+
+
+def test_a_warm_state_that_does_not_restore_is_deleted(home, tmp_path, monkeypatch):
+    def resume(name, run, warm):
+        raise Problem("Tart printed no VNC address.")
+    dropped = warm_run(tmp_path, monkeypatch, resume)
+    monkeypatch.setattr(vm, "sandboxed", lambda: False)
+    with pytest.raises(Problem, match="did not restore, so it was deleted"):
+        vm.save("app", warm=True)
+    assert dropped == ["app"] and not (vm.STATES / "app.json").exists()
