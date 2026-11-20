@@ -46,7 +46,7 @@ def test_qemu_display_comes_from_up_then_the_state_then_the_default(home, monkey
     qemu.CUSTOM_FIRMWARE.parent.mkdir()
     qemu.CUSTOM_FIRMWARE.touch()
     monkeypatch.setattr(qemu, "clone", lambda source, target: None)
-    monkeypatch.setattr(qemu, "boot", lambda machine, memory_file=None: machine["display"])
+    monkeypatch.setattr(qemu, "boot", lambda machine, memory_file=None, extra=(): machine["display"])
     assert qemu.up("s", {}) == "1440x900"
     assert qemu.up("s", {"machine": {"display": "1280x800"}}) == "1280x800"
     assert qemu.up("s", {"machine": {"display": "1280x800"}}, display="1920x1080") == "1920x1080"
@@ -116,3 +116,8 @@ def test_a_warm_state_that_does_not_restore_is_deleted(home, tmp_path, monkeypat
     with pytest.raises(Problem, match="did not restore, so it was deleted"):
         vm.save("app", warm=True)
     assert dropped == ["app"] and not (vm.STATES / "app.json").exists()
+
+
+def test_the_qmp_socket_path_fits_a_unix_socket_in_a_deep_home(monkeypatch, tmp_path):
+    monkeypatch.setattr(qemu, "FOLDER", tmp_path / ("deep" * 30))
+    assert len(str(qemu.qmp_socket())) < 104
