@@ -1,12 +1,12 @@
-"""The processes probe on Linux: the app's process tree and the system, from /proc, once each INTERVAL seconds."""
+"""The processes probe: the app's process tree, and the rest of the guest, once each INTERVAL seconds. Linux reads
+/proc. macOS reads ps."""
 import json
 import os
+import subprocess
 import sys
 import time
 
-TOP = 3
-TOP_MIN = 10.0
-TOP_NAMES = 16
+MAC = sys.platform == "darwin"
 PAGE_KB = os.sysconf("SC_PAGE_SIZE") // 1024
 
 
@@ -33,12 +33,42 @@ def processes(root="/proc"):
     return found
 
 
+def ps_seconds(text):
+    """CPU time from ps, [[H:]M:]S.ss, in seconds."""
+    seconds = 0.0
+    for part in text.split(":"):
+        seconds = seconds * 60 + float(part)
+    return seconds
+
+
+def ps_processes(text):
+    """processes() for the output of ps -axo pid=,ppid=,cputime=,rss=,lstart=,comm=. A process is keyed by its pid and
+    start time. CPU is in hundredths of a second (the tick of the macOS probe), memory is RSS."""
+    found = {}
+    for row in text.splitlines():
+        fields = row.split(None, 9)
+        try:
+            name = os.path.basename(fields[9])
+            found[(int(fields[0]), " ".join(fields[4:9]))] = (int(fields[1]), name, name, ps_seconds(fields[2]) * 100,
+                                                              int(fields[3]))
+        except (IndexError, ValueError):
+            continue
+    return found
+
+
 def pss(folder):
     try:
         with open(f"{folder}/smaps_rollup") as rollup:
             return next(int(line.split()[1]) for line in rollup if line.startswith("Pss:"))
     except (OSError, StopIteration, ValueError):
         return None
+
+
+def read():
+    if MAC:
+        out = subprocess.run(["ps", "-axo", "pid=,ppid=,cputime=,rss=,lstart=,comm="], capture_output=True, text=True)
+        return ps_processes(out.stdout)
+    return processes()
 
 
 def system(root="/proc"):
@@ -66,29 +96,22 @@ def app_tree(found, app):
     return seen
 
 
-def sample(before, now, seconds, tick, app, me=None):
-    """The measures between two reads of processes(), seconds apart. CPU is % of one core."""
-    used = {key: (cpu - before[key][3] if key in before else cpu) / tick / seconds * 100
-            for key, (_, _, _, cpu, _) in now.items() if key[0] != me}
+def sample(before, now, seconds, tick, app):
+    """The measures between two reads of processes(), seconds apart: the app's CPU as a % of one core (a process that
+    is new, or whose count went back, starts from zero), its memory in MB, and how many processes it has."""
     tree = app_tree(now, app)
-    lines = []
-    if tree:
-        lines += [("cpu/app", sum(used[key] for key in tree if key in used)),
-                  ("mem/app", sum(now[key][4] for key in tree) / 1024), ("app/procs", len(tree))]
-    others = {}
-    for key, cpu in used.items():
-        if key not in tree:
-            others[now[key][1]] = others.get(now[key][1], 0) + cpu
-    lines.append(("cpu/other", sum(others.values())))
-    top = sorted(((cpu, name) for name, cpu in others.items() if cpu >= TOP_MIN), reverse=True)[:TOP]
-    return lines + [(f"cpu/top/{name}", cpu) for cpu, name in top], bool(tree)
+    if not tree:
+        return [], False
+    cpu = sum(max(0, now[key][3] - before[key][3]) if key in before else now[key][3] for key in tree)
+    return [("cpu/app", cpu / tick / seconds * 100), ("mem/app", sum(now[key][4] for key in tree) / 1024),
+            ("app/procs", len(tree))], True
 
 
 class Lines:
-    """Prints the protocol: measures with the probe's clock t, at most TOP_NAMES top-process series."""
+    """Prints the protocol: each measure with the probe's clock t."""
 
     def __init__(self, out=sys.stdout):
-        self.out, self.names = out, set()
+        self.out = out
 
     def say(self, line):
         self.out.write(json.dumps(line) + "\n")
@@ -96,32 +119,31 @@ class Lines:
 
     def measures(self, lines, t):
         for m, v in lines:
-            if m.startswith("cpu/top/"):
-                if m not in self.names and len(self.names) >= TOP_NAMES:
-                    continue
-                self.names.add(m)
             self.say({"m": m, "v": round(v, 2), "t": round(t, 4)})
 
 
 def main():
     app, interval = os.environ.get("PROOFREEL_APP", ""), float(os.environ.get("INTERVAL") or 1)
-    tick, cores, me = os.sysconf("SC_CLK_TCK"), os.cpu_count() or 1, os.getpid()
+    tick = 100 if MAC else os.sysconf("SC_CLK_TCK")
     out = Lines()
     out.say({"ready": True})
-    out.say({"meta": {"app": app or "none: give start --app", "cores": cores}})
+    out.say({"meta": {"app": app or "none: give start --app", "cores": os.cpu_count() or 1}})
     before = then = ticks = running = None
     while True:
-        now, (busy, total, memory), at = processes(), system(), time.monotonic()
-        lines, found = sample(before or now, now, at - (then or 0), tick, app, me)
+        now, total, at = read(), None if MAC else system(), time.monotonic()
+        lines, found = sample(before or now, now, at - (then or 0), tick, app)
         if before is None:
             lines = [line for line in lines if not line[0].startswith("cpu/")]
-        else:
-            lines.append(("cpu/system", (busy - ticks[0]) / max(1, total - ticks[1]) * 100))
-        out.measures(lines + [("mem/system", memory)], at)
+        elif total:
+            lines.append(("cpu/system", (total[0] - ticks[0]) / max(1, total[1] - ticks[1]) * 100))
+        if total:
+            lines.append(("mem/system", total[2]))
+        out.measures(lines, at)
         if app and running is not None and found != running:
             out.say({"m": "app/start" if found else "app/exit", "t": round(at, 4)})
-        before, then, ticks, running = now, at, (busy, total), found
+        before, then, ticks, running = now, at, total and total[:2], found
         time.sleep(interval)
+
 
 if __name__ == "__main__":
     main()

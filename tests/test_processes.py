@@ -1,6 +1,9 @@
 import importlib.util
 import io
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 from proofreel import plugins, probes
@@ -62,27 +65,21 @@ def test_cpu_is_the_ticks_used_between_two_reads_as_a_percent_of_one_core(tmp_pa
     del later[102]
     now = procs.processes(fake_proc(tmp_path / "b", later))
     lines, found = procs.sample(before, now, seconds=2.0, tick=100, app="acme-notes")
-    values = dict(lines)
-    assert found and values["cpu/app"] == 100.0 and values["app/procs"] == 2
-    assert values["mem/app"] == 150_000 / 1024
-    assert values["cpu/other"] == 20.0 and values["cpu/top/indexer"] == 20.0
-    assert not any(m.startswith("cpu/top/Xorg") for m in values)
+    assert found and dict(lines) == {"cpu/app": 100.0, "mem/app": 150_000 / 1024, "app/procs": 2}
+    assert procs.sample(before, now, seconds=2.0, tick=100, app="nothing") == ([], False)
 
 
-def test_a_reused_pid_counts_as_a_new_process_and_the_probe_leaves_itself_out():
-    before = {(5, 10): (1, "old", "old", 900, 0), (6, 11): (1, "me", "me", 0, 0)}
-    now = {(5, 99): (1, "new", "new", 30, 0), (6, 11): (1, "me", "me", 500, 0)}
-    lines, found = procs.sample(before, now, seconds=1.0, tick=100, app="", me=6)
-    assert dict(lines) == {"cpu/other": 30.0, "cpu/top/new": 30.0} and not found
+def test_a_reused_pid_counts_as_a_new_process_and_a_dropped_counter_as_no_cpu():
+    before = {(5, 10): (1, "app", "app", 900, 0), (6, 11): (1, "app", "app", 900, 0)}
+    now = {(5, 99): (1, "app", "app", 30, 0), (6, 11): (1, "app", "app", 100, 0)}
+    assert dict(procs.sample(before, now, seconds=1.0, tick=100, app="app")[0])["cpu/app"] == 30.0
 
 
-def test_lines_carry_the_probe_clock_and_top_names_stop_at_the_limit():
+def test_lines_carry_the_probe_clock():
     out = procs.Lines(io.StringIO())
-    for n in range(procs.TOP_NAMES + 4):
-        out.measures([("cpu/other", 1), (f"cpu/top/p{n}", 50)], t=n)
-    lines = [json.loads(line) for line in out.out.getvalue().splitlines()]
-    assert len({line["m"] for line in lines if line["m"].startswith("cpu/top/")}) == procs.TOP_NAMES
-    assert all("t" in line for line in lines)
+    out.measures([("cpu/app", 1.234), ("mem/app", 5)], t=7.5)
+    assert [json.loads(line) for line in out.out.getvalue().splitlines()] == [
+        {"m": "cpu/app", "v": 1.23, "t": 7.5}, {"m": "mem/app", "v": 5, "t": 7.5}]
 
 
 def test_the_probe_is_on_by_default_in_vm_runs_only():
@@ -93,14 +90,29 @@ def test_the_probe_is_on_by_default_in_vm_runs_only():
     assert "processes" not in [p["name"] for p in probes.select([], None)]
 
 
-def test_a_macos_guest_builds_each_swift_file_of_a_staged_plugin(tmp_path, monkeypatch):
-    from proofreel import guest
-    (tmp_path / "procs.swift").write_text("print(1)\n")
-    built = tmp_path / "built"
-    built.write_text("binary")
-    monkeypatch.setattr(guest.shutil, "which", lambda name: "/usr/bin/swiftc")
-    monkeypatch.setattr(guest, "swift_tool", lambda source, *flags: built if flags == guest.MacOS.target else None)
-    guest.GUESTS["linux"].build(tmp_path)
-    assert not (tmp_path / "procs").exists()
-    guest.GUESTS["macos"].build(tmp_path)
-    assert (tmp_path / "procs").read_text() == "binary"
+PS = """  1     0     0:01.50   1200 Mon Nov 16 09:00:00 2026 /sbin/launchd
+ 50     1  1:02:03.25 200000 Thu Nov 19 10:00:00 2026 /Applications/Acme Notes.app/Contents/MacOS/Acme Notes
+ 51    50     0:00.40  30000 Thu Nov 19 10:00:01 2026 /Applications/Acme Notes.app/Contents/Frameworks/helper
+bad row
+"""
+
+
+def test_ps_rows_become_processes_keyed_by_pid_and_start_with_cpu_in_hundredths():
+    found = procs.ps_processes(PS)
+    assert len(found) == 3
+    assert found[(50, "Thu Nov 19 10:00:00 2026")] == (1, "Acme Notes", "Acme Notes", 372325.0, 200000)
+    assert found[(51, "Thu Nov 19 10:00:01 2026")][3] == 40.0
+    assert {pid for pid, _ in procs.app_tree(found, "Acme Notes")} == {50, 51}
+
+
+def test_the_probe_says_ready_first_and_an_app_that_is_not_there_gives_no_app_lines():
+    env = {**os.environ, "INTERVAL": "0.1", "PROOFREEL_APP": "no-such-app-anywhere"}
+    child = subprocess.Popen([sys.executable, "-u", str(FOLDER / "procs.py")], env=env, stdout=subprocess.PIPE, text=True)
+    try:
+        lines = [json.loads(child.stdout.readline()) for _ in range(5)]
+    finally:
+        child.kill()
+        child.wait()
+    assert lines[0] == {"ready": True}
+    assert all(line.get("m") not in ("cpu/app", "mem/app", "app/procs") for line in lines)
+    assert any(line.get("m") == "mem/system" or "meta" in line for line in lines)
