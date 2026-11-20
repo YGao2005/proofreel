@@ -77,3 +77,14 @@ def test_a_budget_on_input_waits_for_the_end_of_the_run(tmp_path):
     assert late["ok"] is False and late["late"] and late["detail"] == "max 0.3 s, measured after the run"
     early = metrics.decide(tmp_path, [{"t": 15, "kind": "check", "text": label, **{"pending": {**fields["pending"], "until": 10.5}}}])[0]
     assert early["ok"] is True
+
+
+def test_a_click_past_the_frame_edge_still_measures(tmp_path):
+    def draw(d, t):
+        if t >= 2.2:
+            d.rectangle((1380, 840, 1440, 900), fill="black")
+    shown = frames(tmp_path, draw)
+    events = [{"t": 2.0, "kind": "click", "text": "click OK", "x": 1700, "y": 1000}]
+    assert latency.measure(tmp_path, events, *shown, scale=1.0) == 1
+    line = json.loads((tmp_path / "metrics" / "input.jsonl").read_text())
+    assert line["ok"] and line["d"] == pytest.approx(0.2, abs=line["err"] + 0.02)
