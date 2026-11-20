@@ -367,8 +367,6 @@ proofreel start slow-load --condition slow-network:profile=lossy-wifi,loss=20%
 proofreel start slow-load --condition slow-network:profile=none,latency=200ms
 ```
 
-![The Stats tab of the same search run on a 3g network, with a 736 ms largest contentful paint.](docs/stats-slow-network.png)
-
 | Condition | Fakes | Check |
 |---|---|---|
 | `bluetooth-headset-call-mode` | the only microphone is a Bluetooth headset; when input starts, its rate drops from 48 kHz to `RATE` (24000 or 16000) | the default input is Bluetooth at 48 kHz, is `RATE` while input runs, and is 48 kHz again after |
