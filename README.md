@@ -121,8 +121,10 @@ that the video is in lights up. Use the same state name in each flow for the sam
 ### Probes and budgets
 
 A probe measures while a session records: the host's load, an app's CPU, request times. `host-load` is on for every
-recording. Add another with `start --probe <name>` or a flow line `probe <name>`; `--probe none` turns the defaults
-off. `proofreel probes` lists them, with what each can see and what it does not measure well.
+recording. `processes` is on for every run VM: the CPU (`cpu/app`, % of one core) and memory (`mem/app`, MB) of the
+app that `start --app` names and every process under it, the guest's CPU and memory, and the other processes that use
+the most CPU (`cpu/top/<name>`). Add another with `start --probe <name>` or a flow line `probe <name>`; `--probe none`
+turns the defaults off. `proofreel probes` lists them, with what each can see and what it does not measure well.
 
 ```
 probe host-load
@@ -138,9 +140,9 @@ check metric net/* failed --below 1 --last 30
 JS heap, and DOM nodes. For example, `check metric web/inp max --below 200`. It needs `pip install websocket-client`.
 
 A stat is `mean`, `min`, `max`, `p50`, `p90`, `p95`, `p99`, `last`, `count`, or `failed`. A budget waits up to
-`--wait` seconds (default 2) for a measure that came after it began. With no data in its window, it is a failed check
-that says which series there are. `stop` prints a line for each series, and `proofreel stats [session]` prints them
-again (`--json` for all the numbers).
+`--wait` seconds (default 2) for a measure of its series that came after it began. With no data in its window, it is a
+failed check that says which series there are. `stop` prints a line for each series, and `proofreel stats [session]`
+prints them again (`--json` for all the numbers).
 
 Input latency needs no probe: when the run stops, proofreel reads the recorded frames and measures how long the
 screen took to answer each click (around the pointer) and each key (anywhere), with an error bar of half the time
