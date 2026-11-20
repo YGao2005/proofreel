@@ -100,7 +100,7 @@ function render() {
   const readoutPill = $("span", { class: "pill live", hidden: "" });
   const overlay = r.overlay ? $("div", { class: "overlay", "aria-hidden": "true" },
     $("div", { class: "top" }, $("span", { class: "pill clock" }), $("span", { class: "pill state" }), $("span", { class: "pill speed" })),
-    $("span", { class: "pill now" }), $("span", { class: "pill caption" }), readoutPill) : null;
+    $("span", { class: "pill now" }), $("div", { class: "bottom" }, readoutPill, $("span", { class: "pill caption" }))) : null;
   const screen = $("div", { class: "screen" }, video, overlay);
   const update = () => {
     stage(r, video, overlay);
