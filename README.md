@@ -114,5 +114,4 @@ The skill an agent reads is [`skills/proofreel/SKILL.md`](skills/proofreel/SKILL
 
 ## License
 
-[PolyForm Noncommercial 1.0.0](LICENSE): free to use, change, and share for any noncommercial purpose (personal
-projects, research, education, nonprofits). For commercial use, ask the author.
+[MIT](LICENSE).

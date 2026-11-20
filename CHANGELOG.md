@@ -13,3 +13,4 @@ The first release. proofreel records a coding agent driving an app in a VM and t
 - **Crash and hang reports** from macOS guests.
 - **Docs:** the README is the front page, with a tour video of the review page; the reference is in docs/. `tools/readme_media.py` makes the tour again from a review folder.
 - **`proofreel --version`.**
+- **License:** MIT (was PolyForm Noncommercial 1.0.0).
