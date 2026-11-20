@@ -29,6 +29,7 @@ the guest sees it), and PROOFREEL_GUEST_IP (the guest as the host sees it); star
 PROOFREEL_HOST_FOR_GUEST.
 """
 
+import importlib.metadata
 import json
 import math
 import os
@@ -70,10 +71,19 @@ def select(requested, run):
                   "setup": bool(info.get("setup")), "tunnel": info.get("tunnel")}
         if info.get("port"):
             record["port"] = free_port(0, run.host_address[0] if run else "127.0.0.1")
-        if info.get("extras") and not tool(info["extras"]):
+        if info.get("extras") and not installed(info["extras"]):
             record["unavailable"] = f"{info['extras']} is not installed. Install it: pip install {info['extras']}"
         records.append(record)
     return records
+
+
+def installed(package):
+    """True when the pip package is installed in this Python, the one that runs host probes."""
+    try:
+        importlib.metadata.distribution(package)
+        return True
+    except importlib.metadata.PackageNotFoundError:
+        return False
 
 
 def tool(command):

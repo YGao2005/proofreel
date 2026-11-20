@@ -140,7 +140,7 @@ def test_a_setup_probe_needs_start_and_stop_and_a_run_vm(tmp_path):
 
 
 def test_a_missing_extra_makes_the_probe_unavailable_and_it_never_starts(home, monkeypatch, tmp_path):
-    monkeypatch.setattr(probes, "tool", lambda name: None)
+    monkeypatch.setattr(probes, "installed", lambda package: False)
     run = vm.Run({"backend": "qemu", "os": "linux", "id": "x"})
     record = probes.select(["none", "network"], run)[0]
     assert record["port"] and "pip install mitmproxy" in record["unavailable"]
@@ -172,3 +172,7 @@ def test_a_reset_is_pending_before_its_start_and_a_failed_start_is_undone(home, 
     assert steps == [("a", "start", ["a"]), ("b", "start", ["a", "b"]), ("b", "stop", ["a", "b"]),
                      ("a", "stop", ["a", "b"])]
     assert pending() == [] and plugins.undo(run) == []
+
+
+def test_an_extra_is_a_pip_package_not_a_command():
+    assert probes.installed("pluggy") and not probes.installed("no-such-package-proofreel")
