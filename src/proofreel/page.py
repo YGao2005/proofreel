@@ -13,7 +13,7 @@ import time
 from importlib import resources
 from pathlib import Path
 
-from . import Problem
+from . import Problem, metrics
 from .session import CHIP, HIDDEN, ROW, VERDICT, moment, visits
 
 VERSION = 2
@@ -21,7 +21,8 @@ VERSION = 2
 CAPABILITIES = {"db": {}, "user": {"scopes": ["profile"]}, "sample": {"images": True}}
 
 ASSETS = resources.files("proofreel")
-SCRIPTS = ("machine.js", "page.js")
+SCRIPTS = ("machine.js", "tracks.js", "page.js")
+CURVES = 6
 
 
 def verdict(info, events):
@@ -32,8 +33,9 @@ def verdict(info, events):
     return "works" if checks else "shown"
 
 
-def run_data(folder, info, events, length, real, clock, camera):
-    """The page's data for one run (version 2). Times are seconds from the first frame."""
+def run_data(folder, info, events, length, real, clock, camera, measured=None):
+    """The page's data for one run (version 2). Times are seconds from the first frame. measured is what
+    metrics.page() packed."""
     checks = [e for e in events if e["kind"] == "check"]
     passed = sum(1 for e in checks if e.get("ok"))
     meta = [f"{k} {v}" for k, v in (info.get("meta") or {}).items() if k and k != "conditions" and v]
@@ -48,7 +50,8 @@ def run_data(folder, info, events, length, real, clock, camera):
             "when": time.strftime("%Y-%m-%d %H:%M", time.localtime(started)) if started else
             (info.get("meta") or {}).get("", ""), "clock": clock.knots,
             "states": visits(events, info.get("error", ""), round(real, 2)),
-            "events": [{k: e[k] for k in keep if k in e} for e in map(shown, events) if e]}
+            "events": [{k: e[k] for k in keep if k in e} for e in map(shown, events) if e],
+            **({"metrics": measured} if measured and (measured["series"] or measured["budgets"]) else {})}
 
 
 def shown(event):
@@ -105,9 +108,9 @@ def document(runs):
 """
 
 
-def write(folder, info, events, length, real, clock, camera):
+def write(folder, info, events, length, real, clock, camera, measured=None):
     """Write run.json and index.html, and return the run data."""
-    run = run_data(folder, info, events, length, real, clock, camera)
+    run = run_data(folder, info, events, length, real, clock, camera, measured)
     (folder / "run.json").write_text(json.dumps(run))
     (folder / "index.html").write_text(document([run]))
     return run
@@ -133,11 +136,19 @@ def publish(session, out):
         if manifest.exists() and isinstance(json.loads(manifest.read_text()), list):
             shutil.copy2(manifest, out / "runs.v1.json")
         runs = [r for r in load_runs(out) if r["id"] != run["id"]] + [{**run, "base": f"runs/{run['id']}/"}]
+        runs = [stats_only(r) for r in runs[:-CURVES]] + runs[-CURVES:]
         atomic(manifest, json.dumps({"version": VERSION, "runs": runs}))
         page = out / "index.html"
         atomic(page, document(runs))
     files = {str(p.relative_to(out)): str(p.resolve()) for p in sorted(target.rglob("*")) if p.is_file()}
     return page, files, len(runs)
+
+
+def stats_only(run):
+    """An older run keeps the numbers of its metrics, not their curves, so the page of a long history stays small."""
+    if "metrics" not in run:
+        return run
+    return {**run, "metrics": {**run["metrics"], "series": [metrics.stats_only(s) for s in run["metrics"]["series"]]}}
 
 
 def atomic(path, text):

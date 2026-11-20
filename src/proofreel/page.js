@@ -10,17 +10,9 @@ const $ = (tag, attrs = {}, ...kids) => {
 };
 const clock = s => `${Math.floor(s / 60)}:${(s % 60).toFixed(1).padStart(4, "0")}`;
 const VERDICTS = { works: ["Works", "ok"], problem: ["Problem", "bad"], shown: ["Shown", "info"] };
-// The run's clock: [real, video] points joined by straight lines. along() maps one column to the other.
-function along(knots, x, y, value) {
-  if (knots.length < 2) return value;
-  let i = 1;
-  while (i < knots.length - 1 && knots[i][x] <= value) i++;
-  const [a, b] = [knots[i - 1], knots[i]];
-  return b[x] > a[x] ? a[y] + (b[y] - a[y]) * (value - a[x]) / (b[x] - a[x]) : a[y];
-}
-const toVideo = (r, real) => along(r.clock, 0, 1, real);
-const fastest = r => Math.round(Math.max(1, ...r.clock.slice(1).map((k, i) =>
-  k[1] > r.clock[i][1] ? (k[0] - r.clock[i][0]) / (k[1] - r.clock[i][1]) : 1)));
+const toVideo = (r, real) => Tracks.along(r.clock, 0, 1, real);
+const toReal = (r, video) => Tracks.along(r.clock, 1, 0, video);
+const fastest = r => Math.round(Math.max(1, ...Tracks.timemap(r.clock).stretches(1).map(s => s.speed)));
 const caps = {};
 let run = RUNS.length - 1;
 let zoom = true, view = "timeline", selected = null;
@@ -40,6 +32,7 @@ const ICONS = {
   play: "M7 5v14l11-7z", pause: "M7 5h4v14H7zM13 5h4v14h-4z", full: "M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5",
   zoom: "M11 4a7 7 0 1 0 0 14a7 7 0 1 0 0-14zM20 20l-4-4M8 11h6M11 8v6",
   help: "M12 21a9 9 0 1 0 0-18a9 9 0 1 0 0 18zM9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6M12 17h.01",
+  pin: "M9 4h6M10 4v5l-3 4h10l-3-4V4M12 13v7",
 };
 const icon = name => {
   const s = document.createElementNS("http://www.w3.org/2000/svg", "svg"), p = document.createElementNS("http://www.w3.org/2000/svg", "path");
@@ -47,12 +40,8 @@ const icon = name => {
   p.setAttribute("d", ICONS[name]); s.append(p);
   return s;
 };
-const VIEWS = [["timeline", "Timeline"], ["machine", "State machine"], ["stats", "Stats", true], ["network", "Network", true], ["compare", "Compare", true]];
-const SOON = {
-  stats: "Per-run numbers: time in each state, checks, retries, CPU and memory peaks. One table, one row per run.",
-  network: "Requests on the video time axis: method, URL, status, time. Click a request to jump the video to it.",
-  compare: "Two runs side by side: the same state in each, with the frame, the checks, and the time they took.",
-};
+const VIEWS = [["timeline", "Timeline"], ["machine", "State machine"], ["stats", "Stats"], ["network", "Network"], ["compare", "Compare", true]];
+const placeholder = text => $("div", { class: "soon-pane" }, $("p", { class: "placeholder", text }));
 
 function runSwitch() {
   if (RUNS.length < 2) return null;
@@ -76,12 +65,14 @@ function render() {
     runSwitch()));
 
   const video = $("video", { playsinline: "", muted: "", preload: "metadata", poster: r.base + "poster.jpg", src: r.base + "session.mp4" });
+  const live = $("span", { class: "pill live", hidden: "" });
   const overlay = r.overlay ? $("div", { class: "overlay", "aria-hidden": "true" },
     $("div", { class: "top" }, $("span", { class: "pill clock" }), $("span", { class: "pill state" }), $("span", { class: "pill speed" })),
-    $("span", { class: "pill now" }), $("span", { class: "pill caption" })) : null;
+    $("span", { class: "pill now" }), $("span", { class: "pill caption" }), live) : null;
   const screen = $("div", { class: "screen" }, video, overlay);
   const update = () => {
     stage(r, video, overlay);
+    tracks.readout(toReal(r, video.currentTime));
     if (video.duration) timebar.style.setProperty("--at", (video.currentTime / video.duration * 100) + "%");
     time.textContent = `${clock(Math.max(0, toReal(r, video.currentTime)))} / ${clock(r.real)}`;
   };
@@ -127,6 +118,7 @@ function render() {
     "data-t": toVideo(r, v.t), "data-end": toVideo(r, v.end), title: `${v.name}: ${VISITS[visitVerdict(v)][0]}`,
     onclick: () => seek(toVideo(r, v.t) - 0.2) }, $("span", { text: v.name })));
   if (r.states && r.states.length) lanes.append($("span", { class: "lane-label", text: "States" }), statesLane, $("span"));
+  const tracks = metricTracks(r, lanes, statesLane, live, t => seek(t));
   const timebar = $("div", { class: "timebar" },
     $("div", { class: "lead" }, play, time), bar, $("div", { class: "tools" }, zoomButton, fullButton, help), lanes);
   const place = () => {
@@ -155,8 +147,8 @@ function render() {
     summary.textContent = `${n} action${n === 1 ? "" : "s"}`;
   }
   const machine = MACHINE ? machineView(r, seek) : null;
-  const panes = { timeline: list, machine: machine && machine.element };
-  for (const [name, , soon] of VIEWS) if (soon) panes[name] = $("div", { class: "soon-pane" }, $("p", { class: "placeholder", text: SOON[name] }));
+  const panes = { timeline: list, machine: machine && machine.element, stats: statsView(r, seek), network: networkView(r, seek),
+    compare: placeholder("Two runs side by side: the same state in each, with the frame, the checks, and the time they took.") };
   const views = VIEWS.filter(([name]) => panes[name]);
   if (!panes[view]) view = "timeline";
   const tabs = $("div", { class: "tabs", role: "tablist", "aria-label": "View" });
@@ -190,13 +182,6 @@ function render() {
 }
 
 const ease = x => { x = Math.min(Math.max(x, 0), 1); return x * x * (3 - 2 * x); };
-const toReal = (r, video) => along(r.clock, 1, 0, video);
-function speedAt(r, video) {
-  const k = r.clock;
-  let i = 1;
-  while (i < k.length - 1 && k[i][1] <= video) i++;
-  return k.length > 1 && k[i][1] > k[i - 1][1] ? (k[i][0] - k[i - 1][0]) / (k[i][1] - k[i - 1][1]) : 1;
-}
 function cameraAt(camera, video) {
   let i = 1;
   while (i < camera.length - 1 && camera[i][0] <= video) i++;
@@ -210,6 +195,179 @@ const keysLabel = text => text.split(/\s+/).map(combo => combo.split("-").map(p 
   p[0].toUpperCase() + p.slice(1))).join("+")).join("  ");
 const chipText = e => e.kind === "check" ? (e.ok ? "Pass: " : "Fail: ") + e.text : e.kind === "key" ? keysLabel(e.text) : e.text;
 
+const PREFS = (() => { try { return JSON.parse(localStorage.getItem("proofreel-tracks")) || {}; } catch (err) { return {}; } })();
+const savePrefs = () => { try { localStorage.setItem("proofreel-tracks", JSON.stringify(PREFS)); } catch (err) {} };
+const groupOf = s => s.m.split("/")[0];
+const nameOf = s => s.label || s.m;
+const metricsOf = r => (r.metrics && r.metrics.series) || [];
+const budgetsOf = (r, s) => ((r.metrics && r.metrics.budgets) || []).filter(b => b.series.includes(s.m));
+const W = 600;
+const SVG = (tag, attrs = {}) => {
+  const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+  return el;
+};
+const limitOf = b => b.below !== null && b.below !== undefined ? b.below : b.above;
+const budgetText = (b, unit) => `${b.stat} ${b.below !== null && b.below !== undefined ? "below" : "above"} ${["count", "failed"].includes(b.stat) ? limitOf(b) : Tracks.format(limitOf(b), unit)}`;
+
+// One row on the video's time axis for each series, the way its record looks: samples as a line in their lo-hi
+// envelope, spans in rows (+N when more do not fit), marks as ticks. Sped-up stretches are hatched and labelled.
+// A chip per group hides its rows; a pin per series puts it in the readout on the video.
+function metricTracks(r, lanes, statesLane, live, seek) {
+  const series = metricsOf(r).filter(s => s.points || s.spans || s.marks);
+  const map = Tracks.timemap(r.clock), length = r.length || map.video(r.real) || 1;
+  const x = t => map.video(t) / length * W, pct = v => `${v / W * 100}%`;
+  const pins = () => PREFS.pins || [...new Set(series.map(groupOf))].map(g => series.find(s => groupOf(s) === g).m).slice(0, 3);
+  const readout = real => {
+    const shown = series.filter(s => pins().includes(s.m));
+    live.hidden = !shown.length;
+    live.replaceChildren(...shown.map(s => $("span", {}, $("b", { text: nameOf(s) }), Tracks.format(Tracks.valueAt(s, real), s.unit))));
+  };
+  if (!series.length) return { readout };
+  const stretches = map.stretches();
+  const hatch = lane => stretches.forEach(st => lane.append($("span", { class: "stretch", style: `left:${st.from / length * 100}%;width:${(st.to - st.from) / length * 100}%`,
+    title: `Plays at up to ${Math.round(st.speed)}x` }, $("span", { text: `${Math.round(st.speed)}x` }))));
+  hatch(statesLane);
+  const hidden = new Set(PREFS.hidden || crowded(series)), rows = [];
+  const chips = $("div", { class: "chips metric" });
+  for (const g of new Set(series.map(groupOf))) {
+    const b = $("button", { type: "button", class: "toggle", "aria-pressed": String(!hidden.has(g)), title: `Show the ${g} rows`, text: g });
+    b.addEventListener("click", () => {
+      hidden.has(g) ? hidden.delete(g) : hidden.add(g);
+      b.setAttribute("aria-pressed", String(!hidden.has(g)));
+      PREFS.hidden = [...hidden];
+      savePrefs();
+      show();
+    });
+    chips.append(b);
+  }
+  lanes.append($("span", { class: "lane-label metric", text: "Tracks" }), chips, $("span", { class: "metric" }));
+  for (const s of series) {
+    const lane = $("div", { class: `lane metric ${s.kind}`, title: `${s.m}: ${statLine(s)}` });
+    lane.addEventListener("click", ev => {
+      const box = lane.getBoundingClientRect();
+      seek((ev.clientX - box.left) / box.width * length);
+    });
+    drawLane(r, s, lane, x, pct, seek, map);
+    hatch(lane);
+    const pin = $("button", { type: "button", class: "pin metric", "aria-pressed": String(pins().includes(s.m)),
+      title: `Show ${nameOf(s)} on the video`, "aria-label": `Pin ${nameOf(s)}` }, icon("pin"));
+    pin.addEventListener("click", () => {
+      const now = pins();
+      PREFS.pins = now.includes(s.m) ? now.filter(m => m !== s.m) : [...now, s.m];
+      savePrefs();
+      lanes.querySelectorAll(".pin").forEach((b, i) => b.setAttribute("aria-pressed", String(PREFS.pins.includes(series[i].m))));
+    });
+    const label = $("span", { class: "lane-label metric", text: nameOf(s), title: s.m });
+    rows.push([groupOf(s), label, lane, pin]);
+    lanes.append(label, lane, pin);
+  }
+  const show = () => rows.forEach(([g, ...els]) => els.forEach(el => { el.hidden = hidden.has(g); }));
+  show();
+  return { readout };
+}
+
+// WHY: many series would push the video off a short window, so past ROWS rows a group starts hidden.
+const ROWS = 8;
+function crowded(series) {
+  let rows = 0;
+  return [...new Set(series.map(groupOf))].filter(g => {
+    const n = series.filter(s => groupOf(s) === g).length;
+    if (rows && rows + n > ROWS) return true;
+    rows += n;
+    return false;
+  });
+}
+
+function drawLane(r, s, lane, x, pct, seek, map) {
+  if (s.kind === "sample") {
+    const cols = Tracks.bin(s.points, x, W), on = cols.map((c, i) => c && [i + 0.5, c]).filter(Boolean);
+    const limits = budgetsOf(r, s).filter(b => !["count", "failed"].includes(b.stat));
+    const top = s.max || Math.max(1e-9, ...on.map(([, c]) => c.hi), ...limits.map(limitOf), ...(s.bands || [])) * 1.1;
+    const y = v => 30 - Math.min(Math.max(v / top, 0), 1) * 28;
+    const svg = SVG("svg", { viewBox: `0 0 ${W} 30`, preserveAspectRatio: "none" });
+    if (on.length) {
+      svg.append(SVG("path", { class: "env", d: "M" + on.map(([i, c]) => `${i},${y(c.hi)}`).join(" L") + " L" + on.slice().reverse().map(([i, c]) => `${i},${y(c.lo)}`).join(" L") + "Z" }));
+      svg.append(SVG("path", { class: "line", d: "M" + on.map(([i, c]) => `${i},${y(c.v)}`).join(" L") }));
+    }
+    for (const v of s.bands || []) svg.append(SVG("line", { class: "band", x1: 0, x2: W, y1: y(v), y2: y(v) }));
+    for (const b of limits) svg.append(SVG("line", { class: `limit ${b.ok === false ? "bad" : ""}`, x1: 0, x2: W, y1: y(limitOf(b)), y2: y(limitOf(b)) }));
+    lane.append(svg);
+  } else if (s.kind === "span") {
+    const items = s.spans.map(([t, d, ok, label]) => ({ from: x(t), to: x(t + d), t, d, ok, label })).sort((a, b) => a.from - b.from);
+    const { row, more } = Tracks.pack(items, 3);
+    items.forEach((it, i) => {
+      if (row[i] < 0) return;
+      const el = $("i", { class: it.ok === false ? "bad" : "", title: `${it.label || s.m}: ${Tracks.format(it.d, "s")}`,
+        style: `left:${pct(it.from)};width:${pct(Math.max(it.to - it.from, 1))};top:${2 + row[i] * 7}px` });
+      el.addEventListener("click", ev => { ev.stopPropagation(); seek(map.video(it.t) - 0.2); });
+      lane.append(el);
+    });
+    lane.style.height = `${4 + 7 * Math.max(1, Math.max(...row) + 1)}px`;
+    if (more + (s.more || 0)) lane.append($("span", { class: "more", text: `+${more + (s.more || 0)}` }));
+  } else {
+    for (const [t, ok, label] of s.marks) lane.append($("b", { class: ok === false ? "bad" : "", style: `left:${pct(x(t))}`, title: label || s.m }));
+    if (s.more) lane.append($("span", { class: "more", text: `+${s.more}` }));
+  }
+}
+
+const statLine = s => s.stats.p50 === undefined ? `${s.stats.count} marks` :
+  `p50 ${Tracks.format(s.stats.p50, s.unit)}, p95 ${Tracks.format(s.stats.p95, s.unit)}, max ${Tracks.format(s.stats.max, s.unit)}`;
+
+// The numbers of the run: input latency first, then one row per series (failing budgets first) with p50, p95, max,
+// and each budget's result. A row jumps the video to the series' worst moment.
+function statsView(r, seek) {
+  const series = metricsOf(r), budgets = (r.metrics && r.metrics.budgets) || [];
+  if (!series.length && !budgets.length) return placeholder("No metrics in this run. Probes measure while a session records; proofreel probes lists them.");
+  const box = $("div", { class: "stats" });
+  const worst = s => s.points ? s.points.reduce((a, p) => (p[3] ?? p[1]) > (a[3] ?? a[1]) ? p : a)[0]
+    : s.spans ? s.spans.reduce((a, p) => p[1] > a[1] ? p : a)[0] : s.marks && s.marks.length ? s.marks[0][0] : null;
+  const go = s => { const t = worst(s); if (t !== null) seek(toVideo(r, t) - 0.3); };
+  const input = series.filter(s => groupOf(s) === "input" && s.stats.p50 !== undefined);
+  if (input.length) box.append($("div", { class: "tiles" }, ...input.map(s => $("button", { type: "button", class: "tile", onclick: () => go(s) },
+    $("span", { class: "k", text: nameOf(s) }), $("span", { class: "big", text: Tracks.format(s.stats.p95, s.unit) }),
+    $("span", { class: "t", text: `p95 · p50 ${Tracks.format(s.stats.p50, s.unit)} · max ${Tracks.format(s.stats.max, s.unit)} · ${s.stats.count - s.stats.failed} inputs` }),
+    s.stats.failed ? $("span", { class: "t bad", text: `${s.stats.failed} got no change on the screen` }) : null))));
+  const rank = s => budgetsOf(r, s).some(b => b.ok === false) ? 0 : groupOf(s) === "input" ? 1 : budgetsOf(r, s).length ? 2 : 3;
+  const body = $("tbody");
+  for (const b of budgets.filter(b => !b.series.length)) body.append($("tr", { class: "bad" },
+    $("td", {}, document.createTextNode(b.glob), $("span", { class: "m", text: b.detail || "no data" })),
+    $("td", { colspan: "3", text: "–" }), $("td", {}, chip(b.ok === false ? "Fail" : b.ok ? "Pass" : "Pending", b.ok === false ? "bad" : b.ok ? "ok" : "info"))));
+  for (const s of series.slice().sort((a, b) => rank(a) - rank(b))) {
+    const mine = budgetsOf(r, s), n = s.stats.p50 === undefined;
+    body.append($("tr", { class: mine.some(b => b.ok === false) ? "bad" : "", tabindex: "0", onclick: () => go(s),
+      onkeydown: ev => { if (ev.key === "Enter") go(s); } },
+      $("td", {}, document.createTextNode(nameOf(s)), $("span", { class: "m", text: s.label ? s.m : `${s.stats.count} ${s.kind}s` }),
+        ...mine.map(b => $("span", { class: `m${b.ok === false ? " bad" : ""}`, text: `${budgetText(b, s.unit)}: ${b.detail}` }))),
+      ...(n ? [$("td", { colspan: "3", text: `${s.stats.count} marks` })] : ["p50", "p95", "max"].map(k => $("td", { text: Tracks.format(s.stats[k], s.unit) }))),
+      $("td", {}, ...mine.map(b => $("span", { title: `${budgetText(b, s.unit)}: ${b.detail}` }, chip(b.ok === false ? "Fail" : b.ok ? "Pass" : "Pending", b.ok === false ? "bad" : b.ok ? "ok" : "info"))))));
+  }
+  box.append($("table", { class: "numbers" }, $("thead", {}, $("tr", {}, ...["Series", "p50", "p95", "max", "Budget"].map(h => $("th", { text: h })))), body));
+  const quiet = Object.entries((r.metrics && r.metrics.probes) || {}).filter(([, p]) => p.status && p.status !== "ok");
+  for (const [name, p] of quiet) box.append($("p", { class: "hint", text: `Probe ${name} ${p.status}${p.note ? ": " + p.note : ""}` }));
+  return box;
+}
+
+// Each request (a span with phases) on real time, in start order. A row jumps the video to its start.
+function networkView(r, seek) {
+  const fall = Tracks.waterfall(metricsOf(r));
+  if (!fall.rows.length) return placeholder("No requests in this run. The network probe records them: start with --probe network.");
+  const box = $("div", { class: "net" },
+    $("div", { class: "legend" }, ...fall.names.map((name, i) => $("span", {}, $("i", { class: `p${i % 5}` }), name)),
+      $("span", { class: "t", text: `${clock(fall.from)} to ${clock(fall.to)}` })));
+  const CAP = 500;
+  for (const q of fall.rows.slice(0, CAP)) {
+    const bar = $("div", { class: "fall" }, $("span", { class: "whole", style: `left:${q.left * 100}%;width:${Math.max(q.width * 100, 0.3)}%` }),
+      ...q.parts.map(([name, left, width]) => $("span", { class: `p${fall.names.indexOf(name) % 5}`, title: `${name} ${Tracks.format(width * (fall.to - fall.from), "s")}`,
+        style: `left:${left * 100}%;width:${width * 100}%` })));
+    box.append($("div", { class: `req${q.ok === false ? " bad" : ""}`, tabindex: "0", role: "button", title: q.label,
+      onclick: () => seek(toVideo(r, q.t) - 0.2), onkeydown: ev => { if (ev.key === "Enter") seek(toVideo(r, q.t) - 0.2); } },
+      $("span", { class: "name", text: q.label }), $("span", { class: "d", text: `${q.status ? q.status + " · " : ""}${Tracks.format(q.d, "s")}` }), bar));
+  }
+  if (fall.rows.length > CAP) box.append($("p", { class: "hint", text: `${fall.rows.length - CAP} more requests are not listed.` }));
+  return box;
+}
+
 // The page draws on the video what the video does not: where the camera looks, the clock, the speed, the step, and
 // the last action or check. Times come from the run's clock, so they line up with every speed of the video.
 function stage(r, video, overlay) {
@@ -220,7 +378,7 @@ function stage(r, video, overlay) {
     video.style.transform = z > 1.001 ? `scale(${z}) translate(${-left * 100}%, ${-top * 100}%)` : "";
   }
   if (!overlay) return;
-  const real = toReal(r, at), speed = speedAt(r, at);
+  const real = toReal(r, at), speed = Tracks.timemap(r.clock).speed(at);
   const [clockPill, statePill, speedPill] = ["clock", "state", "speed"].map(name => overlay.querySelector(".top ." + name));
   clockPill.textContent = clock(Math.max(0, real));
   const visit = visitAt(r, real);

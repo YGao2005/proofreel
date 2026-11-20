@@ -38,6 +38,11 @@ def test_demo_renders_a_page_and_video(tmp_path):
     probe = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "json",
                             str(tmp_path / "demo" / "session.mp4")], capture_output=True, text=True, check=True)
     assert 8 < float(json.loads(probe.stdout)["format"]["duration"]) < 16
+    measured = json.loads((tmp_path / "demo" / "run.json").read_text())["metrics"]
+    kinds = {s["m"]: s["kind"] for s in measured["series"]}
+    assert kinds["host/cpu"] == "sample" and kinds["net/acme.test"] == "span" and kinds["app/log"] == "mark"
+    assert kinds["input/click"] == "span" and [b["ok"] for b in measured["budgets"]] == [True, True]
+    assert "demo-secret" not in json.dumps(measured)
 
 
 def test_a_long_wait_plays_faster_than_real_time_even_while_the_screen_changes():

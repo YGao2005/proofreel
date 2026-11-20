@@ -6,6 +6,7 @@ import shutil
 
 from PIL import Image, ImageDraw
 
+from . import metrics
 from .draw import font
 from .render import render
 from .session import VERSION
@@ -45,17 +46,32 @@ def screen(state):
     return image
 
 
-TRACKS = {"host/cpu": {"label": "Host CPU", "unit": "%", "better": "lower", "max": 100},
-          "host/vm-cpu": {"label": "This VM's CPU", "unit": "%", "better": "lower", "max": 100}}
+PROBES = [{"name": "host-load", "tracks": {"host/cpu": {"label": "Host CPU", "unit": "%", "better": "lower", "max": 100},
+                                         "host/vm-cpu": {"label": "This VM's CPU", "unit": "%", "better": "lower", "max": 100}}},
+          {"name": "processes", "tracks": {"cpu/app": {"label": "App CPU", "unit": "%", "better": "lower", "bands": [50]}}},
+          {"name": "network", "tracks": {"net/*": {"better": "lower"}}},
+          {"name": "app-spans", "tracks": {"app/log": {"label": "App log"}}}]
+REQUESTS = [(0.3, 0.12, "GET", "/signup", 200), (0.45, 0.31, "GET", "/app.js", 200), (5.85, 8.6, "POST", "/api/accounts", 201),
+            (14.5, 0.09, "GET", "/welcome", 200), (14.6, 0.05, "GET", "/api/me?session=demo-secret", 200),
+            (14.7, 0.04, "GET", "/api/avatar", 404)]
 
 
-def host_load(t0):
-    """Made-up host load, once a second: the VM works hard while the server makes the account (6 s to 14 s)."""
+def measured(t0):
+    """Made-up metrics: host load and app CPU once a second, with a spike while the wait plays fast; each request
+    the app makes, with its phases; and app log marks."""
     for n in range(17):
         busy = 6 <= n <= 14
         vm = 62 + 3 * (n % 3) if busy else 9 + n % 4
-        yield {"m": "host/cpu", "v": vm + 11, "a": t0 + n + 0.5}
-        yield {"m": "host/vm-cpu", "v": vm, "a": t0 + n + 0.5}
+        yield "host-load", {"m": "host/cpu", "v": 97 if n == 10 else vm + 11, "a": t0 + n + 0.5}
+        yield "host-load", {"m": "host/vm-cpu", "v": vm, "a": t0 + n + 0.5}
+        yield "processes", {"m": "cpu/app", "v": 35 + 4 * (n % 3) if busy else 4 + n % 3, "a": t0 + n + 0.6}
+    for start, d, method, path, status in REQUESTS:
+        wait = d * 0.8
+        yield "network", {"m": "net/acme.test", "d": d, "ok": status < 400, "label": f"{method} acme.test{path}",
+                          "phases": {"connect": round(d * 0.1, 3), "wait": round(wait, 3), "receive": round(d * 0.1, 3)},
+                          "n": {"status": status, "size": 900}, "a": t0 + start + d}
+    for t, text, ok in ((1.2, "form shown", True), (14.4, "account created", True), (14.75, "avatar missing", False)):
+        yield "app-spans", {"m": "app/log", "label": text, "ok": ok, "a": t0 + t}
 
 
 def demo(folder, broken=False):
@@ -107,6 +123,19 @@ def demo(folder, broken=False):
     hold(14.0, 15.5)
     at(6.0, "wait", 'wait for "Welcome"', end=t0 + 14.6, ok=True, detail="seen after 8.6 s")
     at(15.0, "check", '"Welcome, Sam" is on the screen', ok=not broken)
+    (folder / "metrics").mkdir()
+    for line in measured(t0):
+        with open(folder / "metrics" / f"{line[0]}.jsonl", "a") as out:
+            out.write(json.dumps(line[1]) + "\n")
+    (folder / "metrics" / "probes.json").write_text(json.dumps({p["name"]: {"status": "ok", "note": ""} for p in PROBES}))
+    (folder / "session.json").write_text(json.dumps({"probes": PROBES}))
+    found = metrics.load(folder)
+    for glob, stat, below in (("host/vm-cpu", "p95", 80), ("net/*", "max", 2 if broken else 10)):
+        value, last = found.stat(glob, stat), found.select(glob)[-1]
+        unit = found.unit(last.m, last.kind)
+        at(15.6, "check", f"{glob} {stat} below {below} in the run", ok=value < below,
+           detail=f"{stat} {metrics.number(value)}{'' if unit in ('%', '') else ' '}{unit}",
+           budget={"glob": glob, "stat": stat, "below": below, "above": None})
     hold(15.5, 17.0)
 
     cache = {}
@@ -119,12 +148,9 @@ def demo(folder, broken=False):
             times.write(f"{t0 + t:.3f} {t0 + t + 0.03:.3f}\n")
     (folder / "screen.txt").write_text(f"{W} {H}\n")
     (folder / "events.jsonl").write_text("".join(json.dumps(e) + "\n" for e in events))
-    (folder / "metrics").mkdir()
-    (folder / "metrics" / "host-load.jsonl").write_text("".join(json.dumps(line) + "\n" for line in host_load(t0)))
-    (folder / "metrics" / "probes.json").write_text(json.dumps({"host-load": {"status": "ok", "note": "", "kept": 68}}))
     (folder / "session.json").write_text(json.dumps({
         "version": VERSION, "title": "Sign-up demo",
         "about": "A new user makes an account in a made-up app, drawn frame by frame to show what proofreel makes. The wait for the server plays fast.",
         "meta": {"": "proofreel demo, run with a typo" if broken else "proofreel demo"},
-        "probes": [{"name": "host-load", "version": "1", "where": "host", "values": {}, "tracks": TRACKS}]}))
+        "probes": [{**p, "version": "1", "where": "host", "values": {}} for p in PROBES]}))
     print(render(folder))

@@ -191,8 +191,9 @@ def render(folder, framed=True, width=None, crf=20, target=30):
     end = max(times[-1] - start, max((e.get("end", e["t"]) for e in rel), default=0) + 2.0)
     length, clock, camera = video(folder, rel, frames, times, start, end, framed, width, crf, target)
     shots(folder, rel, frames, times, start)
-    run = page.write(folder, info, rel, length, end, clock, camera)
+    found = metrics.load(folder)
+    run = page.write(folder, info, rel, length, end, clock, camera, found.page(start, end, clock.video, rel))
     size = (folder / "session.mp4").stat().st_size / 1e6
     return (f"{run['verdict'].capitalize()}. {end:.0f} s of screen in a {length:.0f} s video, {size:.1f} MB. "
             f"Page: {folder / 'index.html'}" + (f"\n{path_line(run['states'])}" if run["states"] else "")
-            + "".join(f"\n{line}" for line in metrics.load(folder).summary(limit=8)))
+            + "".join(f"\n{line}" for line in found.summary(limit=8)))
