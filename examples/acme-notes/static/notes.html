@@ -1,0 +1,22 @@
+<!doctype html>
+<meta charset="utf-8">
+<link rel="icon" href="data:,">
+<title>Your notes</title>
+<style>
+body { font: 24px system-ui; margin: 0; background: #f4f1ea; color: #222; }
+main { max-width: 900px; margin: 40px auto; background: #fff; padding: 32px 48px; border-radius: 16px; }
+input, textarea, button { font: inherit; padding: 10px 14px; width: 100%; box-sizing: border-box; margin-top: 12px; }
+button { background: #2b6cb0; color: #fff; border: 0; border-radius: 8px; }
+li { margin: 8px 0; }
+</style>
+<main>
+  <h1>Your notes</h1>
+  <p id="who"></p>
+  <input id="q" placeholder="Search notes">
+  <ul id="list"></ul>
+  <input id="title" placeholder="Title">
+  <textarea id="body" placeholder="Write a note" rows="2"></textarea>
+  <button id="save">Save note</button>
+  <p id="status"></p>
+</main>
+<script src="/app.js"></script>

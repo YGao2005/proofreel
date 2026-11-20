@@ -44,6 +44,8 @@ proofreel check cmd "curl -sf localhost:8080/health" --label "The server is up"
 proofreel stop                               # makes session.mp4, index.html, poster.jpg, shots/
 ```
 
+To try it on an app that you can run, record the made-up web app in [`examples/acme-notes`](examples/acme-notes).
+
 Checks:
 
 | Check | Passes when |
@@ -126,6 +128,8 @@ the Journeys tab lists them with their result, checks passed, and length; a clic
 journey that made no video shows its error in place of the video. The suite prints PASS or FAIL for each journey,
 then the same output as `publish`, and exits 1 if a journey failed.
 
+![The Journeys tab of a suite of three Acme Notes journeys, all three passing.](docs/journeys.png)
+
 ### States: the flow as a state machine
 
 Put `state <name>` where the app should be, such as `state "Sign in"`. The waits and checks after it, up to the next
@@ -190,6 +194,8 @@ a waterfall of the spans that have `phases`. The track fields `label`, `unit`, `
 guide line at) set how a row looks. A run keeps at most 200 KB of metrics: up to 600 bins per series, 2000 spans
 (failed first, then the slowest, then a spread), and 1000 marks. Query strings are cut from labels. In a review
 folder, the newest 6 runs, and every journey of the newest suite run, keep their rows; older runs keep the numbers.
+
+![The Network tab of a search run that a failed request marked Problem: a red 500 row in the request waterfall.](docs/network-budget-fail.png)
 
 **Network requests** (`--probe network`, Linux run VMs, `pip install mitmproxy`): a proxy on the host sees each
 HTTP and HTTPS request that Chromium in the guest makes. Each request is a span in `net/<host>`, with its method and
@@ -360,6 +366,8 @@ proofreel start slow-load --condition slow-network                    # profile=
 proofreel start slow-load --condition slow-network:profile=lossy-wifi,loss=20%
 proofreel start slow-load --condition slow-network:profile=none,latency=200ms
 ```
+
+![The Stats tab of the same search run on a 3g network, with a 736 ms largest contentful paint.](docs/stats-slow-network.png)
 
 | Condition | Fakes | Check |
 |---|---|---|

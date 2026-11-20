@@ -1,0 +1,19 @@
+from linux
+probe network
+probe browser
+start sign-in --title "Sign in" --about "A returning user signs in and sees their notes."
+state Home
+step "Open Acme Notes"
+vm sh "browse ${URL:-http://10.0.2.2:8791}/"
+wait-text "Welcome back" 30
+state "Sign in"
+step "Sign in"
+click-text "Email"
+type "sam@example.com"
+click-text "Sign in"
+state "Notes"
+wait-text "Your notes" 20
+check text "Signed in as sam@example.com"
+check metric net/10.0.2.2 p95 --below 0.5
+check metric net/10.0.2.2 failed --below 1
+stop
