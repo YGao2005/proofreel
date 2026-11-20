@@ -83,3 +83,10 @@ def test_main_exits_1_for_a_failed_check_and_2_for_a_problem(monkeypatch, capsys
 def test_a_command_that_returns_a_value_does_not_become_the_exit_code(monkeypatch):
     monkeypatch.setattr(cli.vms, "up", lambda *a, **k: {"vm": "pr-run.vm"})
     assert cli.command(["vm", "up", "linux"]) is None
+
+
+def test_version_prints_the_package_version(capsys):
+    from proofreel import __version__
+    with pytest.raises(SystemExit):
+        cli.parser().parse_args(["--version"])
+    assert capsys.readouterr().out.strip() == f"proofreel {__version__}"

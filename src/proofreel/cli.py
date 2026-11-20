@@ -63,7 +63,7 @@ import sys
 import time
 from pathlib import Path
 
-from . import HOME, Problem, ax, conditions, flow, guest, metrics, plugins, probes, recording
+from . import HOME, Problem, __version__, ax, conditions, flow, guest, metrics, plugins, probes, recording
 from .recording import log
 from . import vm as vms
 from .screen import Screen, center, find, fold, inside, matches, poll, screen_text, wait_for
@@ -275,6 +275,7 @@ class Parser(argparse.ArgumentParser):
 
 def parser():
     p = Parser(prog="proofreel", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("--version", action="version", version=f"proofreel {__version__}")
     p.add_argument("--vnc")
     p.add_argument("--password")
     sub = p.add_subparsers(dest="command", required=True)
