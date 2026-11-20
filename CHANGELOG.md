@@ -11,3 +11,5 @@ The first release. proofreel records a coding agent driving an app in a VM and t
 - **Conditions:** `slow-network`, `offline`, `no-microphone`, `bluetooth-headset-call-mode`, `quarantined-download`, `run-from-dmg`.
 - **Probes and budgets:** `host-load`, `processes`, `network`, `browser`, and input latency from the frames; `check metric` fails a run on a budget; `stats` prints a summary.
 - **Crash and hang reports** from macOS guests.
+- **Docs:** the README is the front page, with a tour video of the review page; the reference is in docs/. `tools/readme_media.py` makes the tour again from a review folder.
+- **`proofreel --version`.**
