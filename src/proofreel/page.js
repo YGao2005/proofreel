@@ -209,7 +209,7 @@ function render() {
     show();
     const row = body.querySelector(`#pane-${name} [data-t="${t}"]`);
     if (!row) return;
-    row.scrollIntoView({ block: "nearest" });
+    row.scrollIntoView({ block: "center" });
     row.classList.add("hit");
     setTimeout(() => row.classList.remove("hit"), 1200);
   };
