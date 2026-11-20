@@ -19,6 +19,13 @@ test("budgets count apart from screen checks, and the verdict uses the page word
   assert.strictEqual(Verdict.summary(run([], { verdict: "shown" })).verdict, "none");
 });
 
+test("a tally reads as the words of the header and of a state heading", () => {
+  const events = [check(1, "a", true), check(2, "b", false), budget(4, "net/*", "failed", 1, false, "failed 2"), budget(5, "net/*", "p95", 1, true, "p95 0.1 s")];
+  assert.deepStrictEqual(Verdict.words(Verdict.tally(events)), ["1/2 checks", "1 budget failed"]);
+  assert.deepStrictEqual(Verdict.words(Verdict.tally([budget(4, "net/*", "p95", 1, true, "p95 0.1 s")])), ["1 budget passed"]);
+  assert.deepStrictEqual(Verdict.words(Verdict.tally([])), []);
+});
+
 test("budgets read as a sentence from the metric, stat, and limit", () => {
   const r = run([]);
   assert.strictEqual(Verdict.budgetText({ glob: "net/*", stat: "failed", below: 1, above: null }, r, "failed 1"), "Failed requests: 1 (limit 0)");

@@ -26,7 +26,7 @@ const Machine = (() => {
   // point on each layer that it crosses. Each layer is sorted by the mean place of its neighbours, down and up a few
   // times, to cut crossings. Edges that go back run in lanes at the side nearer to where they start.
   // size(id) gives a node's [width, height]. Returns nodes with x, y, w, h, and edges with an SVG path d and a
-  // label place [x, y, anchor].
+  // label place [x, y, anchor, slope] (the slope is how far the curve runs sideways for each unit down at the label).
   function layout(graph, size, gap = { x: 28, y: 56, lane: 14 }) {
     const out = new Map(graph.nodes.map(n => [n.id, []]));
     for (const e of graph.edges) out.get(e.from).push(e);
@@ -113,7 +113,8 @@ const Machine = (() => {
         for (let i = 1; i < points.length; i++) d += i % 2 ? curve(points[i - 1], points[i]) : ` L${points[i]}`;
         // An edge that leans left keeps its label on the left, so the labels of a branch do not run into each other.
         const lean = Math.sign(points[1][0] - points[0][0]);
-        label = [(points[0][0] + points[1][0]) / 2, (points[0][1] + points[1][1]) / 2, lean < 0 ? "end" : "start"];
+        const slope = 1.5 * Math.abs(points[1][0] - points[0][0]) / Math.max(1, points[1][1] - points[0][1]);
+        label = [(points[0][0] + points[1][0]) / 2, (points[0][1] + points[1][1]) / 2, lean < 0 ? "end" : "start", slope];
       }
       return { ...r.edge, back: r.back, d, label };
     });
