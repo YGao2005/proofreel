@@ -110,7 +110,10 @@ def test_click_text_without_the_tree_clicks_the_words(macos, monkeypatch):
         raise TimeoutError("ssh timed out")
 
     monkeypatch.setattr(cli.ax, "elements", denied)
+    notes = []
+    monkeypatch.setattr(cli, "log", lambda kind, text, *_a, **_k: notes.append((kind, text)))
     assert cli.locate(args("click-text", "Import", "--timeout", "0"), None, macos) == [(400, 100), (700, 600)]
+    assert notes == [("note", "The accessibility tree could not be read (ssh timed out), so click-text reads the screen.")]
     assert cli.locate(args("click-text", "Import", "--in", "600,500,300,200"), None, None) == [(700, 600)]
     with pytest.raises(Problem, match="--role reads the accessibility tree"):
         cli.locate(args("click-text", "Import", "--role", "AXButton"), None, None)

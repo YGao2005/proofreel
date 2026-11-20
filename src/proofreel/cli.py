@@ -210,6 +210,7 @@ def locate(a, screen, run):
                 if a.role:
                     raise Problem(f"The accessibility tree could not be read: {error}")
                 tree, found = False, []
+                log("note", f"The accessibility tree could not be read ({error}), so click-text reads the screen.")
             if not a.role:
                 found = [e for e in found if any(fold(name) == want for name in ax.names(e))]
             if a.role or len(found) >= a.nth:
