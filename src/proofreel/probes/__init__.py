@@ -3,8 +3,9 @@
 A probe is a plugin (see plugins.py): probe.toml and scripts. `where` says where it runs: on the host (run.py, run
 with this Python) or in the guest (run.sh or run.ps1, over SSH). `default = true` turns it on for every recording on
 its systems. `privacy` says what it can see. [tracks."<series glob>"] tells the page and `stats` how to show a series:
-label, unit, better ("lower" or "higher"), max. A host probe with `tunnel = <guest port>` gets PROOFREEL_TUNNEL, a host
-port on 127.0.0.1 that reaches that port on the guest's 127.0.0.1 while it runs.
+label, unit, better ("lower" or "higher"), max, and bands (values the page draws a guide line at). A host probe with
+`tunnel = <guest port>` gets PROOFREEL_TUNNEL, a host port on 127.0.0.1 that reaches that port on the guest's
+127.0.0.1 while it runs.
 
 The protocol: a probe prints one JSON object on each line.
   {"m": "cpu/app", "v": 42}                               a sample of the series cpu/app

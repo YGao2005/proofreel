@@ -1,10 +1,12 @@
 import json
+from pathlib import Path
 import sys
 import time
 
 import pytest
 
 from proofreel import Problem, cli, flow, metrics, probes
+from proofreel.motion import Clock
 
 
 def folder_with(tmp_path, lines, probe="p", tracks=None):
@@ -65,8 +67,9 @@ def test_a_budget_passes_fails_or_cannot_run_without_data(tmp_path):
     now = time.time()
     folder = folder_with(tmp_path, [{"m": "host/cpu", "v": v, "a": now - 3 + n} for n, v in enumerate((20, 30, 95, 40))],
                          tracks={"host/cpu": {"unit": "%"}})
-    ok, label, detail = metrics.check(folder, "host/cpu", "max", below=80, wait=0)
+    ok, label, detail, fields = metrics.check(folder, "host/cpu", "max", below=80, wait=0)
     assert not ok and label == "host/cpu max below 80 in the run" and detail == "max 95%"
+    assert fields == {"budget": {"glob": "host/cpu", "stat": "max", "below": 80, "above": None}}
     assert metrics.check(folder, "host/cpu", "max", below=80, since=now - 0.5, window="the last 0.5 s", wait=0)[0]
     assert metrics.check(folder, "host/*", "mean", above=10, wait=0)[0]
     with pytest.raises(Problem, match="No gpu/\\* data in the run. Series: host/cpu"):
@@ -104,3 +107,63 @@ def test_a_flow_probe_line_goes_to_its_start_and_a_bad_budget_stops_the_flow_fir
     bad.write_text("start x\ncheck metric host/cpu p95\n")
     with pytest.raises(Problem, match="bad.flow:2: check metric takes one of"):
         flow.load(bad, {}, cli.parse)
+
+
+def an_hour(spike_at=2000.0):
+    """A made-up 1-hour session: 1 Hz samples of 6 series with one spike, many clicks, requests with phases and a
+    secret in the URL, and marks. The clock plays 100 s to 3500 s at 8x."""
+    start, ms = 1_800_000_000.0, []
+    for n in range(3600):
+        for k, m in enumerate(("host/cpu", "host/vm-cpu", "host/other-cpu", "host/load", "cpu/app", "mem/app")):
+            v = 99.0 if m == "host/cpu" and n == spike_at else 10.0 + k + (n % 7)
+            ms.append(metrics.Measure("p", m, start + n, start + n, v, None, None))
+    for n in range(5000):
+        ms.append(metrics.Measure("input", "input/click", start + n * 0.7 + 0.2, 0, None, 0.05 + (n % 9) / 100, n % 500 != 7,
+                                  {"label": f'click "Button {n}"'}))
+        ms.append(metrics.Measure("network", "net/GET api.acme.test", start + n * 0.7 + 0.5, 0, None, 0.1 + (n % 13) / 10,
+                                  n % 400 != 3, {"label": f"GET https://api.acme.test/notes/{n}?token=SECRET",
+                                                 "phases": {"connect": 0.01, "wait": 0.08, "receive": 0.01}}))
+    ms += [metrics.Measure("app", "app/frame", start + n * 1.1, 0, None, None, None) for n in range(3000)]
+    clock = Clock([[0.0, 0.0], [100.0, 100.0], [3500.0, 525.0], [3600.0, 625.0]])
+    return metrics.Metrics(ms, {"host/cpu": {"label": "Host CPU", "unit": "%", "max": 100}}, {"p": {"status": "ok"}}), start, clock
+
+
+def test_the_page_metrics_of_an_hour_fit_in_200_kb_and_keep_failures_and_no_secret():
+    found, start, clock = an_hour()
+    data = found.page(start, 3600, clock.video)
+    text = json.dumps(data)
+    assert len(text) <= metrics.LIMIT and "SECRET" not in text
+    series = {s["m"]: s for s in data["series"]}
+    assert all(len(s["points"]) <= 600 for s in series.values() if s["kind"] == "sample")
+    clicks, requests = series["input/click"], series["net/GET api.acme.test"]
+    assert clicks["kind"] == "span" and clicks["unit"] == "s" and clicks["stats"]["failed"] == 10
+    assert sum(1 for s in clicks["spans"] if s[2] is False) == 10 and len(clicks["spans"]) + clicks["more"] == 5000
+    assert requests["spans"][0][4] == {"connect": 0.01, "wait": 0.08, "receive": 0.01}
+    assert series["app/frame"]["kind"] == "mark" and len(series["app/frame"]["marks"]) <= 1000
+    assert series["host/cpu"]["label"] == "Host CPU" and series["host/cpu"]["stats"]["max"] == 99
+
+
+def test_a_spike_inside_an_8x_stretch_stays_in_its_bin():
+    found, start, clock = an_hour(spike_at=2000.0)
+    cpu = next(s for s in found.page(start, 3600, clock.video)["series"] if s["m"] == "host/cpu")
+    top = max(cpu["points"], key=lambda p: p[-1])
+    assert top[-1] == 99 and 100 < top[0] < 3500
+    assert max(p[-1] for p in cpu["points"] if p is not top) < 99
+
+
+def test_a_budget_lists_the_series_it_judged():
+    found, start, clock = an_hour()
+    event = {"t": 12.0, "kind": "check", "text": "host/* p95 below 80 in the run", "ok": True, "detail": "p95 17%",
+             "budget": {"glob": "host/*", "stat": "p95", "below": 80, "above": None}}
+    budget = found.page(start, 3600, clock.video, [event])["budgets"][0]
+    assert budget["ok"] and budget["series"] == ["host/cpu", "host/vm-cpu", "host/other-cpu", "host/load"]
+
+
+def test_requests_from_the_network_probe_keep_their_phases_and_status():
+    start = 1795134462.315
+    data = metrics.load(Path(__file__).parent / "fixtures" / "network").page(start, 26.74, lambda t: t)
+    net = data["series"][0]
+    assert net["m"] == "net/10.0.2.2" and net["kind"] == "span" and net["unit"] == "s" and net["stats"]["failed"] == 1
+    assert net["spans"][3] == [15.699, 0.8263, True, "GET 10.0.2.2:52356/slow",
+                               {"connect": 0.0005, "wait": 0.8179, "receive": 0.0027}, 200]
+    assert [s[5] for s in net["spans"]] == [200, 200, 200, 200, 500, 200]

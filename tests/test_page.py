@@ -47,3 +47,19 @@ def test_publish_into_a_version_1_folder_keeps_the_old_runs_and_a_backup(tmp_pat
     assert json.loads((out / "runs.v1.json").read_text()) == json.loads(FIXTURE.read_text())
     assert list(files) == [f"runs/{session.name}/session.mp4"]
     assert not list(out.glob("*.tmp"))
+
+
+def test_the_newest_runs_keep_their_curves_and_older_runs_keep_stats_only(tmp_path):
+    out = tmp_path / "review"
+    series = {"m": "host/cpu", "kind": "sample", "unit": "%", "stats": {"count": 2, "failed": 0, "max": 9},
+              "points": [[0.5, 1], [1.5, 9]]}
+    for n in range(page.CURVES + 2):
+        folder = tmp_path / f"run-{n}"
+        folder.mkdir()
+        (folder / "run.json").write_text(json.dumps({
+            "version": page.VERSION, "id": folder.name, "title": "t", "verdict": "works", "events": [], "clock": [[0, 0]],
+            "metrics": {"series": [series], "budgets": [], "probes": {}}}))
+        page.publish(folder, out)
+    runs = page.load_runs(out)
+    assert [("points" in r["metrics"]["series"][0]) for r in runs] == [False, False] + [True] * page.CURVES
+    assert all(r["metrics"]["series"][0]["stats"]["max"] == 9 for r in runs)

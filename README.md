@@ -149,6 +149,16 @@ between two frames. It ignores what was already changing just before (a caret, a
 `input/*` is decided at `stop`, which then exits 1 if it failed:
 `check metric input/* p95 --below 0.2`.
 
+On the page, each series is a row under the scrub bar, on the video's time axis: samples as a line in their lo-hi
+envelope, spans in rows (`+N` when more do not fit), and marks as ticks. Stretches that play fast are hatched and
+labelled with their speed, such as `8x`. A chip per group (the part of the series id before `/`) hides its rows, and
+a pin puts a series in the readout at the bottom left of the video. The page remembers both for each viewer. The Stats
+tab has input latency, then p50, p95, and max for each series with its budgets, failing ones first. The Network tab is
+a waterfall of the spans that have `phases`. The track fields `label`, `unit`, `max`, and `bands` (values to draw a
+guide line at) set how a row looks. A run keeps at most 200 KB of metrics: up to 600 bins per series, 2000 spans
+(failed first, then the slowest, then a spread), and 1000 marks. Query strings are cut from labels. In a review
+folder, the newest 6 runs keep their rows; older runs keep the numbers.
+
 A probe is a folder like a condition (`probe.toml` and a script), found in the same places. It runs on the host
 (`run.py`) or in the guest (`run.sh`, `run.ps1`) and prints one JSON line for each measure:
 `{"m": "cpu/app", "v": 42}` is a sample, `{"m": "net/GET /items", "d": 0.31, "ok": true}` is a span (something that
