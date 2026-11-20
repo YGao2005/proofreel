@@ -83,10 +83,9 @@ class Metrics:
             return sum(values) / len(values)
         return {"min": min, "max": max}[stat](values) if stat in ("min", "max") else percentile(values, int(stat[1:]))
 
-    @property
-    def high_water(self):
-        """When the newest line arrived."""
-        return max((x.a for x in self.measures), default=0)
+    def high_water(self, glob):
+        """When the newest line of the series arrived."""
+        return max((x.a for x in self.select(glob)), default=0)
 
     def track(self, m):
         return next((track for glob, track in self.tracks.items() if fnmatch.fnmatchcase(m, glob)), {})
@@ -144,14 +143,14 @@ def load(folder):
 
 
 def check(folder, glob, stat, below=None, above=None, since=None, window="the run", wait=2.0):
-    """One budget, as (ok, label, detail). It waits up to wait s for a line that came after it began, so it judges
-    the screen as it is now. With no data in the window, it cannot run."""
+    """One budget, as (ok, label, detail). It waits up to wait s for a line of the series that came after it began, so
+    it judges the screen as it is now. With no data in the window, it cannot run."""
     if (below is None) == (above is None):
         raise Problem("check metric takes one of --below N or --above N.")
     asked = time.time()
     while True:
         metrics = load(folder)
-        if metrics.high_water >= asked or time.time() >= asked + wait:
+        if metrics.high_water(glob) >= asked or time.time() >= asked + wait:
             break
         time.sleep(0.25)
     label = f"{glob} {stat} {'below ' + number(below) if below is not None else 'above ' + number(above)} in {window}"

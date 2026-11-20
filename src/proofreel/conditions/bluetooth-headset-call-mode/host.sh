@@ -7,4 +7,3 @@ cp Info.plist "$bundle/Info.plist"
 clang -O2 -bundle -arch arm64 -mmacosx-version-min=14.0 -DCALL_RATE="$RATE.0" -framework CoreAudio -framework CoreFoundation \
   headset.c -o "$bundle/MacOS/ProofreelHeadset"
 codesign --force --sign - "$OUT/ProofreelHeadset.driver"
-swiftc -O -target arm64-apple-macos14 probe.swift -o "$OUT/probe"

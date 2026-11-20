@@ -10,7 +10,7 @@ Every manifest has name (the folder's name), version, os (the guest systems it w
 reproduce), and [values] (name = default; "" means the value is required). Each kind adds its own fields and says
 which scripts it needs. A step that runs in the guest is <step>.sh on macOS and Linux, and <step>.ps1 on Windows
 (guest.py decides). host.sh, if it is there, runs on the host first, in a copy of the folder ($OUT), and that copy
-goes to the guest.
+goes to the guest. For a macOS guest, each <name>.swift in it is built on the host to the binary <name>.
 """
 
 import os
@@ -116,6 +116,7 @@ def stage(run, kind, name, values):
                                   capture_output=True, text=True)
             if done.returncode:
                 raise Problem(f"{name}: host.sh failed: {(done.stdout + done.stderr).strip()[-800:]}")
+        run.guest.build(copy)
         target = folder(run, kind, path.name)
         run.ssh(run.guest.fresh_folder(target), timeout=30)
         run.upload(str(copy), target.rsplit("/", 1)[0])

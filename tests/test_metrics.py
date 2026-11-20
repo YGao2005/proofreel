@@ -104,3 +104,11 @@ def test_a_flow_probe_line_goes_to_its_start_and_a_bad_budget_stops_the_flow_fir
     bad.write_text("start x\ncheck metric host/cpu p95\n")
     with pytest.raises(Problem, match="bad.flow:2: check metric takes one of"):
         flow.load(bad, {}, cli.parse)
+
+
+def test_a_budget_waits_for_its_own_series_not_for_another_probe(tmp_path):
+    now = time.time()
+    folder = folder_with(tmp_path, [{"m": "cpu/app", "v": 5, "a": now - 1}, {"m": "host/cpu", "v": 9, "a": now + 60}])
+    began = time.time()
+    assert metrics.check(folder, "cpu/app", "max", below=10, wait=0.5)[0]
+    assert time.time() - began >= 0.5

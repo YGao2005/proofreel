@@ -2,13 +2,15 @@
 
 A guest owns the jobs that only some systems have, or that each system does in its own way: crash reports, a step
 before a cold save, modifier keys that its VNC server sends differently or cannot send, the accessibility tree,
-helpers that run in the guest, how to find a running process, and the folder and shell for plugins (`home`,
+helpers that run in the guest and the plugin helpers built for it, how to find a running process, and the folder and shell for plugins (`home`,
 `script`, `run_script`). A new system, or a new
 job for one, is a change in this file only.
 """
 
 import shlex
+import shutil
 import time
+from pathlib import Path
 
 from . import Problem, crash, swift_tool
 
@@ -62,6 +64,9 @@ class Guest:
         """Only press the key down, or only release it."""
         return screen.press(key, down)
 
+    def build(self, folder):
+        """Build the helpers of a plugin's staged copy on the host, before it goes to the guest."""
+
     def running(self, run, process):
         """A process with this exact name runs in the run VM."""
         return run.ssh(f"pgrep -x {shlex.quote(process)}", check=False, timeout=30).returncode == 0
@@ -78,8 +83,17 @@ class MacOS(Guest):
     home = "/Users/Shared/proofreel"
     ax = True
 
+    target = ("-target", "arm64-apple-macos14")
+
     def mark(self, run):
         crash.mark(run)
+
+    def build(self, folder):
+        """Each <name>.swift becomes the binary <name> next to it. With no swiftc on the host, it is left out, and the
+        plugin's script says so."""
+        if shutil.which("swiftc"):
+            for source in Path(folder).glob("*.swift"):
+                shutil.copy(swift_tool(source.resolve(), *self.target), source.with_suffix(""))
 
     def harvest(self, run, folder, app, started):
         return crash.harvest(run, folder, app, started)
@@ -87,7 +101,7 @@ class MacOS(Guest):
     def helper(self, run, source, *args, timeout=60):
         """Run a Swift helper of this package in the run VM over SSH. It is compiled on the host, and copied to the
         guest the first time. A process that SSH starts has the Accessibility permission of sshd-keygen-wrapper."""
-        binary = swift_tool(source, "-target", "arm64-apple-macos14")
+        binary = swift_tool(source, *self.target)
         command = shlex.join([f"./.{binary.name}", *args])
         result = run.ssh(command, check=False, timeout=timeout)
         if result.returncode == 127:
