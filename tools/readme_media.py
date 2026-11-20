@@ -26,6 +26,7 @@ KINDS = {
     "show": '.flow [aria-label=Show] button:text-is("{}")',
     "tracks": "button.fold",
     "tab": '[role=tab][data-view="{}"]',
+    "cause": "button.cause",
 }
 ACTIONS = ("goto", "click", "look")
 
@@ -34,19 +35,19 @@ FAIL_RUN = "Search notes, tags down"
 
 TOUR = [
     {"action": "goto", "target": ("run", PASS_RUN), "caption": "A journey that passed", "pause": 1.5},
-    {"action": "click", "target": ("play", None), "caption": "Play the review video", "pause": 5, "shot": "review-page.png"},
-    {"action": "look", "target": None, "caption": "The flow lights the current state", "pause": 4},
-    {"action": "click", "target": ("node", 0), "caption": "Click a state to jump there", "pause": 3.5},
-    {"action": "click", "target": ("node", 1), "caption": "Click another state", "pause": 3},
+    {"action": "click", "target": ("play", None), "caption": "Play the review video", "pause": 4.5, "shot": "review-page.png"},
+    {"action": "look", "target": None, "caption": "The flow lights the current state", "pause": 3.5},
+    {"action": "click", "target": ("node", 0), "caption": "Click a state to jump there", "pause": 3},
+    {"action": "click", "target": ("node", 1), "caption": "Its checks show under the flow", "pause": 3},
     {"action": "click", "target": ("show", "Steps"), "caption": "Or list the steps", "pause": 1.5},
-    {"action": "click", "target": ("row", 1), "caption": "Click a step to jump there", "pause": 3.5},
+    {"action": "click", "target": ("row", 1), "caption": "Click a step to jump there", "pause": 3},
     {"action": "click", "target": ("show", "Flow"), "caption": "Back to the flow", "pause": 1},
-    {"action": "click", "target": ("tracks", None), "caption": "Open Tracks under the video", "pause": 4},
+    {"action": "click", "target": ("tracks", None), "caption": "Tracks share the video's time axis", "pause": 4},
     {"action": "goto", "target": ("run", FAIL_RUN), "caption": "Now a run that failed", "pause": 1.5},
-    {"action": "look", "target": None, "caption": "Tracks open red: budget failed", "pause": 4, "shot": "budget-failed.png"},
-    {"action": "click", "target": ("bad-node", None), "caption": "The failed check is in the flow", "pause": 3.5},
-    {"action": "click", "target": ("tab", "network"), "caption": "The failed request is here", "pause": 4},
-    {"action": "click", "target": ("tab", "stats"), "caption": "Numbers for every measure", "pause": 4},
+    {"action": "look", "target": None, "caption": "Tracks open red: budget failed", "pause": 3.5, "shot": "budget-failed.png"},
+    {"action": "click", "target": ("cause", None), "caption": "The cause line opens Network", "pause": 4},
+    {"action": "click", "target": ("bad-node", None), "caption": "Flow detail shows the failing check", "pause": 3.5},
+    {"action": "click", "target": ("tab", "stats"), "caption": "Stats: each budget as a sentence", "pause": 4},
     {"action": "click", "target": ("tab", "journeys"), "caption": "Every journey of the suite", "pause": 4},
 ]
 
@@ -61,7 +62,7 @@ addEventListener('DOMContentLoaded', () => {
       border-radius: 50%; border: 2px solid #3b82f6; animation: pr-ring .5s ease-out forwards; }
     @keyframes pr-ring { to { transform: scale(3.2); opacity: 0; } }
     .pr-caption { position: fixed; left: 50%; top: 12px; translate: -50% 0; z-index: 2147483647; pointer-events: none;
-      padding: 9px 20px; border-radius: 999px; background: rgba(17,17,20,.92); color: #fff; font: 500 19px/1.2 Inter, system-ui, sans-serif; }
+      padding: 9px 20px; border-radius: 999px; background: rgba(17,17,20,.92); color: #fff; font: 500 19px/1.2 'IBM Plex Sans', system-ui, sans-serif; }
     .pr-hidden { display: none !important; }`;
   document.head.append(css);
   const cursor = document.createElement('div');

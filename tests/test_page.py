@@ -113,3 +113,13 @@ def test_every_journey_of_the_newest_suite_run_keeps_its_curves(tmp_path):
 def test_a_run_published_before_the_page_counted_checks_loses_that_meta():
     run = {"id": "x", "version": page.VERSION, "events": [], "meta": ["from state linux", "3/4 checks pass", "7 s of screen in a 7 s video"]}
     assert page.upgrade(run)["meta"] == ["from state linux"]
+
+
+def test_a_budget_check_of_an_older_run_is_marked_from_the_run_budgets():
+    budget = {"glob": "net/*", "stat": "failed", "below": 1.0, "above": None, "ok": False, "detail": "failed 1", "series": []}
+    run = {"id": "x", "version": page.VERSION, "meta": [], "metrics": {"budgets": [budget], "series": []},
+           "events": [{"t": 1, "kind": "check", "text": '"A" is on the screen', "ok": True},
+                      {"t": 2, "kind": "check", "text": "net/* failed below 1 in the run", "ok": False}]}
+    events = page.upgrade(run)["events"]
+    assert "budget" not in events[0]
+    assert events[1]["budget"] == {"glob": "net/*", "stat": "failed", "below": 1.0, "above": None}
