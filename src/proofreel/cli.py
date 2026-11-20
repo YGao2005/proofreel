@@ -18,11 +18,14 @@
   hold <key> <seconds|down|up> | tap <key> [count]      Hold a key, or only press or release it; tap it count times.
                                                         A macOS run VM posts modifiers (fn, option, command, control,
                                                         shift; r... for the right key) in the guest.
-  click-text <text> [--nth N] [--timeout S] [--if-shown]   Find the words on the screen, then click them.
+  click-text <text> [--nth N] [--timeout S] [--if-shown] [--role R] [--in BOX]
+                                                        Click the words: a button with this label in the AX tree of
+                                                        a macOS run VM first, else the matched words on the screen.
   ax [--app NAME] [--find TEXT] [--json] | click-ax <label> [--role R] [--app NAME] [--nth N] [--timeout S]
                                                         Read the accessibility tree of a run VM, or click by label.
   wait-text <text> [seconds] | find [text]              Wait for words, or print the words on the screen.
   check text|no-text|ax|no-ax <text> [seconds]          A pass or fail on the page. Text checks wait up to seconds.
+                                                        --in x,y,w,h or --in <element label> looks only there.
   check cmd|sh "<command>" [seconds] [--label L]        A command on the host (cmd) or in the run VM (sh) exits 0;
                                                         it runs again until it does or the seconds pass.
   check running <process>                               A process with this exact name runs in the run VM.
@@ -37,6 +40,9 @@
   run <flow> [--set NAME=VALUE]                         Run a flow file: one proofreel command per line. A line
                                                         `condition <name>` refuses a run VM whose state lacks it, or
                                                         applies a condition that lasts one recording.
+  suite <flows or folders...> [--state S] [--set NAME=VALUE] [--out DIR] [--title T]
+                                                        Run each flow from a new clone of its saved VM state (a flow
+                                                        line `from <state>`, or --state), and publish one page.
   render <session> [--plain] [--width W]                Make the video and page of a session again. A session is
                                                         its folder or its name in the sessions folder.
   publish <session> --out <dir>                         Add a run to a review folder: one page, every run, one URL.
@@ -60,7 +66,7 @@ from pathlib import Path
 from . import HOME, Problem, ax, conditions, flow, guest, metrics, plugins, probes, recording
 from .recording import log
 from . import vm as vms
-from .screen import Screen, center, find, screen_text, wait_for
+from .screen import Screen, center, find, fold, inside, matches, poll, screen_text, wait_for
 
 
 
@@ -105,8 +111,9 @@ def check(args, screen, run):
         if args.kind.endswith("ax"):
             found = ax.wait_for(run, screen, text, seconds, present, app=args.app, role=args.role)
             return bool(found) == present, f'"{text}" is {"" if present else "not "}in the accessibility tree', ""
-        found = wait_for(screen, text, seconds, present=present)
-        return bool(found) == present, f'"{text}" is {"" if present else "not "}on the screen', ""
+        found = wait_for(screen, text, seconds, present=present, within=scope(args.within, screen, run))
+        where = f" in {args.within}" if args.within else ""
+        return bool(found) == present, f'"{text}" is {"" if present else "not "}on the screen{where}', ""
     if args.kind in ("sh", "running"):
         run = run or vms.Run.current()
     if args.kind in ("cmd", "sh"):
@@ -161,6 +168,57 @@ def parse(words):
     return a
 
 
+def scope(where, screen, run):
+    """The box that --in names, as a function: x,y,w,h in screen pixels, or the label of an element in the
+    accessibility tree (a macOS run VM). None when --in is not given."""
+    if not where:
+        return None
+    parts = where.split(",")
+    if len(parts) == 4 and all(part.strip().isdigit() for part in parts):
+        box = [int(part) for part in parts]
+        return lambda: box
+
+    def element():
+        if not (run and run.guest.ax):
+            raise Problem(f'--in "{where}" names an element, and only a macOS run VM has the accessibility tree. '
+                          f"Give a box in pixels: --in x,y,w,h.")
+        found = ax.matches(ax.elements(run, screen), where)
+        if not found:
+            raise Problem(f'No element "{where}" is in the accessibility tree.')
+        return found[0]["box"]
+    return element
+
+
+def locate(a, screen, run):
+    """The click points of click-text. In a macOS run VM, buttons labeled exactly the text in the accessibility tree
+    come first, when there are at least --nth of them; else the matched words on the screen. With --role, only
+    elements with that role in the tree."""
+    within = scope(a.within, screen, run)
+    tree = bool(run and run.guest.ax)
+    if a.role and not tree:
+        raise Problem("--role reads the accessibility tree, and only a macOS run VM has it. Leave out --role.")
+    want = fold(a.text)
+
+    def look():
+        nonlocal tree
+        box = within() if within else None
+        if tree:
+            try:
+                found = [e for e in ax.matches(ax.elements(run, screen), a.text, a.role or "button")
+                         if box is None or inside((e["x"], e["y"]), box)]
+            except Exception as error:
+                if a.role:
+                    raise Problem(f"The accessibility tree could not be read: {error}")
+                tree, found = False, []
+                log("note", f"The accessibility tree could not be read ({error}), so click-text reads the screen.")
+            if not a.role:
+                found = [e for e in found if any(fold(name) == want for name in ax.names(e))]
+            if a.role or len(found) >= a.nth:
+                return [(e["x"], e["y"]) for e in found]
+        return [center(match) for match in matches(screen_text(screen), a.text, box)]
+    return poll(look, a.timeout)
+
+
 def run_check(args, screen, run=None):
     """Record the check and return 1 when it fails. A check that cannot run is a failed check, with the reason."""
     started = time.time()
@@ -176,19 +234,38 @@ def run_check(args, screen, run=None):
     return 0 if ok else 1
 
 
+def published(page, files, runs, new):
+    """What the Artifact tool needs: the page, every file it uses, and its runtime capabilities."""
+    from .page import CAPABILITIES
+    return json.dumps({"page": str(page.resolve()), "runs": runs, "files": files, "new": new,
+                       "capabilities": CAPABILITIES}, indent=2)
+
+
+def load_flow(path, values):
+    return flow.load(path, values, parse=parse)
+
+
 def run_flow(path, values):
-    steps = flow.load(path, values, parse=parse)
+    return play(load_flow(path, values))
+
+
+def play(steps, execute=None):
+    """Run a loaded flow on the screen, once the run VM is from its saved state and has its conditions. execute runs
+    one line (default: command); a `start` line gets the flow's probes and its conditions that last one recording."""
+    run = vms.Run.current() if vms.CURRENT.exists() else {}
+    state, have = run.get("state"), run.get("conditions", [])
+    if steps.state and steps.state != state:
+        raise Problem(f"{steps.name} starts from saved state {steps.state}, and the run VM is from {state or '(none)'}. "
+                      f"Start it: proofreel vm up {steps.state}. Or run it in a suite: proofreel suite {steps.name}.")
     kept, applied = conditions.split(steps.conditions)
-    if kept:
-        run = vms.Run.current() if vms.CURRENT.exists() else {}
-        state, have = run.get("state"), run.get("conditions", [])
-        if gaps := conditions.missing(kept, have):
-            raise Problem(f"{steps.name} needs condition {', '.join(gaps)}, and the run VM's state {state or '(none)'} "
-                          f"has {', '.join(conditions.names(have)) or 'no conditions'}. Make a state with it: proofreel "
-                          f"vm build <state> --from <base> {' '.join('--condition ' + g for g in gaps)}.")
+    if gaps := conditions.missing(kept, have):
+        raise Problem(f"{steps.name} needs condition {', '.join(gaps)}, and the run VM's state {state or '(none)'} "
+                      f"has {', '.join(conditions.names(have)) or 'no conditions'}. Make a state with it: proofreel "
+                      f"vm build <state> --from <base> {' '.join('--condition ' + g for g in gaps)}.")
     added = [f"--probe={p}" for p in steps.probes] + [f"--condition={c}" for c in applied]
-    execute = lambda words: command(words + added if words[0] == "start" else words)
-    return flow.run(steps, execute, abort=lambda message: stop(error=message) if recording.current() else None)
+    line = execute or command
+    return flow.run(steps, lambda words: line(words + added if words[0] == "start" else words),
+                    abort=lambda message: stop(error=message) if recording.current() else None)
 
 
 class Parser(argparse.ArgumentParser):
@@ -218,12 +295,15 @@ def parser():
     for name in ("state", "step", "note", "type", "shot", "wait-text", "find", "click-text"):
         s = sub.add_parser(name)
         s.add_argument("text", nargs="?" if name == "find" else None)
+        if name in ("wait-text", "find", "click-text"):
+            s.add_argument("--in", dest="within", help="look only in this box: x,y,w,h in pixels, or an element label")
         if name == "wait-text":
             s.add_argument("seconds", nargs="?", type=float, default=30)
         if name == "click-text":
             s.add_argument("--nth", type=int, default=1)
             s.add_argument("--timeout", type=float, default=10)
             s.add_argument("--if-shown", action="store_true")
+            s.add_argument("--role", help="click only an element with this role in the accessibility tree")
     s = sub.add_parser("ax")
     s.add_argument("--app")
     s.add_argument("--find")
@@ -257,6 +337,7 @@ def parser():
     s = sub.add_parser("check")
     s.add_argument("kind", choices=["text", "no-text", "ax", "no-ax", "cmd", "sh", "running", "metric"])
     s.add_argument("args", nargs="+")
+    s.add_argument("--in", dest="within", help="text checks: look only in this box (x,y,w,h) or element (a label)")
     s.add_argument("--label")
     s.add_argument("--below", type=float)
     s.add_argument("--above", type=float)
@@ -278,6 +359,12 @@ def parser():
     s = sub.add_parser("run")
     s.add_argument("flow")
     s.add_argument("--set", action="append", default=[])
+    s = sub.add_parser("suite", help="run flows, each from a new clone of its saved state, into one review page")
+    s.add_argument("flows", nargs="+", help="flow files, or folders of .flow files")
+    s.add_argument("--state", help="the state of each flow that has no line from <state>")
+    s.add_argument("--set", action="append", default=[])
+    s.add_argument("--out", help="the review folder (default: a new suite folder in the sessions folder)")
+    s.add_argument("--title")
     s = sub.add_parser("render")
     s.add_argument("dir")
     s.add_argument("--plain", action="store_true")
@@ -423,14 +510,19 @@ def command(argv):
             fields = {k: v for k, v in (("x", a.x), ("y", a.y), ("ok", a.ok), ("detail", a.detail)) if v is not None}
             return log(a.kind, a.text, a.t, a.end, **fields)
         case "run": return run_flow(a.flow, dict(v.split("=", 1) for v in a.set))
+        case "suite":
+            from . import suite
+            values = dict(v.split("=", 1) for v in a.set)
+            result, rows = suite.run(a.flows, lambda path: load_flow(path, values), play, command, a.state, a.out,
+                                     a.title)
+            print(published(*result))
+            return 1 if any(mark == "FAIL" for mark, _, _ in rows) else 0
         case "render":
             from .render import render
             return print(render(recording.session_folder(a.dir), framed=not a.plain, width=a.width))
         case "publish":
-            from .page import CAPABILITIES, publish
-            page, files, runs = publish(recording.session_folder(a.session), a.out)
-            return print(json.dumps({"page": str(page.resolve()), "runs": runs, "files": files,
-                                     "capabilities": CAPABILITIES}, indent=2))
+            from .page import publish
+            return print(published(*publish(recording.session_folder(a.session), a.out)))
         case "demo":
             from .demo import demo
             return demo(Path(a.dir), a.broken)
@@ -484,24 +576,24 @@ def act(a, screen, run):
                 *system.tap(run, screen, a.key, a.count))
         case "shot": screen.capture(a.text)
         case "find":
-            lines = find(screen, a.text) if a.text else screen_text(screen)
+            lines = find(screen, a.text, scope(a.within, screen, run)) if a.text else screen_text(screen)
             for line in lines:
                 print(f"{center(line)[0]:5} {center(line)[1]:5}  {line['text']}")
             return 1 if a.text and not lines else 0
         case "wait-text":
             started = time.time()
-            ok = bool(wait_for(screen, a.text, a.seconds))
+            ok = bool(wait_for(screen, a.text, a.seconds, within=scope(a.within, screen, run)))
             log("wait", f'wait for "{a.text}"', t=started, end=time.time(), ok=ok,
                 detail=f"seen after {time.time() - started:.1f} s" if ok else f"not seen in {a.seconds:.0f} s")
             if not ok:
                 raise Problem(f'"{a.text}" did not show in {a.seconds:.0f} s.')
         case "click-text":
-            lines = wait_for(screen, a.text, a.timeout)
-            if len(lines) < a.nth:
+            points = locate(a, screen, run)
+            if len(points) < a.nth:
                 if a.if_shown:
                     return
                 raise Problem(f'"{a.text}" is not on the screen.')
-            x, y = center(lines[a.nth - 1])
+            x, y = points[a.nth - 1]
             log("click", f'click "{a.text}"', *screen.click(x, y), x=x, y=y)
         case "ax":
             if a.json:

@@ -104,7 +104,7 @@ def load_runs(out):
 
 def document(runs):
     data = json.dumps(runs).replace("</", "<\\/")
-    title = html.escape(runs[-1]["title"])
+    title = html.escape((runs[-1].get("suite") or runs[-1])["title"])
     return f"""<title>{title}</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=IBM+Plex+Mono&display=swap">
@@ -123,12 +123,19 @@ def write(folder, info, events, length, real, clock, camera, measured=None):
     return run
 
 
-def publish(session, out):
-    """Add a session to a review folder that holds every run of one journey, for one artifact URL. Returns the
-    files of this run (published path -> source) for the Artifact tool, and the page path."""
-    session, out = Path(session), Path(out)
-    run = upgrade(json.loads((session / "run.json").read_text()))
-    target = out / "runs" / run["id"]
+def stub(id, title, error, **fields):
+    """A run with no video, such as a suite journey that stopped before it recorded."""
+    return {"version": VERSION, "id": id, "title": title, "about": "", "error": error, "verdict": "problem",
+            "meta": [], "base": "", "length": 0, "real": 0, "overlay": False, "camera": [], "video": False,
+            "when": time.strftime("%Y-%m-%d %H:%M"), "clock": [[0.0, 0.0]], "states": [], "events": [], **fields}
+
+
+def publish(session, out, **fields):
+    """Add a session to a review folder (every run of one journey, or every journey of a suite) for one artifact
+    URL. fields go into the run, such as its suite. Returns what add returns."""
+    session = Path(session)
+    run = {**upgrade(json.loads((session / "run.json").read_text())), **fields}
+    target = Path(out) / "runs" / run["id"]
     if target.exists():
         shutil.rmtree(target)
     (target / "shots").mkdir(parents=True)
@@ -137,22 +144,37 @@ def publish(session, out):
             shutil.copy2(session / name, target / name)
     for shot in (session / "shots").glob("*.jpg"):
         shutil.copy2(shot, target / "shots" / shot.name)
+    return add(out, run)
+
+
+def add(out, run):
+    """Add a run to the folder's runs.json and write the page. Returns the page, every file the page uses
+    (published path -> source) for the Artifact tool, the run count, and the files of this run (new)."""
+    out, newest = Path(out), suite_of(run)
+    out.mkdir(parents=True, exist_ok=True)
     with open(out / "runs.lock", "w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         manifest = out / "runs.json"
         if manifest.exists() and isinstance(json.loads(manifest.read_text()), list):
             shutil.copy2(manifest, out / "runs.v1.json")
         runs = [r for r in load_runs(out) if r["id"] != run["id"]] + [{**run, "base": f"runs/{run['id']}/"}]
-        runs = [stats_only(r) for r in runs[:-CURVES]] + runs[-CURVES:]
+        runs = [r if newest and suite_of(r) == newest else stats_only(r) for r in runs[:-CURVES]] + runs[-CURVES:]
         atomic(manifest, json.dumps({"version": VERSION, "runs": runs}))
         page = out / "index.html"
         atomic(page, document(runs))
-    files = {str(p.relative_to(out)): str(p.resolve()) for p in sorted(target.rglob("*")) if p.is_file()}
-    return page, files, len(runs)
+    files = {str(p.relative_to(out)): str(p.resolve()) for r in runs if (out / "runs" / r["id"]).is_dir()
+             for p in sorted((out / "runs" / r["id"]).rglob("*")) if p.is_file()}
+    new = [path for path in files if path.startswith(f"runs/{run['id']}/")]
+    return page, files, len(runs), new
+
+
+def suite_of(run):
+    return (run.get("suite") or {}).get("id")
 
 
 def stats_only(run):
-    """An older run keeps the numbers of its metrics, not their curves, so the page of a long history stays small."""
+    """An older run keeps the numbers of its metrics, not their curves, so the page of a long history stays small.
+    Every journey of the newest suite run keeps its curves."""
     if "metrics" not in run:
         return run
     return {**run, "metrics": {**run["metrics"], "series": [metrics.stats_only(s) for s in run["metrics"]["series"]]}}

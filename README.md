@@ -47,12 +47,24 @@ Checks:
 
 | Check | Passes when |
 |---|---|
-| `check text <text> [seconds]` | the words show on the screen in the seconds (default 10) |
+| `check text <text> [seconds] [--in BOX]` | the words show on the screen in the seconds (default 10) |
 | `check no-text <text> [seconds]` | the words are gone from the screen in the seconds (default 0) |
 | `check cmd "<command>" [seconds]` | a shell command on the host exits 0. It runs again each second until it does or the seconds pass |
 | `check sh "<command>" [seconds]` | the same, but in the run VM over SSH (PowerShell on Windows) |
 | `check running <process>` | a process with this exact name runs in the run VM |
 | `check metric <series> <stat> --below N` (or `--above N`) | a budget on what a probe measured; see [Probes and budgets](#probes-and-budgets) |
+
+`--in` keeps a text check (and `wait-text`, `find`, `click-text`) to one part of the screen: a box in pixels
+(`--in 0,0,1440,450`), or the label of an element in the accessibility tree of a macOS run VM (`--in "Upload"`,
+such as a dialog). A check whose element is not there fails and says why. To check by role, use
+`check ax <text> --role AXButton`.
+
+`click-text` clicks the matched words, not the middle of their line, so `click-text browse` hits the link in
+"Drag files here or browse". In a macOS run VM it first looks for a button with that label in the accessibility
+tree, so a button wins over a dialog title with the same words. It uses the tree when it has at least `--nth`
+buttons with exactly that label, and the words on the screen otherwise. `--role` clicks only an element with that
+role. `find` reads only the words on the screen, so in a macOS run VM its point can differ from the button that
+`click-text` clicks.
 
 Give `--label` to say what a command check proves. The page shows the label, and the end of the command's output as
 the detail.
@@ -63,8 +75,8 @@ proofreel uses Apple Vision on macOS hosts and Tesseract on other hosts.
 ### Review on claude.ai
 
 `proofreel publish <session> --out <review folder>` adds a run to a review folder: one page that holds every run of
-one journey, so the link in a pull request never changes. It prints the files of the new run and the page's runtime
-capabilities. Claude then publishes the page as a claude.ai Artifact (the same file path or URL each time). On
+one journey, so the link in a pull request never changes. It prints every file that the page uses (`files`, for all
+the runs in the folder), the files of the new run (`new`), and the page's runtime capabilities. Claude then publishes the page as a claude.ai Artifact (the same file path or URL each time). On
 claude.ai the page also has:
 
 - **Comments** on any step or moment, through the artifact's own comments, which can go to the Claude session that
@@ -94,6 +106,24 @@ A problem prints one line that says what to do.
 ```bash
 proofreel run flows/sign-up.flow --set EMAIL=sam@example.com
 ```
+
+A line `from <state>` names the saved VM state that the flow starts from. `run` refuses a run VM from another
+saved state.
+
+### Suites: many journeys, each from a clean start
+
+```bash
+proofreel suite flows/upload/ --state warm-app --out review-upload --title "Upload"
+```
+
+A suite runs each flow in the folders and files that you give. For each flow, it starts a new clone of the flow's
+saved VM state (its `from` line, or `--state`), runs the flow, and deletes the clone. So each journey starts from the
+same place, and nothing from one journey reaches the next. It reads every flow and finds every state before the first
+VM starts. A journey that fails does not stop the suite: its row says why. A recording that a flow leaves open is
+stopped. All journeys go to one review folder, and one page shows them all. The run switcher names each journey, and
+the Journeys tab lists them with their result, checks passed, and length; a click on a row plays that journey. A
+journey that made no video shows its error in place of the video. The suite prints PASS or FAIL for each journey,
+then the same output as `publish`, and exits 1 if a journey failed.
 
 ### States: the flow as a state machine
 
@@ -158,7 +188,7 @@ tab has input latency, then p50, p95, and max for each series with its budgets, 
 a waterfall of the spans that have `phases`. The track fields `label`, `unit`, `max`, and `bands` (values to draw a
 guide line at) set how a row looks. A run keeps at most 200 KB of metrics: up to 600 bins per series, 2000 spans
 (failed first, then the slowest, then a spread), and 1000 marks. Query strings are cut from labels. In a review
-folder, the newest 6 runs keep their rows; older runs keep the numbers.
+folder, the newest 6 runs, and every journey of the newest suite run, keep their rows; older runs keep the numbers.
 
 **Network requests** (`--probe network`, Linux run VMs, `pip install mitmproxy`): a proxy on the host sees each
 HTTP and HTTPS request that Chromium in the guest makes. Each request is a span in `net/<host>`, with its method and
@@ -290,10 +320,12 @@ condition names the systems it works on. All of this is in `src/proofreel/guest.
 A clone is copy on write (APFS), so a state costs only the disk blocks that it changes. On an M-series Mac with a
 macOS 26 guest: `up` from a cold state takes about 18 s to SSH ready, a warm `up` about 12 s with the apps as they
 were, and `save --warm` about 60 s. A warm state needs a run VM
-that was started with `--warmable`. Tart then turns off the VM's audio devices, so do not test a microphone in a
-warm VM. Run `save --warm` outside any macOS sandbox (such as an agent's command sandbox): a memory file saved inside
-one cannot be restored, so `save --warm` refuses there. A warm save resumes at once, and a state that does not
-restore is deleted.
+that was started with `--warmable` (Tart `--suspendable`). proofreel starts every Tart run VM with `--no-audio`. In
+Tart 2.41 (`VM.swift`, `craftConfiguration`), a VM gets host audio only when it has audio and is not suspendable.
+Otherwise the guest gets one virtio speaker with no output and no microphone. So no run VM plays or records sound on
+the host, and a warm VM has no microphone: do not test a microphone in it. Run `save --warm` outside any macOS sandbox
+(such as an agent's command sandbox): a memory file saved inside one cannot be restored, so `save --warm` refuses
+there. A warm save resumes at once, and a state that does not restore is deleted.
 
 ### Conditions: fake hardware and setups
 
@@ -460,8 +492,10 @@ newer proofreel is refused. Another tool logs with times: `proofreel event click
 
 - **Capture** (`capture.py`): the recorder gets full VNC frames as fast as the screen changes (up to 24 a second),
   makes them half size, and saves them as JPEG on two threads. Some VNC servers send nothing while the screen stays
-  the same. Apple Virtualization (Tart and UTM macOS guests) is one of these. For these servers, a request that
-  waits 1 s reconnects, because a new connection always gets a whole frame.
+  the same. Apple Virtualization (Tart and UTM macOS guests) is one of these: with a menu or a file dialog open, it
+  answers one full-frame request on each connection and then nothing. For these servers, a request that waits 1 s
+  reconnects, because a new connection always gets a whole frame. A command that reads the screen does the same: it
+  waits 2, 4, then 8 s, and then stops with a problem that says so.
 - **Time** (`motion.timeline`): the renderer finds the moments when the screen changes (a 96x64 difference) or an
   action occurs. These moments play at 1x, and the time between them plays at up to 8x. The speed ramps, so the
   video has no cuts.
@@ -473,7 +507,7 @@ newer proofreel is refused. Another tool logs with times: `proofreel event click
 
 ## Limits
 
-- A run VM is headless and isolated: no window, no audio device (Tart `--no-audio`, QEMU `-audio none` and no
+- A run VM is headless and isolated: no window, no host audio (Tart `--no-audio`; QEMU `-audio none` and no
   sound device), no shared clipboard. Nothing it does shows or plays on the host.
 - One run VM and one recording at a time for each `PROOFREEL_VM` name (default `pr-run`). Agents that work at the
   same time each set their own name, such as `PROOFREEL_VM=pr-a`. macOS lets a Mac run at most 2 macOS VMs at once.

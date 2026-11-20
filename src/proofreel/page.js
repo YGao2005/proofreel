@@ -18,6 +18,9 @@ let run = RUNS.length - 1;
 let zoom = true, view = "timeline", selected = null;
 try { zoom = localStorage.getItem("proofreel-zoom") !== "0"; view = localStorage.getItem("proofreel-view") || view; } catch (err) {}
 const MACHINE = RUNS.some(x => x.states && x.states.length);
+const SUITE = RUNS.some(x => x.suite);
+const suiteOf = x => x.suite ? x.suite.id : "";
+if (SUITE && !location.hash) view = "journeys";
 const VISITS = { ok: ["Pass", "ok"], bad: ["Fail", "bad"], unchecked: ["Not checked", "info"] };
 const visitAt = (r, real) => (r.states || []).find(v => v.t <= real && real < v.end) || null;
 const visitVerdict = v => v.ok === false ? "bad" : v.ok ? "ok" : "unchecked";
@@ -40,16 +43,44 @@ const icon = name => {
   p.setAttribute("d", ICONS[name]); s.append(p);
   return s;
 };
-const VIEWS = [["timeline", "Timeline"], ["machine", "State machine"], ["stats", "Stats"], ["network", "Network"], ["compare", "Compare", true]];
+const VIEWS = [["journeys", "Journeys"], ["timeline", "Timeline"], ["machine", "State machine"], ["stats", "Stats"], ["network", "Network"], ["compare", "Compare", true]];
 const placeholder = text => $("div", { class: "soon-pane" }, $("p", { class: "placeholder", text }));
 
+// A suite page switches between the journeys of the suite run on show; any other page, between the runs of one journey.
 function runSwitch() {
-  if (RUNS.length < 2) return null;
-  const nav = $("nav", { class: "seg runs", "aria-label": "Runs" });
-  RUNS.forEach((x, i) => nav.append($("button", { type: "button", "aria-pressed": String(i === run),
-    title: `Run ${i + 1}: ${VERDICTS[x.verdict][0]}, ${x.when}`, onclick: () => { location.hash = `run-${i + 1}`; } },
-    $("span", { class: `dot ${VERDICTS[x.verdict][1]}` }), $("span", { text: `Run ${i + 1}` }), $("span", { class: "when", text: x.when.slice(5) }))));
+  const shown = RUNS.map((x, i) => [x, i]).filter(([x]) => !SUITE || suiteOf(x) === suiteOf(RUNS[run]));
+  if (shown.length < 2) return null;
+  const nav = $("nav", { class: "seg runs", "aria-label": SUITE ? "Journeys" : "Runs" });
+  for (const [x, i] of shown) {
+    const name = SUITE ? x.journey || x.title : `Run ${i + 1}`;
+    nav.append($("button", { type: "button", "aria-pressed": String(i === run),
+      title: `${name}: ${VERDICTS[x.verdict][0]}, ${x.when}`, onclick: () => { location.hash = `run-${i + 1}`; } },
+      $("span", { class: `dot ${VERDICTS[x.verdict][1]}` }), $("span", { text: name }), SUITE ? null : $("span", { class: "when", text: x.when.slice(5) })));
+  }
   return nav;
+}
+
+// Each suite run in the folder, newest first: its pass count, then a row for each journey. A row plays that journey.
+function journeysView() {
+  if (!SUITE) return null;
+  const box = $("div", { class: "stats journeys" });
+  for (const id of [...new Set(RUNS.map(suiteOf))].reverse()) {
+    const rows = RUNS.map((x, i) => [x, i]).filter(([x]) => suiteOf(x) === id), pass = rows.filter(([x]) => x.verdict !== "problem").length;
+    const info = rows[0][0].suite || {};
+    box.append($("p", { class: "hint" }, $("b", { text: info.title || "Runs" }), document.createTextNode(` · ${pass}/${rows.length} journeys pass · ${rows[0][0].when}`)));
+    const body = $("tbody");
+    for (const [x, i] of rows) {
+      const checks = x.events.filter(e => e.kind === "check"), go = () => { location.hash = `run-${i + 1}`; };
+      body.append($("tr", { class: x.verdict === "problem" ? "bad" : "", tabindex: "0", "aria-current": String(i === run), onclick: go,
+        onkeydown: ev => { if (ev.key === "Enter") go(); } },
+        $("td", {}, document.createTextNode(x.journey || x.title), x.error ? $("span", { class: "m bad", text: x.error }) : null),
+        $("td", { text: checks.length ? `${checks.filter(e => e.ok).length}/${checks.length}` : "–" }),
+        $("td", { text: x.video === false ? "–" : clock(x.real) }),
+        $("td", {}, chip(...VERDICTS[x.verdict]))));
+    }
+    box.append($("table", { class: "numbers" }, $("thead", {}, $("tr", {}, ...["Journey", "Checks", "Length", "Result"].map(h => $("th", { text: h })))), body));
+  }
+  return box;
 }
 
 function render() {
@@ -64,7 +95,8 @@ function render() {
       $("div", { class: "meta" }, ...r.meta.map(m => $("span", { text: m })))),
     runSwitch()));
 
-  const video = $("video", { playsinline: "", muted: "", preload: "metadata", poster: r.base + "poster.jpg", src: r.base + "session.mp4" });
+  const recorded = r.video !== false;
+  const video = $("video", recorded ? { playsinline: "", muted: "", preload: "metadata", poster: r.base + "poster.jpg", src: r.base + "session.mp4" } : {});
   const live = $("span", { class: "pill live", hidden: "" });
   const overlay = r.overlay ? $("div", { class: "overlay", "aria-hidden": "true" },
     $("div", { class: "top" }, $("span", { class: "pill clock" }), $("span", { class: "pill state" }), $("span", { class: "pill speed" })),
@@ -131,7 +163,8 @@ function render() {
     if (video.videoWidth) document.documentElement.style.setProperty("--ratio", video.videoWidth / video.videoHeight);
   };
   video.addEventListener("loadedmetadata", place);
-  const stagePanel = $("section", { class: "panel stage", "aria-label": "Recording" }, $("div", { class: "media" }, screen), timebar);
+  const stagePanel = $("section", { class: "panel stage", "aria-label": "Recording" },
+    ...(recorded ? [$("div", { class: "media" }, screen), timebar] : [placeholder(r.error ? `No video: ${r.error}` : "This run made no video.")]));
 
   const list = $("ol", { class: "list timeline" });
   let actions = null, summary = null, visit = 0;
@@ -147,7 +180,7 @@ function render() {
     summary.textContent = `${n} action${n === 1 ? "" : "s"}`;
   }
   const machine = MACHINE ? machineView(r, seek) : null;
-  const panes = { timeline: list, machine: machine && machine.element, stats: statsView(r, seek), network: networkView(r, seek),
+  const panes = { journeys: journeysView(), timeline: list, machine: machine && machine.element, stats: statsView(r, seek), network: networkView(r, seek),
     compare: placeholder("Two runs side by side: the same state in each, with the frame, the checks, and the time they took.") };
   const views = VIEWS.filter(([name]) => panes[name]);
   if (!panes[view]) view = "timeline";
@@ -572,7 +605,8 @@ async function setReview(r, verdict) {
 }
 
 function askPanel(r, video) {
-  const panel = $("section", { class: "section ask", id: "ask", hidden: "" });
+  const panel = $("section", { class: "section ask", id: "ask" });
+  panel.hidden = !caps.sample;
   const box = $("textarea", { "aria-label": "Ask about this moment", rows: "1", placeholder: "Why did the check fail?" });
   const answer = $("div", { class: "answer" });
   let controller = null;
@@ -615,5 +649,4 @@ render();
   const [db, user, sample] = await Promise.all([use("db"), use("user"), use("sample")]);
   Object.assign(caps, { db, user, sample });
   if (db || user || sample) render();
-  if (sample) document.getElementById("ask").hidden = false;
 })();

@@ -29,7 +29,7 @@ def intersect(a, b):
 
 
 def flatten(node, scale, clip, depth=0):
-    """Each element with its depth and center in screen pixels. Visible: its center is in its window and scroll areas."""
+    """Each element with its depth, center, and box in screen pixels. Visible: its center is in its window and scroll areas."""
     frame = node.get("frame")
     if frame and (depth == 0 or node["role"] == "AXScrollArea"):
         clip = intersect(clip, frame)
@@ -39,6 +39,7 @@ def flatten(node, scale, clip, depth=0):
     if frame and frame[2] > 0 and frame[3] > 0:
         cx, cy = frame[0] + frame[2] / 2, frame[1] + frame[3] / 2
         element.update(x=to_pixels(cx, scale), y=to_pixels(cy, scale),
+                       box=[to_pixels(v, scale) for v in frame],
                        visible=clip[0] <= cx < clip[0] + clip[2] and clip[1] <= cy < clip[1] + clip[3])
     yield element
     for child in node.get("children", []):
