@@ -34,8 +34,9 @@ autologin-user-timeout=0
 autologin-session=xfce
 user-session=xfce
 EOF
+# WHY: the component updater pings and the account check run at start whatever the quiet flags say, so both point at a closed local port, which the proxy never sees.
 cat > /etc/chromium.d/proofreel <<'EOF'
-export CHROMIUM_FLAGS="$CHROMIUM_FLAGS --no-first-run --no-default-browser-check --password-store=basic --start-maximized --remote-debugging-port=9222"
+export CHROMIUM_FLAGS="$CHROMIUM_FLAGS --no-first-run --no-default-browser-check --password-store=basic --start-maximized --remote-debugging-port=9222 --disable-background-networking --disable-component-update --disable-sync --disable-features=Translate,OptimizationHints,MediaRouter,NetworkTimeServiceQuerying --component-updater=url-source=http://127.0.0.1:9/u --gaia-url=http://127.0.0.1:9"
 EOF
 cat > /etc/chromium/policies/managed/proofreel.json <<'EOF'
 {"DefaultBrowserSettingEnabled": false, "PromotionalTabsEnabled": false, "PasswordManagerEnabled": false,
