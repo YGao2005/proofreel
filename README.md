@@ -3,7 +3,7 @@
 Review proof for computer-use agents. proofreel records an agent as it drives a real screen, then makes a short
 review video and a page that a person can check in a minute.
 
-[![A tour of the review page: the video plays, the flow lights each state, a click jumps the video, Tracks open, and a failed run shows its failed budget, request, and numbers.](docs/tour.gif)](docs/tour.mp4)
+[![A tour of the review page: the video plays, the flow lights each state, a click jumps the video, Tracks open, and a failed run shows its failed budget, request, and numbers.](https://raw.githubusercontent.com/YGao2005/proofreel/main/docs/tour.gif)](https://raw.githubusercontent.com/YGao2005/proofreel/main/docs/tour.mp4)
 
 ## Install
 
