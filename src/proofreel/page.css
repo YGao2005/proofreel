@@ -96,9 +96,7 @@ textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-
   color: var(--fg-2); font: 500 var(--fs-md)/1 var(--sans); border-bottom: 2px solid transparent; margin-bottom: -1px; }
 .tabs [role=tab]:hover { color: var(--fg); }
 .tabs [role=tab][aria-selected="true"] { color: var(--fg); border-bottom-color: var(--accent); }
-.tabs .soon { color: var(--fg-3); }
-.badge { font: 500 var(--fs-xs)/1 var(--sans); color: var(--fg-3); border: 1px dashed var(--line-strong); border-radius: var(--r-sm); padding: 2px 4px; }
-.soon-pane { padding: var(--s4); }
+.empty-pane { padding: var(--s4); }
 .placeholder { margin: 0; padding: var(--s5) var(--s4); border: 1px dashed var(--line-strong); border-radius: var(--r-md); color: var(--fg-3); text-align: center; }
 
 .stage .media { background: var(--stage); display: flex; justify-content: center; }

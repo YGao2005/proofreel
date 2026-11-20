@@ -42,8 +42,8 @@ const icon = name => {
   p.setAttribute("d", ICONS[name]); s.append(p);
   return s;
 };
-const VIEWS = [["journeys", "Journeys"], ["stats", "Stats"], ["network", "Network"], ["compare", "Compare", true]];
-const placeholder = text => $("div", { class: "soon-pane" }, $("p", { class: "placeholder", text }));
+const VIEWS = [["journeys", "Journeys"], ["stats", "Stats"], ["network", "Network"]];
+const placeholder = text => $("div", { class: "empty-pane" }, $("p", { class: "placeholder", text }));
 
 // A suite page switches between the journeys of the suite run on show; any other page, between the runs of one journey.
 function runSwitch() {
@@ -157,8 +157,7 @@ function render() {
   const stagePanel = $("section", { class: "panel stage", "aria-label": "Recording" },
     ...(recorded ? [$("div", { class: "media" }, screen), timebar] : [placeholder(r.error ? `No video: ${r.error}` : "This run made no video.")]));
 
-  const panes = { journeys: journeysView(), stats: statsView(r, seek), network: networkView(r, seek),
-    compare: placeholder("Two runs side by side: the same state in each, with the frame, the checks, and the time they took.") };
+  const panes = { journeys: journeysView(), stats: statsView(r, seek), network: networkView(r, seek) };
   const views = VIEWS.filter(([name]) => panes[name]);
   if (!panes[view]) view = null;
   const tabs = $("div", { class: "tabs", role: "tablist", "aria-label": "Details" });
@@ -168,9 +167,8 @@ function render() {
     body.hidden = !view;
     tabs.querySelectorAll("[role=tab]").forEach(b => b.setAttribute("aria-selected", String(b.dataset.view === view)));
   };
-  for (const [name, label, soon] of views) tabs.append($("button", { type: "button", role: "tab", "data-view": name, class: soon ? "soon" : "",
-    onclick: () => { view = view === name ? null : name; show(); } },
-    document.createTextNode(label), soon ? $("span", { class: "badge", text: "soon" }) : null));
+  for (const [name, label] of views) tabs.append($("button", { type: "button", role: "tab", "data-view": name,
+    onclick: () => { view = view === name ? null : name; show(); } }, label));
   show();
   const viewsPanel = $("section", { class: "panel views" }, $("div", { class: "head" }, tabs), body);
   const dock = $("aside", { class: "panel dock", "aria-label": "Review" }, reviewPanel(r), askPanel(r, video));
