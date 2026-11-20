@@ -1,8 +1,9 @@
 """The review page. One template for a single run and for a run history published to one URL.
 
-The page draws itself from embedded run data. The timeline shows the states, steps, and checks; the actions between
-them fold under one line. When the runs have states, the state machine view (machine.js) joins them into one graph. On claude.ai, the artifact's own comments work on any row, and the page adds a shared
-Approve / Needs work review and questions about the current frame. Opened as a plain file, it is a static page.
+The page draws itself from embedded run data: the video, the state machine (machine.js) of the runs' states and the steps of each state, the
+metric tracks, and a tab strip for the journeys, stats, and network. On claude.ai, the artifact's own comments work
+on any row, and the page adds a shared Approve / Needs work review and questions about the current frame. Opened as a
+plain file, it is a static page.
 """
 
 import fcntl

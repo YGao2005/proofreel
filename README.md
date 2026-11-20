@@ -9,10 +9,11 @@ review video and a page that a person can check in a minute.
   change on the screen plays at up to 8x, with a smooth ramp in and out.
 - **The video fits about 30 s.** Busy time plays at up to 2.5x when the session is long, a wait for the screen plays
   at 3x, and a badge shows the speed whenever it is above 1x.
-- **The page is the review.** It has the video, a scrub bar with a mark for each step and check, a States track
-  under it, and a side panel with the timeline of actions and thumbnails. A click on a row or a state jumps the video
-  to that moment. A failed check marks the page *Problem*. On a wide screen the page fits the window and only the side
-  panel scrolls.
+- **The page is the review.** On a wide screen the video, a scrub bar with a mark for each step and check, and a
+  folded Tracks row are on the left. The right column shows the state machine of the review folder, drawn from the runs' `state` lines (Flow), or
+  a list of the steps of each state with their times (Steps). A click on a state or a step jumps the video to that
+  moment. The page fits the window, and only that column scrolls. Journeys, Stats, and Network are tabs below. A failed check
+  marks the page *Problem*.
 - **Saved states for VMs.** Save a VM as a named state, such as `clean-os`, `app-installed`, or
   `signed-in-mid-onboarding`. Then start each test from that state in seconds. A warm state keeps the memory, so the
   test starts with the apps already open. A state that a flow makes records the flow, so you can make it again when
@@ -141,12 +142,12 @@ state "Sign in"
 check text "Sign in to Acme"
 ```
 
-`stop` prints the run's path, such as `States: Home ok → Sign in ok → Welcome FAIL`. On the page, the
-State machine tab draws the states of every run in the review folder as one graph: a node for each state
-and an edge for each transition that a run took. Other flows and conditions add branches and loops. The run on show
-is drawn strong, each node has a dot for its verdict in each run, and each edge shows how long the transition took.
-Click a state or a transition to play the video from there. Click a state again to go to its next visit. The node
-that the video is in lights up. Use the same state name in each flow for the same place in the app.
+`stop` prints the run's path, such as `States: Home ok → Sign in ok → Welcome FAIL`. On the page, the user flow sits
+under the video: a node for each state in the order the run reached it, with an arrow for each transition, and a
+transition that skips ahead or goes back drawn as an arc under the nodes. A node shows its checks passed of total, and
+it is green when they pass, red when one fails, and grey with no checks. The node that the video is in lights up. Click
+a node to play the video from there. Click it again to go to its next visit. A run with no `state` lines has no flow.
+Use the same state name in each flow for the same place in the app.
 
 ### Probes and budgets
 
