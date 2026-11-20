@@ -159,13 +159,24 @@ guide line at) set how a row looks. A run keeps at most 200 KB of metrics: up to
 (failed first, then the slowest, then a spread), and 1000 marks. Query strings are cut from labels. In a review
 folder, the newest 6 runs keep their rows; older runs keep the numbers.
 
+**Network requests** (`--probe network`, Linux run VMs, `pip install mitmproxy`): a proxy on the host sees each
+HTTP and HTTPS request that Chromium in the guest makes. Each request is a span in `net/<host>`, with its method and
+path, its status and size, and the time to connect, to do TLS, to wait for the answer, and to receive it. A status of
+400 or more, or no answer, is `failed`. It never keeps a query string, a header value, or a body, and a path part that
+looks like an id, a token, or an email address shows as `:id` or `:email`. At `start`, the guest gets the proxy and
+trusts a CA that is new for each session; at `stop`, both go, and the CA is deleted. Only the run VM may use the
+proxy. A request from the guest to `10.0.2.2` (the host) goes through the proxy too, so a test server on the host is
+measured.
+
 A probe is a folder like a condition (`probe.toml` and a script), found in the same places. It runs on the host
 (`run.py`) or in the guest (`run.sh`, `run.ps1`) and prints one JSON line for each measure:
 `{"m": "cpu/app", "v": 42}` is a sample, `{"m": "net/GET /items", "d": 0.31, "ok": true}` is a span (something that
 took `d` seconds), and `{"m": "app/ready"}` is a mark. A line can carry `t`, the time in the probe's own steady
 clock; proofreel moves it onto the host clock by the probe's smallest delay. `{"unavailable": "<why>"}` says the probe
 cannot measure here. Lines over 16 KB, over 200 a second, or past 64 series are counted and dropped. A probe never
-gets the guest password. See `src/proofreel/probes/__init__.py` for the whole contract.
+gets the guest password. A probe can also change the guest for the recording with `start` and `stop` scripts (a proxy,
+a trusted CA). proofreel writes each reset into the run record before its `start` runs, so a crash is undone at the
+next `start` or `vm save`. See `src/proofreel/probes/__init__.py` for the whole contract.
 
 ### Crash and hang reports (macOS guests)
 

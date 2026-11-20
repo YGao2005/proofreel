@@ -18,7 +18,7 @@ import time
 from pathlib import Path
 
 from . import Problem
-from .vm import HOME, MACHINE, wait
+from .vm import HOME, MACHINE, free_port, wait
 
 FOLDER = HOME / "qemu"
 DEFAULTS = {"memory": 4096, "cpu": 4, "display": "1440x900"}
@@ -59,15 +59,9 @@ def base(name, image):
     clone(firmware()[1], folder(name) / "vars.fd")
 
 
-def free_port(first=0):
-    for port in range(first, first + 100) if first else [0]:
-        with socket.socket() as s:
-            try:
-                s.bind(("127.0.0.1", port))
-                return s.getsockname()[1]
-            except OSError:
-                continue
-    raise Problem("No free local port.")
+def host_address(run):
+    """User networking: the guest reaches the host's 127.0.0.1 at 10.0.2.2, and its connections come from 127.0.0.1."""
+    return "127.0.0.1", "10.0.2.2", "127.0.0.1"
 
 
 def up(name, info, display=None, memory=None, cpu=None, warmable=False):

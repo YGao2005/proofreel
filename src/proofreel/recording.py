@@ -76,6 +76,8 @@ def start(name, server, password, info, fps=30, reduce=0, run=None):
     folder = SESSIONS / f"{name}-{time.strftime('%Y%m%d-%H%M%S')}"
     folder.mkdir(parents=True)
     if run:
+        for line in probes.recover(run):
+            print(line, file=sys.stderr)
         run.guest.mark(run)
     probes.prepare(info.get("probes") or [], run)
     (folder / "session.json").write_text(json.dumps({"version": session.VERSION, **info, "os": run["os"] if run else None,
@@ -93,6 +95,13 @@ def start(name, server, password, info, fps=30, reduce=0, run=None):
             recorder.kill()
             raise Problem(f"The recorder did not start: {(folder / 'recorder.log').read_text().strip()[-400:] or 'no frame in 15 s'}")
         time.sleep(0.1)
+    if run:
+        try:
+            probes.begin(info.get("probes") or [], run)
+        except Problem:
+            POINTER.unlink(missing_ok=True)
+            probes.end_group(recorder.pid)
+            raise
     return folder
 
 
@@ -120,7 +129,8 @@ def stop(error=None, plain=False, width=None, keep_frames=False):
     if info.get("run"):
         run = vm.Run.current() if vm.CURRENT.exists() else None
         if run and run["id"] == info["run"]:
-            events = run.guest.harvest(run, folder, info.get("app"), info.get("started", 0))
+            events = [{"t": time.time(), "kind": "note", "text": line} for line in probes.recover(run)]
+            events += run.guest.harvest(run, folder, info.get("app"), info.get("started", 0))
         else:
             events = [{"t": time.time(), "kind": "note", "text": "No crash reports: the run VM stopped or changed."}]
     with open(folder / "events.jsonl", "a") as out:

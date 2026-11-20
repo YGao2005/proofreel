@@ -10,12 +10,11 @@ number for a series glob in a time window, check() is one budget, summary() is t
 import fnmatch
 import json
 import math
-import re
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import Problem
+from . import Problem, redact
 
 STATS = ("mean", "min", "max", "p50", "p90", "p95", "p99", "last", "count", "failed")
 AFTER = ("input/",)
@@ -55,11 +54,6 @@ def percentile(values, q):
     return values[low] + (values[min(low + 1, len(values) - 1)] - values[low]) * (at - low)
 
 
-def clean(text):
-    """Text for the page: a URL's query and fragment can hold secrets, so they are cut."""
-    return re.sub(r"[?#]\S*", "", str(text))[:160]
-
-
 def short(value):
     return float(f"{value:.4g}")
 
@@ -87,7 +81,7 @@ def span(x, start):
     """[start, d, ok, label, phases, status], with the empty ones at the end left out."""
     phases = x.info.get("phases")
     status = (x.info.get("n") or {}).get("status") if isinstance(x.info.get("n"), dict) else None
-    row = [round(x.t - start - x.d, 3), short(x.d), x.ok, clean(x.info["label"]) if x.info.get("label") else None,
+    row = [round(x.t - start - x.d, 3), short(x.d), x.ok, redact.text(x.info["label"]) if x.info.get("label") else None,
            {k: short(v) for k, v in phases.items()} if isinstance(phases, dict) else None, status]
     while row[-1] is None and len(row) > 3:
         row.pop()
@@ -180,9 +174,9 @@ class Metrics:
         for x in self.measures:
             by.setdefault(x.m, []).append(x)
         budgets = [{**e["budget"], "ok": e.get("ok"), "detail": e.get("detail", ""), "t": round(e["t"], 3),
-                    "series": [clean(m) for m in by if fnmatch.fnmatchcase(m, e["budget"]["glob"])]}
+                    "series": [redact.text(m) for m in by if fnmatch.fnmatchcase(m, e["budget"]["glob"])]}
                    for e in events if "budget" in e]
-        probes = {name: {"status": s.get("status"), "note": clean(s.get("note") or "")} for name, s in self.status.items()}
+        probes = {name: {"status": s.get("status"), "note": redact.text(s.get("note") or "")} for name, s in self.status.items()}
         caps = CAPS
         while True:
             series = [self.packed(m, chosen, start, end, video, caps) for m, chosen in by.items()]
@@ -201,7 +195,7 @@ class Metrics:
         stats = {"count": len(chosen), "failed": sum(1 for x in chosen if x.ok is False)}
         if values:
             stats.update(p50=short(percentile(values, 50)), p95=short(percentile(values, 95)), max=short(values[-1]))
-        out = {"m": clean(m), "kind": kind, "unit": self.unit(m, kind),
+        out = {"m": redact.text(m), "kind": kind, "unit": self.unit(m, kind),
                **{k: track[k] for k in SHOWN if k in track and k != "unit"}, "stats": stats}
         inside = [x for x in chosen if 0 <= x.t - start <= end]
         if kind == "sample":
@@ -212,7 +206,7 @@ class Metrics:
             out["more"] = len(inside) - len(kept)
         else:
             kept = pick(inside, caps[2], slowest=False)
-            out["marks"] = [[round(x.t - start, 3), x.ok] + ([clean(x.info["label"])] if x.info.get("label") else [])
+            out["marks"] = [[round(x.t - start, 3), x.ok] + ([redact.text(x.info["label"])] if x.info.get("label") else [])
                             for x in kept]
             out["more"] = len(inside) - len(kept)
         return out

@@ -9,7 +9,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: sudo apt-get update && sudo apt-get install -y ffmpeg fonts-dejavu-core
-      - run: pip install -e . pytest
+      - run: pip install -e '.[network]' pytest
       - run: pytest -q
       - run: node --check src/proofreel/page.js && node --check src/proofreel/machine.js && node --check src/proofreel/tracks.js
       - run: node --test tests/js/*.test.js

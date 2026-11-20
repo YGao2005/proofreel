@@ -105,7 +105,7 @@ def test_without_websocket_client_or_a_tunnel_the_probe_says_why():
 
 
 def test_a_url_label_keeps_only_host_and_path():
-    assert redact.url_label("GET", "https://ann:pw@acme.test:8443/notes/7?token=SECRET#top") == "GET acme.test:8443/notes/7"
+    assert redact.url_label("GET", "https://ann:pw@acme.test:8443/notes/7?token=SECRET#top") == "GET acme.test:8443/notes/:id"
     assert redact.url_label(None, "http://10.0.2.2:18431/?token=SECRET") == "10.0.2.2:18431/"
     assert redact.url_label(None, "file:///home/tester/a.html") == "file:/home/tester/a.html"
 
