@@ -98,13 +98,12 @@ def app_tree(found, app):
 
 def sample(before, now, seconds, tick, app):
     """The measures between two reads of processes(), seconds apart: the app's CPU as a % of one core (a process that
-    is new, or whose count went back, starts from zero), its memory in MB, and how many processes it has."""
+    is new, or whose count went back, starts from zero) and its memory in MB. Nothing when it is not running."""
     tree = app_tree(now, app)
     if not tree:
-        return [], False
+        return []
     cpu = sum(max(0, now[key][3] - before[key][3]) if key in before else now[key][3] for key in tree)
-    return [("cpu/app", cpu / tick / seconds * 100), ("mem/app", sum(now[key][4] for key in tree) / 1024),
-            ("app/procs", len(tree))], True
+    return [("cpu/app", cpu / tick / seconds * 100), ("mem/app", sum(now[key][4] for key in tree) / 1024)]
 
 
 class Lines:
@@ -128,10 +127,10 @@ def main():
     out = Lines()
     out.say({"ready": True})
     out.say({"meta": {"app": app or "none: give start --app", "cores": os.cpu_count() or 1}})
-    before = then = ticks = running = None
+    before = then = ticks = None
     while True:
         now, total, at = read(), None if MAC else system(), time.monotonic()
-        lines, found = sample(before or now, now, at - (then or 0), tick, app)
+        lines = sample(before or now, now, at - (then or 0), tick, app)
         if before is None:
             lines = [line for line in lines if not line[0].startswith("cpu/")]
         elif total:
@@ -139,9 +138,7 @@ def main():
         if total:
             lines.append(("mem/system", total[2]))
         out.measures(lines, at)
-        if app and running is not None and found != running:
-            out.say({"m": "app/start" if found else "app/exit", "t": round(at, 4)})
-        before, then, ticks, running = now, at, total and total[:2], found
+        before, then, ticks = now, at, total and total[:2]
         time.sleep(interval)
 
 

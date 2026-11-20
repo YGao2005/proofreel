@@ -64,15 +64,15 @@ def test_cpu_is_the_ticks_used_between_two_reads_as_a_percent_of_one_core(tmp_pa
              101: (100, "acme-notes", "/opt/acme/acme-notes", 70, 50_000), 300: (1, "indexer", "/usr/bin/indexer", 40, None)}
     del later[102]
     now = procs.processes(fake_proc(tmp_path / "b", later))
-    lines, found = procs.sample(before, now, seconds=2.0, tick=100, app="acme-notes")
-    assert found and dict(lines) == {"cpu/app": 100.0, "mem/app": 150_000 / 1024, "app/procs": 2}
-    assert procs.sample(before, now, seconds=2.0, tick=100, app="nothing") == ([], False)
+    lines = procs.sample(before, now, seconds=2.0, tick=100, app="acme-notes")
+    assert dict(lines) == {"cpu/app": 100.0, "mem/app": 150_000 / 1024}
+    assert procs.sample(before, now, seconds=2.0, tick=100, app="nothing") == []
 
 
 def test_a_reused_pid_counts_as_a_new_process_and_a_dropped_counter_as_no_cpu():
     before = {(5, 10): (1, "app", "app", 900, 0), (6, 11): (1, "app", "app", 900, 0)}
     now = {(5, 99): (1, "app", "app", 30, 0), (6, 11): (1, "app", "app", 100, 0)}
-    assert dict(procs.sample(before, now, seconds=1.0, tick=100, app="app")[0])["cpu/app"] == 30.0
+    assert dict(procs.sample(before, now, seconds=1.0, tick=100, app="app"))["cpu/app"] == 30.0
 
 
 def test_lines_carry_the_probe_clock():
