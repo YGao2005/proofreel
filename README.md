@@ -131,6 +131,10 @@ check metric net/* p95 --below 0.5 --step     # since the last step or state
 check metric net/* failed --below 1 --last 30
 ```
 
+`--probe browser` measures web pages in the `linux` VM's Chromium: LCP, CLS, and INP (`web/lcp`, `web/cls`,
+`web/inp`, in ms), long animation frames, the page's own `performance.measure` and `mark` (`web/measure/<name>`), the
+JS heap, and DOM nodes. For example, `check metric web/inp max --below 200`. It needs `pip install websocket-client`.
+
 A stat is `mean`, `min`, `max`, `p50`, `p90`, `p95`, `p99`, `last`, `count`, or `failed`. A budget waits up to
 `--wait` seconds (default 2) for a measure that came after it began. With no data in its window, it is a failed check
 that says which series there are. `stop` prints a line for each series, and `proofreel stats [session]` prints them
@@ -379,6 +383,7 @@ proofreel vm sh 'setsid -f xfce4-terminal'              # any app: SSH sessions 
 
 - The guest reaches the host at `10.0.2.2`. A server on the host's 127.0.0.1 is enough.
 - `browse` starts Chromium maximized, or opens a new tab when Chromium runs. The page shows about 1.5 s later.
+- Chromium listens for DevTools on the guest's 127.0.0.1:9222, for the `browser` probe.
 - Chromium shows no first-run pages. Policies turn off the password, autofill, translate, and sign-in prompts.
 - The guest has no screen lock, no screensaver, no screen blank, and no automatic updates.
 - The screen size is the `--display` size: the kernel takes the largest firmware mode (`video=efifb:auto`).

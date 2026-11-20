@@ -1,0 +1,53 @@
+name = "browser"
+version = "1"
+os = ["linux"]
+where = "host"
+default = false
+extras = "websocket-client"
+tunnel = 9222
+fidelity = "Reads the guest's Chromium through its DevTools port, which the linux image's browse turns on. Web vitals come from the page's own PerformanceObserver: INP is the slowest interaction (one in 50 skipped), CLS the largest session window, both for each page load. Chromium rounds event durations to 8 ms. Heap, nodes, layouts, and style recalcs are read once a second for each tab."
+privacy = "Sees each tab's URL and keeps only its host and path. Keeps User Timing names and the name of the script that ran a long frame. No page text, cookies, or requests."
+
+[tracks."web/lcp"]
+label = "Largest contentful paint"
+unit = "ms"
+better = "lower"
+
+[tracks."web/cls"]
+label = "Cumulative layout shift"
+better = "lower"
+
+[tracks."web/inp"]
+label = "Interaction to next paint"
+unit = "ms"
+better = "lower"
+
+[tracks."web/interaction"]
+label = "Interactions"
+better = "lower"
+
+[tracks."web/long-frame"]
+label = "Long animation frames"
+better = "lower"
+
+[tracks."web/measure/*"]
+better = "lower"
+
+[tracks."web/heap"]
+label = "JS heap"
+unit = "MB"
+better = "lower"
+
+[tracks."web/nodes"]
+label = "DOM nodes"
+better = "lower"
+
+[tracks."web/layouts"]
+label = "Layouts"
+unit = "/s"
+better = "lower"
+
+[tracks."web/style-recalcs"]
+label = "Style recalcs"
+unit = "/s"
+better = "lower"
