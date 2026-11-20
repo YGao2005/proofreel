@@ -4,7 +4,7 @@ os = ["linux", "macos"]
 where = "guest"
 default = true
 fidelity = "CPU is each process's CPU time, read each INTERVAL seconds, as a % of one core; a process that starts and ends between two reads is not seen. The app is each process named PROOFREEL_APP (start --app: a process name, not a bundle ID) and every process under it. Memory is PSS on Linux and RSS on macOS, which counts shared pages in each process. The guest's CPU and memory (cpu/system, mem/system) are Linux only."
-privacy = "Reads the name, parent, CPU time, and memory of each guest process. The names of the processes that use the most CPU leave it as series names; command lines and arguments do not."
+privacy = "Reads the name, parent, CPU time, and memory of each guest process. Only the app's totals leave the guest: no process names, command lines, or arguments."
 
 [values]
 INTERVAL = "1"

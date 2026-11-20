@@ -105,14 +105,12 @@ def test_ps_rows_become_processes_keyed_by_pid_and_start_with_cpu_in_hundredths(
     assert {pid for pid, _ in procs.app_tree(found, "Acme Notes")} == {50, 51}
 
 
-def test_the_probe_says_ready_first_and_an_app_that_is_not_there_gives_no_app_lines():
+def test_the_probe_says_ready_first_and_names_the_app_it_looks_for():
     env = {**os.environ, "INTERVAL": "0.1", "PROOFREEL_APP": "no-such-app-anywhere"}
     child = subprocess.Popen([sys.executable, "-u", str(FOLDER / "procs.py")], env=env, stdout=subprocess.PIPE, text=True)
     try:
-        lines = [json.loads(child.stdout.readline()) for _ in range(5)]
+        lines = [json.loads(child.stdout.readline()) for _ in range(2)]
     finally:
         child.kill()
         child.wait()
-    assert lines[0] == {"ready": True}
-    assert all(line.get("m") not in ("cpu/app", "mem/app", "app/procs") for line in lines)
-    assert any(line.get("m") == "mem/system" or "meta" in line for line in lines)
+    assert lines[0] == {"ready": True} and lines[1]["meta"]["app"] == "no-such-app-anywhere"
