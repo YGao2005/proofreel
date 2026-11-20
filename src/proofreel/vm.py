@@ -215,11 +215,11 @@ def save(name, warm=False, note="", flow=None, values=None, conditions=None):
     """Save the run VM as a state, then keep it running. Warm keeps memory: apps stay open. The state keeps the
     conditions of the state the run VM came from, and the ones given."""
     check_name(name)
-    from . import probes, recording
+    from . import plugins, recording
     if recording.current():
         raise Problem("A session is recording. Stop it first: proofreel stop.")
     run = Run.current()
-    for line in probes.recover(run):
+    for line in plugins.failed(plugins.undo(run)):
         print(line)
     kind = run["backend"]
     parent = state_info(name).get("parent") if run["state"] == name else run["state"]

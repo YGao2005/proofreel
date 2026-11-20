@@ -4,7 +4,8 @@
 <fps> <reduce>`, with the VNC password in the environment. The recorder holds an exclusive lock on
 `<folder>/recorder.lock` for as long as it lives, so "is it still recording?" never depends on a pid. It writes
 frames/<n>.jpg, times.txt (the unix time of each frame), and screen.txt (the screen size), until SIGTERM. It also
-runs the session's probes (see probes) as its children, in its own process group, so `stop` ends them all.
+runs the session's probes (see probes) as its children, in its own process group, so `stop` ends them all. The
+conditions that last one recording are applied before the recorder starts, and removed at `stop`.
 
 Some VNC servers (Apple Virtualization, so Tart macOS guests) send nothing while the screen stays the same. Each
 capture asks for a whole frame, and VNC_STREAMS connections take turns, because one full update takes a round trip.
@@ -22,7 +23,7 @@ import threading
 import time
 from pathlib import Path
 
-from . import HOME, Problem, probes, session, vm
+from . import HOME, Problem, conditions, plugins, probes, session, vm
 
 SESSIONS = Path(os.environ.get("PROOFREEL_SESSIONS", HOME / "sessions"))
 POINTER = HOME / f"{vm.RUN}-session.json"
@@ -76,32 +77,38 @@ def start(name, server, password, info, fps=30, reduce=0, run=None):
     folder = SESSIONS / f"{name}-{time.strftime('%Y%m%d-%H%M%S')}"
     folder.mkdir(parents=True)
     if run:
-        for line in probes.recover(run):
+        for line in plugins.failed(plugins.undo(run)):
             print(line, file=sys.stderr)
         run.guest.mark(run)
     probes.prepare(info.get("probes") or [], run)
     (folder / "session.json").write_text(json.dumps({"version": session.VERSION, **info, "os": run["os"] if run else None,
                                                     "run": run["id"] if run else None, "started": time.time()}))
-    with open(folder / "recorder.log", "w") as out:
-        recorder = subprocess.Popen([sys.executable, "-m", "proofreel.recording", str(folder), server, str(fps),
-                                     str(reduce)], stdout=out, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
-                                    env={**os.environ, "PROOFREEL_VNC_PASSWORD": password or ""},
-                                    start_new_session=True)
-    POINTER.write_text(json.dumps({"dir": str(folder), "pid": recorder.pid}))
-    deadline = time.time() + 15
-    while not (folder / "frames" / "000000.jpg").exists():
-        if recorder.poll() is not None or time.time() > deadline:
-            POINTER.unlink(missing_ok=True)
-            recorder.kill()
-            raise Problem(f"The recorder did not start: {(folder / 'recorder.log').read_text().strip()[-400:] or 'no frame in 15 s'}")
-        time.sleep(0.1)
-    if run:
-        try:
-            probes.begin(info.get("probes") or [], run)
-        except Problem:
-            POINTER.unlink(missing_ok=True)
-            probes.end_group(recorder.pid)
-            raise
+    try:
+        conditions.begin(run, [c for c in info.get("conditions", []) if c.get("recording")])
+        with open(folder / "recorder.log", "w") as out:
+            recorder = subprocess.Popen([sys.executable, "-m", "proofreel.recording", str(folder), server, str(fps),
+                                         str(reduce)], stdout=out, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+                                        env={**os.environ, "PROOFREEL_VNC_PASSWORD": password or ""},
+                                        start_new_session=True)
+        POINTER.write_text(json.dumps({"dir": str(folder), "pid": recorder.pid}))
+        deadline = time.time() + 15
+        while not (folder / "frames" / "000000.jpg").exists():
+            if recorder.poll() is not None or time.time() > deadline:
+                POINTER.unlink(missing_ok=True)
+                recorder.kill()
+                raise Problem(f"The recorder did not start: {(folder / 'recorder.log').read_text().strip()[-400:] or 'no frame in 15 s'}")
+            time.sleep(0.1)
+        if run:
+            try:
+                probes.begin(info.get("probes") or [], run)
+            except Problem:
+                POINTER.unlink(missing_ok=True)
+                probes.end_group(recorder.pid)
+                raise
+    except BaseException:
+        if run:
+            plugins.undo(run)
+        raise
     return folder
 
 
@@ -129,7 +136,11 @@ def stop(error=None, plain=False, width=None, keep_frames=False):
     if info.get("run"):
         run = vm.Run.current() if vm.CURRENT.exists() else None
         if run and run["id"] == info["run"]:
-            events = [{"t": time.time(), "kind": "note", "text": line} for line in probes.recover(run)]
+            undone = plugins.undo(run)
+            events = [{"t": time.time(), "kind": "note", "text": line}
+                      for line in plugins.failed([r for r in undone if r[0]["kind"] != "condition"])]
+            events += [{"t": time.time(), "kind": "check", "text": f"{entry['name']} is removed", "ok": ok, "detail": said}
+                       for entry, ok, said in undone if entry["kind"] == "condition"]
             events += run.guest.harvest(run, folder, info.get("app"), info.get("started", 0))
         else:
             events = [{"t": time.time(), "kind": "note", "text": "No crash reports: the run VM stopped or changed."}]

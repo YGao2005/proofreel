@@ -1,0 +1,21 @@
+name = "slow-network"
+version = 1
+os = ["linux", "macos"]
+fakes = "A slow, choppy network: added round-trip latency, jitter, packet loss, and a bandwidth cap, both ways."
+applies = "Linux: tc netem on two ifb links, one for each way, that the default interface sends all traffic but SSH to. macOS: two dummynet pipes (dnctl) in a pf anchor. SSH on port 22 is not shaped, so proofreel's own commands and guest probes keep their speed."
+checks = "Each way has its shaping (netem on Linux, a dummynet pipe on macOS), and the interface sends traffic to it. The check prints the shaping it found."
+removes = "Deletes the links, pipes, and rules, then checks that none is left. Apply runs it first too, so a run that stopped half way leaves nothing behind."
+fidelity = "latency and jitter are round trip: each way gets half. loss is for each way, so a round trip loses about twice as much. rate caps each way. Jitter on Linux reorders packets, which slows TCP more than most real networks do. macOS dummynet has no jitter: it is left out there. The interface stays up, so the app is never told that it is offline."
+
+[values]
+profile = "3g"
+latency = "0ms"
+jitter = "0ms"
+loss = "0%"
+rate = "0"
+
+[profiles]
+3g = { latency = "300ms", jitter = "50ms", loss = "1%", rate = "1mbit" }
+edge = { latency = "800ms", jitter = "100ms", loss = "2%", rate = "200kbit" }
+lossy-wifi = { latency = "60ms", jitter = "40ms", loss = "10%", rate = "10mbit" }
+none = {}
