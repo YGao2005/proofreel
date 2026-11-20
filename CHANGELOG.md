@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- QEMU guests are 1440x900 after a plain `pip install`: the edk2 firmware that takes any screen size ships in the package (1.6 MB packed, BSD-2-Clause-Patent). Its build script moves to `src/proofreel/firmware/`.
+
 ## 1.0.0
 
 The first release. proofreel records a coding agent driving an app in a VM and turns the run into a review video and a review page (a claude.ai artifact).

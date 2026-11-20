@@ -6,7 +6,7 @@ TAG=edk2-stable202408
 HERE=$(cd "$(dirname "$0")" && pwd)
 HOME_DIR=${PROOFREEL_HOME:-$HOME/.proofreel}
 WORK=$HOME_DIR/build/edk2
-OUT=$HOME_DIR/firmware
+OUT=$HERE/edk2-aarch64-code.fd.gz
 
 LLVM=$(brew --prefix llvm)/bin/
 LLD=$(brew --prefix lld)/bin
@@ -35,9 +35,11 @@ build -q -a AARCH64 -t CLANGDWARF -b RELEASE -p ArmVirtPkg/ArmVirtQemu.dsc -n 0 
   -D NETWORK_HTTP_BOOT_ENABLE -D NETWORK_IP6_ENABLE -D NETWORK_TLS_ENABLE -D NETWORK_ISCSI_ENABLE \
   -D SECURE_BOOT_ENABLE -D TPM2_ENABLE -D TPM2_CONFIG_ENABLE -D CAVIUM_ERRATUM_27456
 
-mkdir -p "$OUT"
-cp Build/ArmVirtQemu-AArch64/RELEASE_CLANGDWARF/FV/QEMU_EFI.fd "$OUT/edk2-aarch64-code.fd"
-# WHY: QEMU's virt machine needs each pflash file to be exactly 64 MB.
-truncate -s 64m "$OUT/edk2-aarch64-code.fd"
-rm -rf Build
-echo "Installed $OUT/edk2-aarch64-code.fd"
+# WHY: QEMU's virt machine needs each pflash file to be exactly 64 MB. The 64 MB file packs to under 2 MB.
+cp Build/ArmVirtQemu-AArch64/RELEASE_CLANGDWARF/FV/QEMU_EFI.fd "$WORK/code.fd"
+truncate -s 64m "$WORK/code.fd"
+gzip -9 -n -c "$WORK/code.fd" > "$OUT"
+cp License.txt "$HERE/LICENSE-edk2.txt"
+rm -rf Build "$WORK/code.fd"
+echo "Wrote $OUT"
+shasum -a 256 "$OUT"

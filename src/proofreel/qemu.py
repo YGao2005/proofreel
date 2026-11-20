@@ -6,6 +6,7 @@ state, written by a migration to a file). A run VM starts from clones of these f
 QEMU runs headless: no display window, no audio device, no clipboard, VNC (QEMU's own) and SSH on 127.0.0.1 only.
 """
 
+import gzip
 import hashlib
 import json
 import os
@@ -14,7 +15,6 @@ import re
 import shutil
 import socket
 import subprocess
-import sys
 import tempfile
 import time
 from pathlib import Path
@@ -24,7 +24,7 @@ from .vm import HOME, MACHINE, free_port, wait
 
 FOLDER = HOME / "qemu"
 DEFAULTS = {"memory": 4096, "cpu": 4, "display": "1440x900"}
-CUSTOM_FIRMWARE = HOME / "firmware" / "edk2-aarch64-code.fd"
+FIRMWARE = Path(__file__).parent / "firmware" / "edk2-aarch64-code.fd.gz"
 
 
 def folder(name):
@@ -55,9 +55,15 @@ def need_qemu():
 
 
 def firmware():
-    binary = need_qemu()
-    share = Path(binary).resolve().parent.parent / "share" / "qemu"
-    code = CUSTOM_FIRMWARE if CUSTOM_FIRMWARE.exists() else share / "edk2-aarch64-code.fd"
+    """(code, vars): proofreel's UEFI firmware, unpacked once into HOME, and QEMU's own empty variables file."""
+    share = Path(need_qemu()).resolve().parent.parent / "share" / "qemu"
+    packed = FIRMWARE.read_bytes()
+    code = HOME / "firmware" / f"edk2-{hashlib.sha256(packed).hexdigest()[:12]}.fd"
+    if not code.exists():
+        code.parent.mkdir(parents=True, exist_ok=True)
+        partial = code.with_suffix(f".{os.getpid()}")
+        partial.write_bytes(gzip.decompress(packed))
+        partial.replace(code)
     return code, share / "edk2-arm-vars.fd"
 
 
@@ -89,9 +95,6 @@ def up(name, info, display=None, memory=None, cpu=None, warmable=False, extra=()
         machine.update({k: v for k, v in (("memory", memory), ("cpu", cpu), ("display", display)) if v})
     if not re.fullmatch(r"\d{3,4}x\d{3,4}", machine["display"]):
         raise Problem(f"--display must be WIDTHxHEIGHT, for example 1440x900, not {machine['display']!r}.")
-    if not CUSTOM_FIRMWARE.exists():
-        print(f"The screen is at most 1024x768, not {machine['display']}: the stock UEFI firmware has no other "
-              f"modes. To get it, run firmware/build.sh from the proofreel repo.", file=sys.stderr)
     return boot(machine, folder(name) / "memory.bin" if info.get("warm") else None, extra)
 
 
@@ -104,8 +107,8 @@ def boot(machine, memory_file=None, extra=()):
             "-audio", "none", "-vnc", f"127.0.0.1:{vnc - 5900}",
             "-drive", f"if=pflash,format=raw,readonly=on,file={firmware()[0]}",
             "-drive", f"if=pflash,format=raw,file={run / 'vars.fd'}",
-            "-device", "ramfb", *(["-fw_cfg", f"name=opt/org.proofreel/resolution,string={machine['display']}"]
-                                  if CUSTOM_FIRMWARE.exists() else []),
+            "-device", "ramfb",
+            "-fw_cfg", f"name=opt/org.proofreel/resolution,string={machine['display']}",
             "-device", "qemu-xhci", "-device", "usb-kbd", "-device", "usb-tablet",
             "-drive", f"if=none,id=disk,format=qcow2,discard=unmap,file={run / 'disk.qcow2'}",
             "-device", "nvme,drive=disk,serial=proofreel",

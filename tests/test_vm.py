@@ -1,4 +1,6 @@
+import gzip
 import json
+from pathlib import Path
 
 import pytest
 
@@ -43,8 +45,6 @@ def test_only_windows_forgets_its_screen_size_before_a_cold_save(system, cleaned
 
 
 def test_qemu_display_comes_from_up_then_the_state_then_the_default(home, monkeypatch):
-    qemu.CUSTOM_FIRMWARE.parent.mkdir()
-    qemu.CUSTOM_FIRMWARE.touch()
     monkeypatch.setattr(qemu, "clone", lambda source, target: None)
     monkeypatch.setattr(qemu, "boot", lambda machine, memory_file=None, extra=(): machine["display"])
     assert qemu.up("s", {}) == "1440x900"
@@ -53,6 +53,23 @@ def test_qemu_display_comes_from_up_then_the_state_then_the_default(home, monkey
     assert qemu.up("s", {"warm": True, "machine": {"display": "1280x800"}}, display="1920x1080") == "1280x800"
     with pytest.raises(Problem):
         qemu.up("s", {}, display="big")
+
+
+def test_the_firmware_is_unpacked_once_into_home(home, monkeypatch):
+    qemu.FIRMWARE.write_bytes(gzip.compress(b"uefi"))
+    monkeypatch.setattr(qemu, "HOME", home)
+    monkeypatch.setattr(qemu, "need_qemu", lambda: "/opt/q/bin/qemu-system-aarch64")
+    code, variables = qemu.firmware()
+    assert code.read_bytes() == b"uefi" and code.parent == home / "firmware"
+    assert variables == Path("/opt/q/share/qemu/edk2-arm-vars.fd")
+    code.write_bytes(b"kept")
+    assert qemu.firmware()[0].read_bytes() == b"kept"
+    qemu.FIRMWARE.write_bytes(gzip.compress(b"newer"))
+    assert qemu.firmware()[0].read_bytes() == b"newer"
+
+
+def test_the_shipped_firmware_is_a_64_mb_pflash_image():
+    assert len(gzip.decompress(qemu.FIRMWARE.read_bytes())) == 64 * 1024 * 1024
 
 
 def test_the_guest_password_never_goes_to_disk(tmp_path, monkeypatch):

@@ -1,1 +1,1 @@
-firmware/*.patch -text
+src/proofreel/firmware/*.patch -text
