@@ -60,8 +60,7 @@ proofreel publish <session> --out review-sign-in   # adds the run to a review fo
 proofreel vm down
 ```
 
-`stop` prints the session folder to give to `publish`. `proofreel click 512 400` clicks a point; the screen is 1024x768
-unless you build the [firmware](docs/vm-states.md#windows-11-arm-and-linux-qemu) for a larger one.
+`stop` prints the session folder to give to `publish`. `proofreel click 512 400` clicks a point on the screen.
 
 Publishing is in [the review page](docs/review-page.md). To use an existing VNC screen in place of a VM, set
 `PROOFREEL_VNC=127.0.0.1::5900` and `PROOFREEL_PASSWORD=...`.

@@ -96,8 +96,7 @@ on real hardware before a release.
 ## Windows 11 ARM and Linux (QEMU)
 
 ```bash
-brew install qemu llvm lld acpica
-firmware/build.sh                                       # once: UEFI firmware that takes any screen size
+brew install qemu
 proofreel vm base win11 win11.qcow2 --backend qemu --os windows   # once: a disk that boots Windows (see below)
 proofreel vm up win11                                   # PowerShell over SSH, the screen over VNC (1440x900)
 proofreel vm up win11 --display 1920x1080               # any WIDTHxHEIGHT
@@ -148,9 +147,11 @@ On an M-series Mac, with Windows 11 Pro 24H2 ARM64, 4 GB of memory, and 4 cores:
 Limits that are particular to QEMU:
 
 - Windows has no display driver for `ramfb`. It uses the screen mode that the UEFI firmware set. QEMU's own firmware
-  has only 640x480, 800x600, and 1024x768. `firmware/build.sh` builds edk2 with `firmware/ramfb-resolution.patch` and
-  installs it in `~/.proofreel/firmware`. This firmware uses the size from `up --display` in place of 1024x768 (default
-  1440x900; give a size larger than 800x600). Without it, the screen is 1024x768 at most and `up` says so.
+  has only 640x480, 800x600, and 1024x768. proofreel ships its own edk2 firmware (`src/proofreel/firmware/`), which
+  uses the size from `up --display` in place of 1024x768 (default 1440x900; give a size larger than 800x600). `up`
+  unpacks it into `~/.proofreel/firmware` once. To rebuild it, run `src/proofreel/firmware/build.sh` from a checkout
+  (`brew install llvm lld acpica`). It uses edk2 tag `edk2-stable202408` and `ramfb-resolution.patch`, and replaces
+  `edk2-aarch64-code.fd.gz`. edk2 is BSD-2-Clause-Patent: `LICENSE-edk2.txt` is next to the binary.
 - Windows keeps the last screen size and scales it to fit a new size. A cold `save` deletes the saved size
   (`HKLM\SYSTEM\CurrentControlSet\Control\GraphicsDrivers\Configuration`), so the next `up` fills the screen. A
   cold state keeps the `--display` that it was saved with. A warm state always has the size that it was saved with.
@@ -176,7 +177,7 @@ proofreel vm sh 'setsid -f xfce4-terminal'              # any app: SSH sessions 
 - Chromium shows no first-run pages. Policies turn off the password, autofill, translate, and sign-in prompts.
 - Chromium makes no background requests. The quiet flags turn off most of them. The component updater and the account check run at start whatever the flags say, so both point at a closed local port (see `src/proofreel/images/debian-desktop.sh`).
 - The guest has no screen lock, no screensaver, no screen blank, and no automatic updates.
-- The screen size is the `--display` size (1024x768 at most without the [firmware](#windows-11-arm-and-linux-qemu)): the kernel takes the largest firmware mode (`video=efifb:auto`).
+- The screen size is the `--display` size: the kernel takes the largest firmware mode (`video=efifb:auto`).
 - The state disk is about 2.1 GB. The state is cold only: a cold `up` is already fast.
 
 To make the `linux` state, run `proofreel vm image` (a name is optional; the default is `linux`). It needs QEMU, and
