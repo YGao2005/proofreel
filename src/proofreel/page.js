@@ -36,65 +36,114 @@ const fromHash = () => {
 fromHash();
 
 function chip(label, css) { return $("span", { class: `chip ${css}`, text: label }); }
+const ICONS = {
+  play: "M7 5v14l11-7z", pause: "M7 5h4v14H7zM13 5h4v14h-4z", full: "M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5",
+  zoom: "M11 4a7 7 0 1 0 0 14a7 7 0 1 0 0-14zM20 20l-4-4M8 11h6M11 8v6",
+  help: "M12 21a9 9 0 1 0 0-18a9 9 0 1 0 0 18zM9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6M12 17h.01",
+};
+const icon = name => {
+  const s = document.createElementNS("http://www.w3.org/2000/svg", "svg"), p = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  s.setAttribute("viewBox", "0 0 24 24"); s.setAttribute("aria-hidden", "true"); s.setAttribute("class", "icon " + name);
+  p.setAttribute("d", ICONS[name]); s.append(p);
+  return s;
+};
+const VIEWS = [["timeline", "Timeline"], ["machine", "State machine"], ["stats", "Stats", true], ["network", "Network", true], ["compare", "Compare", true]];
+const SOON = {
+  stats: "Per-run numbers: time in each state, checks, retries, CPU and memory peaks. One table, one row per run.",
+  network: "Requests on the video time axis: method, URL, status, time. Click a request to jump the video to it.",
+  compare: "Two runs side by side: the same state in each, with the frame, the checks, and the time they took.",
+};
+
+function runSwitch() {
+  if (RUNS.length < 2) return null;
+  const nav = $("nav", { class: "seg runs", "aria-label": "Runs" });
+  RUNS.forEach((x, i) => nav.append($("button", { type: "button", "aria-pressed": String(i === run),
+    title: `Run ${i + 1}: ${VERDICTS[x.verdict][0]}, ${x.when}`, onclick: () => { location.hash = `run-${i + 1}`; } },
+    $("span", { class: `dot ${VERDICTS[x.verdict][1]}` }), $("span", { text: `Run ${i + 1}` }), $("span", { class: "when", text: x.when.slice(5) }))));
+  return nav;
+}
 
 function render() {
   const r = RUNS[run], app = document.getElementById("app");
   app.replaceChildren();
   document.title = r.title;
-  const header = $("header", {},
-    $("div", {}, chip(...VERDICTS[r.verdict])),
-    $("h1", { text: r.title }),
-    r.about ? $("p", { class: "lede", text: r.about }) : null,
-    r.error ? $("p", { class: "lede" }, chip("Stopped", "bad"), document.createTextNode(" " + r.error)) : null,
-    $("div", { class: "meta" }, ...r.meta.map(m => $("span", { text: m }))));
-  app.append(header);
-  if (RUNS.length > 1) {
-    const tabs = $("div", { class: "runs", role: "group", "aria-label": "Runs" });
-    RUNS.forEach((x, i) => tabs.append($("button", { type: "button", "aria-pressed": String(i === run),
-      onclick: () => { location.hash = `run-${i + 1}`; } },
-      $("span", { text: `Run ${i + 1}` }), chip(...VERDICTS[x.verdict]), $("span", { class: "when", text: x.when }))));
-    app.append(tabs);
-  }
-  const video = $("video", { controls: "", controlslist: "nofullscreen", playsinline: "", muted: "", preload: "metadata",
-    poster: r.base + "poster.jpg", src: r.base + "session.mp4" });
+  app.append($("header", { class: "top" },
+    $("div", { class: "title" },
+      $("div", { class: "name" }, chip(...VERDICTS[r.verdict]), $("h1", { text: r.title })),
+      r.about ? $("p", { class: "lede", text: r.about }) : null,
+      r.error ? $("p", { class: "lede" }, chip("Stopped", "bad"), document.createTextNode(" " + r.error)) : null,
+      $("div", { class: "meta" }, ...r.meta.map(m => $("span", { text: m })))),
+    runSwitch()));
+
+  const video = $("video", { playsinline: "", muted: "", preload: "metadata", poster: r.base + "poster.jpg", src: r.base + "session.mp4" });
   const overlay = r.overlay ? $("div", { class: "overlay", "aria-hidden": "true" },
     $("div", { class: "top" }, $("span", { class: "pill clock" }), $("span", { class: "pill state" }), $("span", { class: "pill speed" })),
     $("span", { class: "pill now" }), $("span", { class: "pill caption" })) : null;
   const screen = $("div", { class: "screen" }, video, overlay);
-  const update = () => stage(r, video, overlay);
-  const zoomButton = r.camera && r.camera.length ? $("button", { type: "button", class: "btn small",
-    "aria-pressed": String(zoom), text: zoom ? "Zoom on" : "Zoom off", title: "Zoom in on each action", onclick: () => {
-      zoom = !zoom;
-      try { localStorage.setItem("proofreel-zoom", zoom ? "1" : "0"); } catch (err) {}
-      zoomButton.setAttribute("aria-pressed", String(zoom));
-      zoomButton.textContent = zoom ? "Zoom on" : "Zoom off";
-      update();
-    } }) : null;
-  const fullButton = screen.requestFullscreen ? $("button", { type: "button", class: "btn small", text: "Full screen",
-    onclick: () => screen.requestFullscreen().catch(() => {}) }) : null;
+  const update = () => {
+    stage(r, video, overlay);
+    if (video.duration) timebar.style.setProperty("--at", (video.currentTime / video.duration * 100) + "%");
+    time.textContent = `${clock(Math.max(0, toReal(r, video.currentTime)))} / ${clock(r.real)}`;
+  };
+  const toggle = (label, name, on, title, flip) => {
+    const b = $("button", { type: "button", class: "btn tool", "aria-pressed": String(on), title }, icon(name), $("span", { class: "label", text: label }));
+    b.addEventListener("click", () => { on = !on; b.setAttribute("aria-pressed", String(on)); flip(on); });
+    return b;
+  };
+  const zoomButton = r.camera && r.camera.length ? toggle("Zoom", "zoom", zoom, "Zoom in on each action", on => {
+    zoom = on;
+    try { localStorage.setItem("proofreel-zoom", zoom ? "1" : "0"); } catch (err) {}
+    update();
+  }) : null;
+  const fullButton = screen.requestFullscreen ? $("button", { type: "button", class: "btn tool icon-only", title: "Full screen",
+    "aria-label": "Full screen", onclick: () => screen.requestFullscreen().catch(() => {}) }, icon("full")) : null;
+  const play = $("button", { type: "button", class: "btn tool icon-only play", "aria-label": "Play", onclick: () => video.paused ? video.play().catch(() => {}) : video.pause() }, icon("play"));
+  const paint = () => { play.replaceChildren(icon(video.paused ? "play" : "pause")); play.setAttribute("aria-label", video.paused ? "Play" : "Pause"); };
+  video.addEventListener("play", paint); video.addEventListener("pause", paint);
+  video.addEventListener("click", () => play.click());
   const tick = () => { update(); if (!video.paused) requestAnimationFrame(tick); };
   video.addEventListener("play", () => requestAnimationFrame(tick));
   for (const name of ["seeked", "loadedmetadata", "timeupdate"]) video.addEventListener(name, update);
-  const done = $("div", { class: "done" });
-  const bar = $("div", { class: "bar" }, $("div", { class: "track" }), done);
-  const shown = r.events;
-  for (const e of shown.filter(e => ["step", "check", "wait"].includes(e.kind))) {
+  const time = $("span", { class: "time" });
+  const bar = $("div", { class: "bar", role: "slider", "aria-label": "Seek", tabindex: "0" }, $("div", { class: "track" }), $("div", { class: "done" }));
+  for (const e of r.events.filter(e => ["step", "check", "wait"].includes(e.kind))) {
     const css = e.kind === "step" ? "step" : (e.ok ? "ok" : "bad");
-    bar.append($("i", { class: css, "data-t": toVideo(r, e.t), title: e.text }));
+    bar.append($("i", { class: css, "data-t": toVideo(r, e.t), title: `${clock(e.t)} ${e.text}` }));
   }
   const seek = t => { video.currentTime = Math.max(0, t); video.play().catch(() => {}); };
   bar.addEventListener("click", ev => {
     const box = bar.getBoundingClientRect();
     if (video.duration) seek((ev.clientX - box.left) / box.width * video.duration);
   });
-  const place = () => { if (video.duration) bar.querySelectorAll("i").forEach(m => m.style.left = (m.dataset.t / video.duration * 100) + "%"); };
+  bar.addEventListener("keydown", ev => {
+    const step = { ArrowLeft: -1, ArrowRight: 1, PageDown: -5, PageUp: 5 }[ev.key];
+    if (step && video.duration) { ev.preventDefault(); video.currentTime = Math.min(video.duration, Math.max(0, video.currentTime + step)); }
+  });
+  const help = $("details", { class: "help" }, $("summary", { class: "btn tool icon-only", "aria-label": "About this video", title: "About this video" }, icon("help")),
+    $("div", { class: "pop", text: `Recorded from the screen as the agent drove it. Blue rings are clicks. The video is sped up to about 30 s; a badge shows the speed (up to ${fastest(r)}x with no change on the screen). The clock is real time. Click a row or a mark to jump to it.` }));
+  const lanes = $("div", { class: "lanes" });
+  const statesLane = $("div", { class: "lane states", "aria-label": "States" });
+  for (const v of r.states || []) statesLane.append($("button", { type: "button", class: `seg-state ${VISITS[visitVerdict(v)][1]}`,
+    "data-t": toVideo(r, v.t), "data-end": toVideo(r, v.end), title: `${v.name}: ${VISITS[visitVerdict(v)][0]}`,
+    onclick: () => seek(toVideo(r, v.t) - 0.2) }, $("span", { text: v.name })));
+  if (r.states && r.states.length) lanes.append($("span", { class: "lane-label", text: "States" }), statesLane, $("span"));
+  const timebar = $("div", { class: "timebar" },
+    $("div", { class: "lead" }, play, time), bar, $("div", { class: "tools" }, zoomButton, fullButton, help), lanes);
+  const place = () => {
+    if (!video.duration) return;
+    bar.querySelectorAll("i").forEach(m => m.style.left = (m.dataset.t / video.duration * 100) + "%");
+    statesLane.querySelectorAll(".seg-state").forEach(s => {
+      s.style.left = (s.dataset.t / video.duration * 100) + "%";
+      s.style.width = (Math.max(0, s.dataset.end - s.dataset.t) / video.duration * 100) + "%";
+    });
+    if (video.videoWidth) document.documentElement.style.setProperty("--ratio", video.videoWidth / video.videoHeight);
+  };
   video.addEventListener("loadedmetadata", place);
-  const player = $("div", { class: "panel player" }, $("div", { class: "view" }, zoomButton, fullButton), screen, bar,
-    $("p", { text: `Recorded from the screen as the agent drove it. Blue rings are clicks. The video is sped up to about 30 s; a badge shows the speed (up to ${fastest(r)}x with no change on the screen). The clock is real time. Click a row or a mark to jump to it.` }));
-  const side = $("div", { class: "side" }, player, reviewPanel(r), askPanel(r, video));
-  const list = $("ol");
+  const stagePanel = $("section", { class: "panel stage", "aria-label": "Recording" }, $("div", { class: "media" }, screen), timebar);
+
+  const list = $("ol", { class: "list timeline" });
   let actions = null, summary = null, visit = 0;
-  for (const e of shown) {
+  for (const e of r.events) {
     if (e.row === "key") { list.append(row(r, e, seek, e.kind === "state" ? r.states[visit++] : null)); actions = null; continue; }
     if (!actions) {
       actions = $("ol");
@@ -106,24 +155,28 @@ function render() {
     summary.textContent = `${n} action${n === 1 ? "" : "s"}`;
   }
   const machine = MACHINE ? machineView(r, seek) : null;
-  const views = machine ? $("div", { class: "views", role: "group", "aria-label": "View" }) : null;
+  const panes = { timeline: list, machine: machine && machine.element };
+  for (const [name, , soon] of VIEWS) if (soon) panes[name] = $("div", { class: "soon-pane" }, $("p", { class: "placeholder", text: SOON[name] }));
+  const views = VIEWS.filter(([name]) => panes[name]);
+  if (!panes[view]) view = "timeline";
+  const tabs = $("div", { class: "tabs", role: "tablist", "aria-label": "View" });
   const show = () => {
-    list.hidden = !!machine && view === "machine";
-    if (machine) machine.element.hidden = view !== "machine";
-    if (views) views.querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.view === view)));
+    for (const [name, pane] of Object.entries(panes)) if (pane) pane.hidden = name !== view;
+    tabs.querySelectorAll("[role=tab]").forEach(b => b.setAttribute("aria-selected", String(b.dataset.view === view)));
   };
-  if (views) for (const [name, label] of [["timeline", "Timeline"], ["machine", "State machine"]]) {
-    views.append($("button", { type: "button", class: "btn small", "data-view": name, text: label, onclick: () => {
-      view = name;
-      try { localStorage.setItem("proofreel-view", view); } catch (err) {}
-      show();
-    } }));
-  }
+  for (const [name, label, soon] of views) tabs.append($("button", { type: "button", role: "tab", "data-view": name, class: soon ? "soon" : "",
+    onclick: () => { view = name; try { localStorage.setItem("proofreel-view", view); } catch (err) {} show(); } },
+    document.createTextNode(label), soon ? $("span", { class: "badge", text: "soon" }) : null));
   show();
-  app.append($("div", { class: "grid" }, side, $("div", { class: "column" }, views, list, machine && machine.element)));
+  const body = $("div", { class: "body scroll" }, ...Object.values(panes).filter(Boolean));
+  const viewsPanel = $("section", { class: "panel views" }, $("div", { class: "head" }, tabs), body);
+  const dock = $("aside", { class: "panel dock", "aria-label": "Review" }, reviewPanel(r), askPanel(r, video));
+  app.append($("div", { class: "grid" }, stagePanel, viewsPanel, dock));
+  const grid = app.lastChild;
+  const fit = () => app.style.setProperty("--fit-h", Math.max(160, grid.clientHeight - timebar.offsetHeight - 2) + "px");
+  if (window.ResizeObserver) { const watch = new ResizeObserver(fit); watch.observe(grid); watch.observe(timebar); }
   video.addEventListener("timeupdate", () => {
     if (machine) machine.now(toReal(r, video.currentTime));
-    if (video.duration) done.style.width = (video.currentTime / video.duration * 100) + "%";
     let current = null;
     const rows = list.querySelectorAll("li[data-t]");
     for (const li of rows) if (+li.dataset.t <= video.currentTime + 0.05) current = li;
@@ -131,6 +184,7 @@ function render() {
     const mark = folded ? folded.parentElement : current;
     for (const li of list.querySelectorAll("li")) li.classList.toggle("now", li === mark);
   });
+  update();
   place();
   watchReview(r);
 }
@@ -304,7 +358,7 @@ function machineView(r, seek) {
     }
   };
   details();
-  const element = $("div", { class: "panel machine" }, $("div", { class: "graph" }, drawing), info);
+  const element = $("div", { class: "machine" }, $("div", { class: "graph" }, drawing), info);
   const now = real => {
     playing = real;
     const v = visitAt(r, real);
@@ -314,7 +368,7 @@ function machineView(r, seek) {
 }
 
 function reviewPanel(r) {
-  const panel = $("section", { class: "panel review", id: "review", hidden: "" });
+  const panel = $("section", { class: "section review", id: "review", hidden: "" });
   panel.append($("h2", { text: "Review" }));
   const body = $("div", { class: "body" });
   const choices = $("div", { class: "choices" });
@@ -356,8 +410,8 @@ async function setReview(r, verdict) {
 }
 
 function askPanel(r, video) {
-  const panel = $("section", { class: "panel", id: "ask", hidden: "" });
-  const box = $("textarea", { "aria-label": "Ask about this moment", placeholder: "Ask about this moment, such as: why did the check fail?" });
+  const panel = $("section", { class: "section ask", id: "ask", hidden: "" });
+  const box = $("textarea", { "aria-label": "Ask about this moment", rows: "1", placeholder: "Why did the check fail?" });
   const answer = $("div", { class: "answer" });
   let controller = null;
   const ask = async () => {
@@ -388,7 +442,7 @@ function askPanel(r, video) {
     }
   };
   panel.append($("h2", { text: "Ask about this moment" }),
-    $("div", { class: "body" }, box, $("div", { class: "choices" }, $("button", { type: "button", class: "btn small", text: "Ask", onclick: ask })), answer));
+    $("div", { class: "body" }, $("div", { class: "ask-row" }, box, $("button", { type: "button", class: "btn", text: "Ask", onclick: ask })), answer));
   return panel;
 }
 

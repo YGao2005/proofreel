@@ -97,7 +97,7 @@ def document(runs):
     title = html.escape(runs[-1]["title"])
     return f"""<title>{title}</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=IBM+Plex+Mono&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=IBM+Plex+Mono&display=swap">
 <style>{ASSETS.joinpath('page.css').read_text()}</style>
 <div class="wrap"><main id="app"></main><footer>Made with <a href="https://github.com/YGao2005/proofreel">proofreel</a>.</footer></div>
 <script type="application/json" id="runs">{data}</script>
