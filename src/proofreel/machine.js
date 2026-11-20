@@ -1,6 +1,6 @@
 const Machine = (() => {
   function flow(run) {
-    const checks = (run.events || []).filter(e => e.kind === "check" || e.kind === "wait");
+    const checks = (run.events || []).filter(e => e.kind === "check");
     const nodes = new Map(), edges = new Map();
     let from = null;
     for (const v of run.states || []) {

@@ -24,10 +24,10 @@ test("a repeated transition is one edge that counts its takes", () => {
   assert.deepStrictEqual(f.edges.map(e => [e.from, e.to, e.takes]), [["A", "B", 2], ["B", "A", 1]]);
 });
 
-test("a node counts the checks and waits that ran in its visits", () => {
+test("a node counts the checks that ran in its visits, as the header does, and not the waits", () => {
   const events = [check(1), check(2, false), { kind: "wait", t: 12, ok: true }, { kind: "step", t: 13 }, check(25)];
   const f = Machine.flow({ states: path("A", "B", "C"), events });
-  assert.deepStrictEqual(f.nodes.map(n => [n.passed, n.total]), [[1, 2], [1, 1], [1, 1]]);
+  assert.deepStrictEqual(f.nodes.map(n => [n.passed, n.total]), [[1, 2], [0, 0], [1, 1]]);
 });
 
 test("a verdict is bad when a visit failed, ok when one passed, unchecked when none was checked", () => {
