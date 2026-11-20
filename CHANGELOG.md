@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- **`proofreel vm image`** makes the `linux` state from nothing: downloads Debian (SHA-512 checked), installs Xfce and Chromium, saves the state. The cloud-init files and the desktop script ship in the package (`proofreel/images`).
+- The README says what to install for each guest, and the quickstart runs as written with the Acme Notes app.
+- New `browser` extra (`websocket-client`). The QMP socket moves to the temp folder, so a deep `PROOFREEL_HOME` works. The Acme Notes notes page fits a 1024x768 screen.
+
 ## 1.0.0
 
 The first release. proofreel records a coding agent driving an app in a VM and turns the run into a review video and a review page (a claude.ai artifact).

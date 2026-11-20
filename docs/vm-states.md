@@ -174,17 +174,19 @@ proofreel vm sh 'setsid -f xfce4-terminal'              # any app: SSH sessions 
 - `browse` starts Chromium maximized, or opens a new tab when Chromium runs. The page shows about 1.5 s later.
 - Chromium listens for DevTools on the guest's 127.0.0.1:9222, for the `browser` probe.
 - Chromium shows no first-run pages. Policies turn off the password, autofill, translate, and sign-in prompts.
-- Chromium makes no background requests. The quiet flags turn off most of them. The component updater and the account check run at start whatever the flags say, so both point at a closed local port (see `images/debian-desktop.sh`).
+- Chromium makes no background requests. The quiet flags turn off most of them. The component updater and the account check run at start whatever the flags say, so both point at a closed local port (see `src/proofreel/images/debian-desktop.sh`).
 - The guest has no screen lock, no screensaver, no screen blank, and no automatic updates.
-- The screen size is the `--display` size: the kernel takes the largest firmware mode (`video=efifb:auto`).
+- The screen size is the `--display` size (1024x768 at most without the [firmware](#windows-11-arm-and-linux-qemu)): the kernel takes the largest firmware mode (`video=efifb:auto`).
 - The state disk is about 2.1 GB. The state is cold only: a cold `up` is already fast.
 
-To make the `linux` state again:
+To make the `linux` state, run `proofreel vm image` (a name is optional; the default is `linux`). It needs QEMU, and
+takes about 4 minutes. It does these steps:
 
-1. Get `debian-13-generic-arm64.qcow2` from `cloud.debian.org/images/cloud/trixie/latest/`. Make it larger with
-   `qemu-img resize debian-13-generic-arm64.qcow2 10G`.
-2. Make a cloud-init disk: `xorriso -as mkisofs -V cidata -J -r -o seed.iso images/debian-seed`.
-3. Start the image once in QEMU with the flags of `up`, and add `seed.iso` as a virtio disk.
-4. Copy `images/debian-desktop.sh` into the guest. Run `sudo sh debian-desktop.sh tester`, then shut down.
-5. `proofreel vm base linux debian-13-generic-arm64.qcow2 --backend qemu --os linux --user tester --guest-password tester`.
-6. `proofreel vm up linux --memory 2048`, then `proofreel vm save linux`.
+1. Downloads `debian-13-generic-arm64.qcow2` from `cloud.debian.org/images/cloud/trixie/latest/` into
+   `$PROOFREEL_HOME/images`, and checks its SHA-512 against `SHA512SUMS` from the same folder.
+2. Makes a state from it (`vm base`) and makes the disk 10 GB.
+3. Boots it once with cloud-init. The host serves `images/debian-seed` (the `tester` user) over HTTP; there is no ISO.
+4. Runs `images/debian-desktop.sh` in the guest over SSH, then saves the state (`vm save`), which also checks that
+   the desktop starts.
+
+Both files are in the package (`src/proofreel/images`). If a step fails, the half-made state is deleted.
