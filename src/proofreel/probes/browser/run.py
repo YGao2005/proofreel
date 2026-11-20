@@ -135,13 +135,13 @@ def version(port):
 
 
 def main():
+    port = os.environ.get("PROOFREEL_TUNNEL")
+    if not port:
+        return say({"unavailable": "The browser probe needs a run VM: proofreel vm up <state>."})
     try:
         import websocket
     except ImportError:
         return say({"unavailable": "The browser probe needs websocket-client: pip install websocket-client"})
-    port = os.environ.get("PROOFREEL_TUNNEL")
-    if not port:
-        return say({"unavailable": "The browser probe needs a run VM: proofreel vm up <state>."})
     say({"meta": {"waiting": "for Chromium's DevTools port 9222 in the guest; open pages with browse"}})
     since = time.monotonic()
     while True:
