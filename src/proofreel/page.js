@@ -20,6 +20,7 @@ try { zoom = localStorage.getItem("proofreel-zoom") !== "0"; } catch (err) {}
 const SUITE = RUNS.some(x => x.suite);
 const suiteOf = x => x.suite ? x.suite.id : "";
 if (SUITE && !location.hash) view = "journeys";
+const MACHINE = RUNS.some(x => x.states && x.states.length);
 const VISITS = { ok: ["Pass", "ok"], bad: ["Fail", "bad"], unchecked: ["Not checked", "info"] };
 const visitVerdict = v => v.ok === false ? "bad" : v.ok ? "ok" : "unchecked";
 const fromHash = () => {
@@ -145,7 +146,7 @@ function render() {
   const help = $("details", { class: "help" }, $("summary", { class: "btn tool icon-only", "aria-label": "About this video", title: "About this video" }, icon("help")),
     $("div", { class: "pop", text: `Recorded from the screen as the agent drove it. Blue rings are clicks. The video is sped up to about 30 s; a badge shows the speed (up to ${fastest(r)}x with no change on the screen). The clock is real time. Click a row or a mark to jump to it.` }));
   const tracks = metricTracks(r, live, seek);
-  const flow = flowView(r, seek);
+  const flow = flowPanel(r, seek);
   const timebar = $("div", { class: "timebar" }, $("div", { class: "lead" }, play, time), bar, $("div", { class: "tools" }, zoomButton, fullButton, help));
   const place = () => {
     if (!video.duration) return;
@@ -443,6 +444,110 @@ function row(r, e, seek) {
 // The run's flow, top to bottom: a node for each state the run visited, with its time and checks, and under it the steps
 // of that visit. A run with no states is one list of steps. The node and step at the video's time are lit, and the
 // column follows them except for 4 s after the person scrolls it.
+// Every run's states as one graph. The run on show is drawn strong: its path, a verdict on each node it visited, and
+// how long each step took. A dot under a node is its verdict in each run. The node the video is in lights up.
+function machineView(r, seek) {
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = (tag, attrs = {}, ...kids) => {
+    const el = document.createElementNS(NS, tag);
+    for (const [k, v] of Object.entries(attrs)) if (k.startsWith("on")) el.addEventListener(k.slice(2), v); else el.setAttribute(k, v);
+    for (const kid of kids) if (kid) el.append(kid);
+    return el;
+  };
+  const graph = Machine.build(RUNS), current = RUNS.indexOf(r), many = RUNS.length > 1, states = r.states || [];
+  const measure = document.createElement("canvas").getContext("2d");
+  measure.font = "600 14px Inter, system-ui, sans-serif";
+  const name = id => id.length > 32 ? id.slice(0, 31) + "…" : id;
+  const size = id => id === Machine.START ? [measure.measureText(id).width + 26, 26]
+    : [Math.max(64, measure.measureText(name(id)).width + 30), many ? 46 : 34];
+  const box = Machine.layout(graph, size);
+  const pad = 8;
+  const drawing = svg("svg", { role: "img", "aria-label": "State machine of the runs" },
+    svg("defs", {}, svg("marker", { id: "arrow", viewBox: "0 0 10 10", refX: "9", refY: "5", markerWidth: "7",
+      markerHeight: "7", orient: "auto-start-reverse" }, svg("path", { d: "M0,0 L10,5 L0,10 z", class: "head" }))));
+  const start = (run, visit) => visit ? RUNS[run].states[visit - 1].t : 0;
+  const small = document.createElement("canvas").getContext("2d");
+  small.font = "12px Inter, system-ui, sans-serif";
+  let left = 0, right = box.width;
+  for (const e of box.edges) {
+    const mine = e.takes.filter(x => x.run === current);
+    const steps = mine.map(x => r.events.find(ev => ev.kind === "step" && ev.t >= start(current, x.visit) && ev.t < states[x.visit].t));
+    const took = mine.map(x => states[x.visit].t - start(current, x.visit));
+    const label = mine.length ? `${took[0].toFixed(1)} s${mine.length > 1 ? ` ×${mine.length}` : ""}${steps[0] ? " · " + steps[0].text : ""}` : "";
+    const runs = [...new Set(e.takes.map(x => x.run + 1))];
+    const g = svg("g", { class: "edge" + (mine.length ? " on" : "") + (e.back ? " back" : ""),
+      onclick: () => { if (mine.length) seek(toVideo(r, start(current, mine[0].visit)) - 0.2); } },
+      svg("title", {}, `${e.from} → ${e.to}${many ? ` (run ${runs.join(", ")})` : ""}${steps[0] ? ": " + steps[0].text : ""}`),
+      svg("path", { d: e.d, class: "hit" }), svg("path", { d: e.d, class: "line", "marker-end": "url(#arrow)" }));
+    if (label && e.label) {
+      const text = label.length > 34 ? label.slice(0, 33) + "…" : label;
+      const [x, y, anchor] = e.label, width = small.measureText(text).width, at = anchor === "end" ? x - 7 : x + 7;
+      g.append(svg("text", { x: at, y: y + 4, "text-anchor": anchor, class: "label" }, text));
+      left = Math.min(left, anchor === "end" ? at - width : at);
+      right = Math.max(right, anchor === "end" ? at : at + width);
+    }
+    drawing.append(g);
+  }
+  const nodes = new Map();
+  let selected = null;
+  for (const n of box.nodes) {
+    const here = Machine.verdict(states, n.id), first = n.id === Machine.START;
+    const g = svg("g", { class: `node ${first ? "start" : here ? VISITS[here][1] : "away"}`, tabindex: "0", role: "button",
+      transform: `translate(${n.x},${n.y})`, "aria-label": `${n.id}${here ? ": " + VISITS[here][0] : ""}` },
+      svg("rect", { width: n.w, height: n.h, rx: first ? n.h / 2 : 8 }),
+      svg("text", { x: n.w / 2, y: many && !first ? 19 : n.h / 2 + 4.5, class: "name" }, first ? n.id : name(n.id)));
+    if (many && !first) RUNS.forEach((x, i) => {
+      const v = Machine.verdict(x.states, n.id);
+      g.append(svg("circle", { cx: n.w / 2 + (i - (RUNS.length - 1) / 2) * 11, cy: 33, r: i === current ? 4 : 3.2,
+        class: `dot ${v ? VISITS[v][1] : "away"}${i === current ? " mine" : ""}` }, svg("title", {}, `Run ${i + 1}: ${v ? VISITS[v][0] : "not visited"}`)));
+    });
+    const pick = () => {
+      selected = n.id;
+      details();
+      const v = states.find(v => v.name === n.id);
+      if (v) seek(toVideo(r, v.t) - 0.2);
+    };
+    g.addEventListener("click", pick);
+    g.addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); pick(); } });
+    drawing.append(g);
+    nodes.set(n.id, g);
+  }
+  drawing.setAttribute("viewBox", `${left - pad} ${-pad} ${right - left + 2 * pad} ${box.height + 2 * pad}`);
+  drawing.setAttribute("width", right - left + 2 * pad);
+  const info = $("div", { class: "visit" });
+  const details = () => {
+    nodes.forEach((g, id) => g.classList.toggle("picked", id === selected));
+    info.replaceChildren();
+    if (!selected || selected === Machine.START || !nodes.has(selected)) {
+      info.append($("p", { class: "hint", text: "Click a state to see its checks, or a step to jump to it." }));
+      return;
+    }
+    const here = Machine.verdict(states, selected);
+    info.append($("h3", {}, document.createTextNode(selected + " "), here ? chip(...VISITS[here]) : chip("Not in this run", "info")));
+    const visits = states.filter(v => v.name === selected);
+    const checks = r.events.filter(e => ["wait", "check"].includes(e.kind) && visits.some(v => e.t >= v.t && e.t < v.end));
+    if (visits.length && !checks.length) info.append($("p", { class: "hint", text: "No wait or check ran in this state." }));
+    if (checks.length) { const ol = $("ol"); checks.forEach(e => ol.append(row(r, e, seek))); info.append(ol); }
+    if (r.error && visits.includes(states[states.length - 1])) info.append($("p", { class: "hint" }, chip("Stopped", "bad"), document.createTextNode(" " + r.error)));
+    if (many) {
+      const others = $("div", { class: "choices" });
+      RUNS.forEach((x, i) => {
+        const v = Machine.verdict(x.states, selected);
+        if (v && i !== current) others.append($("button", { type: "button", class: "btn small", onclick: () => { location.hash = `run-${i + 1}`; } },
+          $("span", { text: `Run ${i + 1}` }), chip(...VISITS[v])));
+      });
+      if (others.children.length) info.append($("p", { class: "hint", text: "In other runs:" }), others);
+    }
+  };
+  details();
+  const element = $("div", { class: "machine body" }, $("div", { class: "graph" }, drawing), info);
+  const now = real => {
+    const v = Machine.at(r, real);
+    nodes.forEach((g, id) => g.classList.toggle("now", !!v && v.name === id));
+  };
+  return { element, now };
+}
+
 function flowView(r, seek) {
   const list = Machine.sections(r), body = $("div", { class: "body" }), items = $("ol", { class: "list flow-list" });
   const nodes = [], steps = [];
@@ -450,7 +555,7 @@ function flowView(r, seek) {
     const tone = VISITS[visitVerdict(s)][1], item = $("li", { class: `visit ${tone}` });
     if (s.visit) {
       const checks = s.total ? `${s.passed}/${s.total} checks` : "No checks";
-      const node = $("button", { type: "button", class: "node", title: `${s.name}: ${VISITS[visitVerdict(s)][0]}, ${checks}`,
+      const node = $("button", { type: "button", class: "visit-node", title: `${s.name}: ${VISITS[visitVerdict(s)][0]}, ${checks}`,
         onclick: () => seek(toVideo(r, s.t) - 0.2) },
         $("span", { class: "name", text: s.name }), $("span", { class: "t", text: clock(s.t) }),
         $("span", { class: "checks", text: checks }), s.ok === null ? null : chip(...VISITS[tone]));
@@ -495,8 +600,23 @@ function flowView(r, seek) {
     const node = nodes[section];
     if (mark) reveal(mark, node ? node.offsetHeight + 4 : 0); else if (node) reveal(node, 0);
   };
-  const element = $("aside", { class: "panel flow", "aria-label": "User flow" }, $("h2", { text: "User flow" }), body);
-  return { element, now };
+  return { element: body, now };
+}
+
+function flowPanel(r, seek) {
+  const steps = flowView(r, seek), diagram = MACHINE ? machineView(r, seek) : null;
+  const panes = { flow: diagram && diagram.element, steps: steps.element };
+  let mode = diagram ? "flow" : "steps";
+  const buttons = Object.keys(panes).filter(k => panes[k]).map(k => $("button", { type: "button", "aria-pressed": String(k === mode), text: k === "flow" ? "Flow" : "Steps",
+    onclick: () => { mode = k; show(); } }));
+  const show = () => {
+    for (const k in panes) if (panes[k]) panes[k].hidden = k !== mode;
+    buttons.forEach(b => b.setAttribute("aria-pressed", String(b.textContent.toLowerCase() === mode)));
+  };
+  show();
+  const head = diagram ? $("div", { class: "head" }, $("div", { class: "seg", role: "group", "aria-label": "Show" }, ...buttons)) : $("h2", { text: "Steps" });
+  return { element: $("aside", { class: "panel flow", "aria-label": "User flow" }, head, diagram && diagram.element, steps.element),
+    now: real => { steps.now(real); if (diagram) diagram.now(real); } };
 }
 
 function reviewPanel(r) {
