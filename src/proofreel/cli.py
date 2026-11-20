@@ -48,7 +48,7 @@
   publish <session> --out <dir>                         Add a run to a review folder: one page, every run, one URL.
   demo [dir]                                            Render a made-up session (no VNC needed).
   clean [--days 7]                                      Delete sessions older than this.
-  vm base|up|save|build|states|conditions|drop|down|sh|put|get   VMs (Tart or QEMU), their saved states, and the
+  vm image|base|up|save|build|states|conditions|drop|down|sh|put|get   VMs (Tart or QEMU), their saved states, and the
                                                         conditions a state can fake (see: proofreel vm -h).
 
 The screen is the run VM of `proofreel vm up`, or --vnc host::port with --password, or PROOFREEL_VNC.
@@ -63,7 +63,7 @@ import sys
 import time
 from pathlib import Path
 
-from . import HOME, Problem, __version__, ax, conditions, flow, guest, metrics, plugins, probes, recording
+from . import HOME, Problem, __version__, ax, conditions, flow, guest, image, metrics, plugins, probes, recording
 from .recording import log
 from . import vm as vms
 from .screen import Screen, center, find, fold, inside, matches, poll, screen_text, wait_for
@@ -392,6 +392,8 @@ def parser():
     v.add_argument("--os", choices=list(guest.GUESTS), default="macos", help="the guest system")
     v.add_argument("--user", default="admin")
     v.add_argument("--guest-password", default="admin")
+    v = vm.add_parser("image", help="make the Linux browser state from nothing (Debian, Xfce, Chromium)")
+    v.add_argument("name", nargs="?", default="linux")
     v = vm.add_parser("up", help="start the run VM from a state")
     v.add_argument("state")
     v.add_argument("--display")
@@ -453,6 +455,7 @@ def list_probes():
 
 def vm(a):
     match a.action:
+        case "image": image.make(a.name)
         case "base": vms.base(a.name, a.image, a.backend, a.os, a.user, a.guest_password)
         case "up": vms.up(a.state, a.display, a.memory, a.cpu, a.warmable)
         case "save": vms.save(a.state, a.warm, a.note)

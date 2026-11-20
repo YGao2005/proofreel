@@ -8,9 +8,17 @@ review video and a page that a person can check in a minute.
 ## Install
 
 ```bash
-pip install git+https://github.com/YGao2005/proofreel   # Python 3.11+, and ffmpeg on PATH
-proofreel demo               # a made-up session, no VNC needed: open the index.html it prints
+pip install "proofreel[network,browser] @ git+https://github.com/YGao2005/proofreel"   # Python 3.11+
+proofreel demo               # a made-up session, no VM needed: open the index.html it prints
 ```
+
+Install the tools for the guests you use:
+
+- `brew install ffmpeg`: always. It makes the video.
+- `brew install qemu`: for a Linux or Windows guest (QEMU).
+- `brew install cirruslabs/cli/tart`: for a macOS guest (Tart).
+
+The `network` and `browser` extras add the network and browser probes that the Acme Notes budgets use.
 
 To let Claude Code drive it, add the skill:
 
@@ -21,22 +29,36 @@ curl -fsSL https://raw.githubusercontent.com/YGao2005/proofreel/main/skills/proo
 
 ## Quickstart
 
-Start a VM from a saved state, record a session, and publish the review page.
+Make the `linux` state once. It downloads Debian (about 0.4 GB), installs Xfce and Chromium, and saves the disk. It takes
+about 4 minutes and needs QEMU. A state that exists is not made again; `proofreel vm drop linux` removes it.
 
 ```bash
+proofreel vm image                           # once: the linux state (Debian, Xfce, Chromium)
+```
+
+Then start a VM from the state, record a session, and publish the review page. The example app is in this repo:
+
+```bash
+git clone https://github.com/YGao2005/proofreel && cd proofreel
+python3 examples/acme-notes/server.py &      # a made-up app on port 8791
 proofreel vm up linux                        # a run VM, cloned from a saved state in seconds
-proofreel start sign-up --title "Sign up" --about "A new user makes an account."
-proofreel step "Fill in the form"
-proofreel vm sh 'browse http://10.0.2.2:8000/'    # open a page in Chromium on the screen
+proofreel start sign-in --title "Sign in" --about "A returning user signs in."
+proofreel step "Open Acme Notes"
+proofreel vm sh 'browse http://10.0.2.2:8791/'    # open a page in Chromium on the screen
+proofreel wait-text "Welcome back" 30
 proofreel click-text "Email"                 # finds the words on the screen, then clicks them
 proofreel type "sam@example.com"
 proofreel key tab
-proofreel click 1210 830 --label 'click "Create account"'
-proofreel wait-text "Welcome" 30
-proofreel check text "Welcome, Sam"          # a pass or fail on the page
+proofreel click-text "Sign in"
+proofreel wait-text "Your notes" 20
+proofreel check text "Signed in as sam@example.com"   # a pass or fail on the page
 proofreel stop                               # makes session.mp4, index.html, poster.jpg, shots/
-proofreel publish <session> --out review-sign-up   # adds the run to a review folder, and prints its files
+proofreel publish <session> --out review-sign-in   # adds the run to a review folder, and prints its files
+proofreel vm down
 ```
+
+`stop` prints the session folder to give to `publish`. `proofreel click 512 400` clicks a point; the screen is 1024x768
+unless you build the [firmware](docs/vm-states.md#windows-11-arm-and-linux-qemu) for a larger one.
 
 Publishing is in [the review page](docs/review-page.md). To use an existing VNC screen in place of a VM, set
 `PROOFREEL_VNC=127.0.0.1::5900` and `PROOFREEL_PASSWORD=...`.
@@ -46,7 +68,7 @@ each from a clean start:
 
 ```bash
 proofreel run flows/sign-up.flow --set EMAIL=sam@example.com
-proofreel suite flows/ --out review-sign-up --title "Sign up"
+proofreel suite flows/ --out review-sign-in --title "Sign in"
 ```
 
 ## Checks
@@ -79,7 +101,7 @@ Tracks, Stats, and Network show what the [probes](docs/probes.md) measured.
 search). Its README says how to run it, and how `BROKEN=1` makes a run fail. The suite:
 
 ```bash
-python3 examples/acme-notes/server.py &
+python3 examples/acme-notes/server.py &    # skip if it already runs
 proofreel suite examples/acme-notes/flows --out review-acme
 ```
 

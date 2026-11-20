@@ -6,6 +6,7 @@ state, written by a migration to a file). A run VM starts from clones of these f
 QEMU runs headless: no display window, no audio device, no clipboard, VNC (QEMU's own) and SSH on 127.0.0.1 only.
 """
 
+import hashlib
 import json
 import os
 import platform
@@ -14,6 +15,7 @@ import shutil
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -29,6 +31,11 @@ def folder(name):
     return FOLDER / name
 
 
+def qmp_socket():
+    # WHY: a Unix socket path holds at most 103 bytes, so the socket is in the temp folder, not in a deep PROOFREEL_HOME.
+    return Path(tempfile.gettempdir()) / f"proofreel-qmp-{hashlib.sha256(str(folder(MACHINE)).encode()).hexdigest()[:12]}"
+
+
 def exists(name):
     return (folder(name) / "disk.qcow2").exists()
 
@@ -38,10 +45,17 @@ def clone(source, target):
                    check=True)
 
 
+def need_qemu():
+    """The path of qemu-system-aarch64. The qemu backend needs it and qemu-img on PATH."""
+    missing = [tool for tool in ("qemu-system-aarch64", "qemu-img") if not shutil.which(tool)]
+    if missing:
+        raise Problem(f"The qemu backend needs {' and '.join(missing)} on PATH. Install QEMU: brew install qemu "
+                      f"(macOS), or apt install qemu-system-arm qemu-utils (Debian and Ubuntu).")
+    return shutil.which("qemu-system-aarch64")
+
+
 def firmware():
-    binary = shutil.which("qemu-system-aarch64")
-    if not binary:
-        raise Problem("The qemu backend needs qemu-system-aarch64 on PATH: brew install qemu.")
+    binary = need_qemu()
     share = Path(binary).resolve().parent.parent / "share" / "qemu"
     code = CUSTOM_FIRMWARE if CUSTOM_FIRMWARE.exists() else share / "edk2-aarch64-code.fd"
     return code, share / "edk2-arm-vars.fd"
@@ -64,7 +78,7 @@ def host_address(run):
     return "127.0.0.1", "10.0.2.2", "127.0.0.1"
 
 
-def up(name, info, display=None, memory=None, cpu=None, warmable=False):
+def up(name, info, display=None, memory=None, cpu=None, warmable=False, extra=()):
     run = folder(MACHINE)
     shutil.rmtree(run, ignore_errors=True)
     run.mkdir(parents=True)
@@ -78,10 +92,10 @@ def up(name, info, display=None, memory=None, cpu=None, warmable=False):
     if not CUSTOM_FIRMWARE.exists():
         print(f"The screen is at most 1024x768, not {machine['display']}: the stock UEFI firmware has no other "
               f"modes. To get it, run firmware/build.sh from the proofreel repo.", file=sys.stderr)
-    return boot(machine, folder(name) / "memory.bin" if info.get("warm") else None)
+    return boot(machine, folder(name) / "memory.bin" if info.get("warm") else None, extra)
 
 
-def boot(machine, memory_file=None):
+def boot(machine, memory_file=None, extra=()):
     run = folder(MACHINE)
     port, vnc = free_port(), free_port(5900)
     accel = "hvf" if platform.system() == "Darwin" else "kvm"
@@ -96,13 +110,13 @@ def boot(machine, memory_file=None):
             "-drive", f"if=none,id=disk,format=qcow2,discard=unmap,file={run / 'disk.qcow2'}",
             "-device", "nvme,drive=disk,serial=proofreel",
             "-netdev", f"user,id=net,hostfwd=tcp:127.0.0.1:{port}-:22", "-device", "virtio-net-pci,netdev=net",
-            "-qmp", f"unix:{run / 'qmp.sock'},server=on,wait=off",
-            *(["-incoming", f"file:{memory_file}"] if memory_file else [])]
+            "-qmp", f"unix:{qmp_socket()},server=on,wait=off",
+            *(["-incoming", f"file:{memory_file}"] if memory_file else []), *extra]
     with open(run / "qemu.log", "w") as out:
         proc = subprocess.Popen(args, stdout=out, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
                                 start_new_session=True)
     record = {"vm": MACHINE, "backend": "qemu", "pid": proc.pid, "ip": "127.0.0.1", "port": port,
-              "vnc": f"127.0.0.1::{vnc}", "vnc_password": "", "qmp": str(run / "qmp.sock"), "machine": machine}
+              "vnc": f"127.0.0.1::{vnc}", "vnc_password": "", "qmp": str(qmp_socket()), "machine": machine}
 
     def running():
         if not alive(proc.pid):
@@ -180,12 +194,13 @@ def resume(name, run, warm):
 
 def stop():
     run = folder(MACHINE)
-    if (run / "qmp.sock").exists():
+    if qmp_socket().exists():
         try:
-            qmp({"qmp": str(run / "qmp.sock")}, "quit")
+            qmp({"qmp": str(qmp_socket())}, "quit")
         except (OSError, ValueError):
             pass
         time.sleep(1)
+    qmp_socket().unlink(missing_ok=True)
     shutil.rmtree(run, ignore_errors=True)
 
 

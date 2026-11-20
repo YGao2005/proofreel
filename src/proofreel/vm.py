@@ -181,13 +181,13 @@ def askpass(password):
             "PROOFREEL_GUEST_PASSWORD": password}
 
 
-def start(info, name, fields):
-    """Record the run VM that a backend booted, then wait for SSH."""
+def start(info, name, fields, desktop=True):
+    """Record the run VM that a backend booted, then wait for SSH, and for the desktop if the guest has one."""
     run = Run({**fields, "id": uuid.uuid4().hex, "state": name, "backend": info["backend"], "os": info["os"],
                "user": info["user"], "password": info["password"], "conditions": info.get("conditions", [])})
     CURRENT.write_text(json.dumps(run))
     wait(lambda: run.ssh("exit 0", check=False, timeout=10).returncode == 0, 240, "SSH in the VM did not start.")
-    if run.guest.desktop:
+    if desktop and run.guest.desktop:
         wait(lambda: run.ssh(run.guest.desktop, check=False, timeout=10).returncode == 0, 180,
              f"The {run['os']} desktop did not start in the VM.")
     return run

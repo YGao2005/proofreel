@@ -10,6 +10,7 @@ dependencies = ["pillow>=10.1,<13", "vncdotool==1.2.0"]
 
 [project.optional-dependencies]
 network = ["mitmproxy>=11"]
+browser = ["websocket-client"]
 
 [project.scripts]
 proofreel = "proofreel.cli:main"
