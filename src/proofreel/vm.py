@@ -116,6 +116,14 @@ class Run(dict):
         subprocess.run(["ssh", *self._options("-p"), "-O", "exit", self.target], capture_output=True, check=False)
 
 
+def sandboxed():
+    """True when this process runs in a macOS sandbox (sandbox_check with no operation)."""
+    if os.uname().sysname != "Darwin":
+        return False
+    import ctypes
+    return ctypes.CDLL("/usr/lib/libSystem.dylib").sandbox_check(os.getpid(), None, 0) == 1
+
+
 def free_port(first=0, host="127.0.0.1"):
     for port in range(first, first + 100) if first else [0]:
         with socket.socket() as s:
@@ -219,6 +227,9 @@ def save(name, warm=False, note="", flow=None, values=None, conditions=None):
     if recording.current():
         raise Problem("A session is recording. Stop it first: proofreel stop.")
     run = Run.current()
+    if warm and run["backend"] == "tart" and sandboxed():
+        raise Problem("A warm save inside a sandbox makes a memory file that Tart cannot restore later (\"permission "
+                      "denied\"). Run vm save --warm outside the sandbox.")
     for line in plugins.failed(plugins.undo(run)):
         print(line)
     kind = run["backend"]
@@ -230,7 +241,13 @@ def save(name, warm=False, note="", flow=None, values=None, conditions=None):
     write_state(name, parent=parent, backend=kind, os=run["os"], user=run["user"], password=run["password"], warm=warm,
                 note=note, flow=flow, values=values or {}, conditions=list(kept.values()),
                 **({"machine": machine} if machine else {}))
-    start(state_info(name), name, backend(kind).resume(name, run, warm))
+    try:
+        start(state_info(name), name, backend(kind).resume(name, run, warm))
+    except Problem as error:
+        if not warm:
+            raise
+        drop(name)
+        raise Problem(f"The warm state {name} did not restore, so it was deleted: {error}") from None
     print(f"Saved state {name}{' (warm)' if warm else ''} from {run['state']}. {RUN} runs on.")
 
 

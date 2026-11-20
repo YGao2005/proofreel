@@ -291,7 +291,9 @@ A clone is copy on write (APFS), so a state costs only the disk blocks that it c
 macOS 26 guest: `up` from a cold state takes about 18 s to SSH ready, a warm `up` about 12 s with the apps as they
 were, and `save --warm` about 60 s. A warm state needs a run VM
 that was started with `--warmable`. Tart then turns off the VM's audio devices, so do not test a microphone in a
-warm VM.
+warm VM. Run `save --warm` outside any macOS sandbox (such as an agent's command sandbox): a memory file saved inside
+one cannot be restored, so `save --warm` refuses there. A warm save resumes at once, and a state that does not
+restore is deleted.
 
 ### Conditions: fake hardware and setups
 
