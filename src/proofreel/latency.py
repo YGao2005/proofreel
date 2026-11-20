@@ -46,8 +46,10 @@ def differs(a, b, mask):
 def region(event, kind, frame_size, scale):
     if kind == "key" or "x" not in event:
         return (0, 0, *frame_size)
-    x, y, w, h = event["x"] * scale, event["y"] * scale, REGION[0] * scale / 2, REGION[1] * scale / 2
-    return (max(0, int(x - w)), max(0, int(y - h)), min(frame_size[0], int(x + w)), min(frame_size[1], int(y + h)))
+    width, height = frame_size
+    x, y = min(max(event["x"] * scale, 0), width - 1), min(max(event["y"] * scale, 0), height - 1)
+    w, h = REGION[0] * scale / 2, REGION[1] * scale / 2
+    return (max(0, int(x - w)), max(0, int(y - h)), min(width, int(x + w) + 1), min(height, int(y + h) + 1))
 
 
 def answer(frames, taken, arrived, event, kind, scale):
@@ -57,7 +59,7 @@ def answer(frames, taken, arrived, event, kind, scale):
     if base < 0:
         return None
     size = SMALL[kind]
-    box = region(event, kind, Image.open(frames[0]).size, scale)
+    box = region(event, kind, Image.open(frames[base]).size, scale)
     look = lambda i: picture(frames[i], box, size)
     reference = look(base)
     mask = Image.new("L", size, 0)
