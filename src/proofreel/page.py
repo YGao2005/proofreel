@@ -9,6 +9,7 @@ plain file, it is a static page.
 import fcntl
 import html
 import json
+import re
 import shutil
 import time
 from importlib import resources
@@ -22,8 +23,10 @@ VERSION = 2
 CAPABILITIES = {"db": {}, "user": {"scopes": ["profile"]}, "sample": {"images": True}}
 
 ASSETS = resources.files("proofreel")
-SCRIPTS = ("machine.js", "tracks.js", "page.js")
+SCRIPTS = ("machine.js", "tracks.js", "verdict.js", "page.js")
 CURVES = 6
+# WHY: runs published before the page counted checks itself carry these two facts in their meta.
+LEGACY_META = re.compile(r" checks pass$| of screen in a \d+ s video$")
 
 
 def verdict(info, events):
@@ -37,13 +40,10 @@ def verdict(info, events):
 def run_data(folder, info, events, length, real, clock, camera, measured=None):
     """The page's data for one run (version 2). Times are seconds from the first frame. measured is what
     metrics.page() packed."""
-    checks = [e for e in events if e["kind"] == "check"]
-    passed = sum(1 for e in checks if e.get("ok"))
     meta = [f"{k} {v}" for k, v in (info.get("meta") or {}).items() if k and k != "conditions" and v]
-    meta += [f"conditions {', '.join(map(condition, info['conditions']))}" if info.get("conditions") else "",
-             f"{passed}/{len(checks)} checks pass" if checks else "", f"{real:.0f} s of screen in a {length:.0f} s video"]
+    meta += [f"conditions {', '.join(map(condition, info['conditions']))}" if info.get("conditions") else ""]
     started = info.get("started")
-    keep = ("t", "dur", "kind", "text", "ok", "detail", "shot", "row", "chip", "late")
+    keep = ("t", "dur", "kind", "text", "ok", "detail", "shot", "row", "chip", "late", "budget")
     return {"version": VERSION, "id": folder.name, "title": info.get("title") or folder.name,
             "about": info.get("about", ""), "error": info.get("error", ""), "verdict": verdict(info, events),
             "meta": [m for m in meta if m], "base": "", "length": round(length, 2), "real": round(real, 2),
@@ -80,15 +80,19 @@ def upgrade(run):
     if run.get("version", 1) > VERSION:
         raise Problem(f"Run {run['id']} was made by a newer proofreel (format {run['version']}). Update proofreel.")
     if run.get("version", 1) == VERSION:
-        return run
+        return current(run)
     knots = [[0.0, 0.0]]
     for e in sorted(run["events"], key=lambda e: e["t"]):
         if "v" in e and e["t"] > knots[-1][0] and e["v"] > knots[-1][1]:
             knots.append([e["t"], e["v"]])
     events = [e if "row" in e else shown(e) for e in run["events"]]
     old = {k: run[k] for k in run if k not in ("verdict_css", "fast")}
-    return {**old, "version": VERSION, "verdict": run["verdict"].lower(), "clock": knots,
-            "events": [{k: v for k, v in e.items() if k != "v"} for e in events if e]}
+    return current({**old, "version": VERSION, "verdict": run["verdict"].lower(), "clock": knots,
+                    "events": [{k: v for k, v in e.items() if k != "v"} for e in events if e]})
+
+
+def current(run):
+    return {**run, "meta": [m for m in run.get("meta", []) if not LEGACY_META.search(m)]}
 
 
 def load_runs(out):
@@ -106,7 +110,11 @@ def load_runs(out):
 def document(runs):
     data = json.dumps(runs).replace("</", "<\\/")
     title = html.escape((runs[-1].get("suite") or runs[-1])["title"])
-    return f"""<title>{title}</title>
+    return f"""<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>{title}</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=IBM+Plex+Mono&display=swap">
 <style>{ASSETS.joinpath('page.css').read_text()}</style>

@@ -92,7 +92,8 @@ On a wide screen the video, a scrub bar with a mark for each step and check, and
 The right column shows the state machine of the review folder, drawn from the runs' `state` lines (Flow), or a list of
 the steps of each state with their times (Steps). A click on a state or a step jumps the video to that moment. The page
 fits the window, and only that column scrolls. Journeys, Stats, and Network are tabs below. A failed check marks the
-page *Problem*.
+page *Fail*, and under the title a line names the first failure; a click on it jumps the video there. Approve and Needs work sit by the title.
+Keys: Space plays, the arrows seek, J and K step, N finds the next failure.
 
 Publishing, review folders, and what the page adds on claude.ai are in [the review page](docs/review-page.md).
 Tracks, Stats, and Network show what the [probes](docs/probes.md) measured.

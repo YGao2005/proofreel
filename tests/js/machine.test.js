@@ -105,3 +105,8 @@ test("the state at a time is the visit that holds it", () => {
   assert.strictEqual(Machine.at({}, 1), null);
   assert.strictEqual(Machine.at({ states: [{ name: "A", t: 0, end: null }] }, 99).name, "A");
 });
+
+test("a budget is not counted as a screen check of its state", () => {
+  const [a] = Machine.sections({ states: path("A"), events: [check(5), { ...check(6, false), budget: { glob: "net/*" } }] });
+  assert.deepStrictEqual([a.passed, a.total, a.events.length], [1, 1, 2]);
+});

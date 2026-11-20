@@ -34,7 +34,7 @@ def test_pointer_reaches_each_click_on_time():
 def test_demo_renders_a_page_and_video(tmp_path):
     demo(tmp_path / "demo")
     page = (tmp_path / "demo" / "index.html").read_text()
-    assert "Works" in page and "session.mp4" in page
+    assert "\"verdict\": \"works\"" in page and "session.mp4" in page
     probe = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "json",
                             str(tmp_path / "demo" / "session.mp4")], capture_output=True, text=True, check=True)
     assert 8 < float(json.loads(probe.stdout)["format"]["duration"]) < 16

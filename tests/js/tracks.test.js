@@ -52,7 +52,11 @@ test("values read in their unit", () => {
   assert.strictEqual(Tracks.format(0.123, "s"), "123 ms");
   assert.strictEqual(Tracks.format(2.5, "s"), "2.5 s");
   assert.strictEqual(Tracks.format(42.42, "%"), "42.4%");
-  assert.strictEqual(Tracks.format(1234.5, "MB"), "1235 MB");
+  assert.strictEqual(Tracks.format(1234.5, "MB"), "1.21 GB");
+  assert.strictEqual(Tracks.format(519.8, "MB"), "520 MB");
+  assert.strictEqual(Tracks.format(0.009, "s"), "9 ms");
+  assert.strictEqual(Tracks.format(72, "s"), "1 m 12 s");
+  assert.strictEqual(Tracks.format(59.97, "s"), "1 m 0 s");
   assert.strictEqual(Tracks.format(null, "%"), "–");
 });
 
