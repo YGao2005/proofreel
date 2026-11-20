@@ -92,7 +92,20 @@ def upgrade(run):
 
 
 def current(run):
-    return {**run, "meta": [m for m in run.get("meta", []) if not LEGACY_META.search(m)]}
+    budgets = (run.get("metrics") or {}).get("budgets", [])
+    return {**run, "meta": [m for m in run.get("meta", []) if not LEGACY_META.search(m)],
+            "events": [marked(e, budgets) for e in run.get("events", [])]}
+
+
+def marked(event, budgets):
+    """A check of a run published before events carried their budget gets it from the run's budgets: the check's text
+    starts with the budget's glob and stat."""
+    if event.get("kind") != "check" or "budget" in event:
+        return event
+    for b in budgets:
+        if event.get("text", "").startswith(f"{b['glob']} {b['stat']} "):
+            return {**event, "budget": {k: b[k] for k in ("glob", "stat", "below", "above")}}
+    return event
 
 
 def load_runs(out):
