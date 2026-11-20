@@ -201,6 +201,7 @@ const groupOf = s => s.m.split("/")[0];
 const nameOf = s => s.label || s.m;
 const metricsOf = r => (r.metrics && r.metrics.series) || [];
 const budgetsOf = (r, s) => ((r.metrics && r.metrics.budgets) || []).filter(b => b.series.includes(s.m));
+const rankOf = (r, s) => budgetsOf(r, s).some(b => b.ok === false) ? 0 : groupOf(s) === "input" ? 1 : budgetsOf(r, s).length ? 2 : 3;
 const W = 600;
 const SVG = (tag, attrs = {}) => {
   const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
@@ -228,7 +229,7 @@ function metricTracks(r, lanes, statesLane, live, seek) {
   const hatch = lane => stretches.forEach(st => lane.append($("span", { class: "stretch", style: `left:${st.from / length * 100}%;width:${(st.to - st.from) / length * 100}%`,
     title: `Plays at up to ${Math.round(st.speed)}x` }, $("span", { text: `${Math.round(st.speed)}x` }))));
   hatch(statesLane);
-  const hidden = new Set(PREFS.hidden || crowded(series)), rows = [];
+  const hidden = new Set(PREFS.hidden || crowded(r, series)), rows = [];
   const chips = $("div", { class: "chips metric" });
   for (const g of new Set(series.map(groupOf))) {
     const b = $("button", { type: "button", class: "toggle", "aria-pressed": String(!hidden.has(g)), title: `Show the ${g} rows`, text: g });
@@ -267,11 +268,14 @@ function metricTracks(r, lanes, statesLane, live, seek) {
   return { readout };
 }
 
-// WHY: many series would push the video off a short window, so past ROWS rows a group starts hidden.
+// WHY: many series would push the video off a short window, so past ROWS rows a group starts hidden. Groups with a
+// failed budget, then input latency, then a budget, keep their rows first.
 const ROWS = 8;
-function crowded(series) {
+function crowded(r, series) {
+  const best = g => Math.min(...series.filter(s => groupOf(s) === g).map(s => rankOf(r, s)));
+  const groups = [...new Set(series.map(groupOf))].map((g, i) => [best(g), i, g]).sort((a, b) => a[0] - b[0] || a[1] - b[1]);
   let rows = 0;
-  return [...new Set(series.map(groupOf))].filter(g => {
+  return groups.map(([, , g]) => g).filter(g => {
     const n = series.filter(s => groupOf(s) === g).length;
     if (rows && rows + n > ROWS) return true;
     rows += n;
@@ -328,7 +332,7 @@ function statsView(r, seek) {
     $("span", { class: "k", text: nameOf(s) }), $("span", { class: "big", text: Tracks.format(s.stats.p95, s.unit) }),
     $("span", { class: "t", text: `p95 · p50 ${Tracks.format(s.stats.p50, s.unit)} · max ${Tracks.format(s.stats.max, s.unit)} · ${s.stats.count - s.stats.failed} inputs` }),
     s.stats.failed ? $("span", { class: "t bad", text: `${s.stats.failed} got no change on the screen` }) : null))));
-  const rank = s => budgetsOf(r, s).some(b => b.ok === false) ? 0 : groupOf(s) === "input" ? 1 : budgetsOf(r, s).length ? 2 : 3;
+  const rank = s => rankOf(r, s);
   const body = $("tbody");
   for (const b of budgets.filter(b => !b.series.length)) body.append($("tr", { class: "bad" },
     $("td", {}, document.createTextNode(b.glob), $("span", { class: "m", text: b.detail || "no data" })),
