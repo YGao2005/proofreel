@@ -75,3 +75,21 @@ test("the requests of a network probe run draw as a waterfall in start order", (
   assert.ok(Math.abs(Math.max(...fall.rows.map(r => r.left + r.width)) - 1) < 1e-9);
   assert.deepStrictEqual(Tracks.waterfall([series[1]]).rows, []);
 });
+
+test("axis ticks fall on a nice step and number at most ten", () => {
+  assert.deepStrictEqual(Tracks.ticks(0, 7.4), [0, 1, 2, 3, 4, 5, 6, 7]);
+  assert.deepStrictEqual(Tracks.ticks(0, 30), [0, 5, 10, 15, 20, 25, 30]);
+  assert.deepStrictEqual(Tracks.ticks(1.7, 3.5), [1.8, 2, 2.2, 2.4, 2.6, 2.8, 3, 3.2, 3.4]);
+  assert.ok(Tracks.ticks(0, 600).length <= 10 && Tracks.ticks(0, 600).length >= 6);
+  assert.deepStrictEqual(Tracks.ticks(2, 2), []);
+  assert.strictEqual(Tracks.axisLabel(0), "0 s");
+  assert.strictEqual(Tracks.axisLabel(3), "3 s");
+  assert.strictEqual(Tracks.axisLabel(2.5), "2.5 s");
+  assert.strictEqual(Tracks.axisLabel(120), "2 m");
+});
+
+test("groups have human names, and a request label splits into method, host, and path", () => {
+  assert.deepStrictEqual(["mem", "net", "web", "input", "other"].map(Tracks.groupName), ["Memory", "Network", "Browser", "Input", "Other"]);
+  assert.deepStrictEqual(Tracks.request("GET 10.0.2.2:8791/api/tags"), { method: "GET", host: "10.0.2.2:8791", path: "/api/tags" });
+  assert.deepStrictEqual(Tracks.request("click"), { method: "", host: "", path: "click" });
+});

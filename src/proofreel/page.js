@@ -60,26 +60,29 @@ function runSwitch() {
   return nav;
 }
 
-// Each suite run in the folder, newest first: its pass count, then a row for each journey. A row plays that journey.
+// Each suite run in the folder, newest first: its pass count, then a row for each journey, in one table layout so the
+// columns line up from one suite run to the next.
 function journeysView() {
   if (!SUITE) return null;
-  const box = $("div", { class: "stats journeys" });
+  const box = $("div", { class: "journeys" });
   for (const id of [...new Set(RUNS.map(suiteOf))].reverse()) {
     const rows = RUNS.map((x, i) => [x, i]).filter(([x]) => suiteOf(x) === id), pass = rows.filter(([x]) => x.verdict !== "problem").length;
     const info = rows[0][0].suite || {};
-    box.append($("p", { class: "hint" }, $("b", { text: info.title || "Runs" }), document.createTextNode(` · ${pass}/${rows.length} pass · ${rows[0][0].when}`)));
+    box.append($("h2", {}, $("span", { text: info.title || "Runs" }), $("span", { class: "meta", text: `${pass}/${rows.length} pass \u00b7 ${rows[0][0].when}` })));
     const body = $("tbody");
     for (const [x, i] of rows) {
       const sum = Verdict.summary(x), go = () => { location.hash = `run-${i + 1}`; };
       body.append($("tr", { class: x.verdict === "problem" ? "bad" : "", tabindex: "0", "aria-current": String(i === run), onclick: go,
         onkeydown: ev => { if (ev.key === "Enter") go(); } },
-        $("td", {}, document.createTextNode(x.title), x.error ? $("span", { class: "m bad", text: x.error }) : null),
+        $("td", {}, $("a", { href: `#run-${i + 1}`, text: x.title, onclick: ev => ev.stopPropagation() }), x.error ? $("span", { class: "m bad", text: x.error }) : null),
         $("td", {}, chip(...VERDICTS[x.verdict])),
         $("td", { text: sum.checks.total ? `${sum.checks.passed}/${sum.checks.total}` : "-" }),
         $("td", { text: sum.budgets.failed ? `${sum.budgets.failed} failed` : "-" }),
         $("td", { text: x.video === false ? "-" : Tracks.format(x.real, "s") })));
     }
-    box.append($("table", { class: "numbers" }, $("thead", {}, $("tr", {}, ...["Journey", "Result", "Checks", "Budgets", "Length"].map(h => $("th", { text: h })))), body));
+    box.append($("table", { class: "numbers journey-table" },
+      $("colgroup", {}, ...["", "w112", "w88", "w112", "w96"].map(c => $("col", c ? { class: c } : {}))),
+      $("thead", {}, $("tr", {}, ...["Journey", "Result", "Checks", "Budgets", "Length"].map(h => $("th", { text: h })))), body));
   }
   return box;
 }
@@ -97,7 +100,7 @@ function render() {
   const readoutPill = $("span", { class: "pill live", hidden: "" });
   const overlay = r.overlay ? $("div", { class: "overlay", "aria-hidden": "true" },
     $("div", { class: "top" }, $("span", { class: "pill clock" }), $("span", { class: "pill state" }), $("span", { class: "pill speed" })),
-    $("span", { class: "pill now" }), $("span", { class: "pill caption" }), readoutPill) : null;
+    $("span", { class: "pill now" }), $("div", { class: "bottom" }, readoutPill, $("span", { class: "pill caption" }))) : null;
   const screen = $("div", { class: "screen" }, video, overlay);
   const update = () => {
     stage(r, video, overlay);
@@ -206,7 +209,7 @@ function render() {
     show();
     const row = body.querySelector(`#pane-${name} [data-t="${t}"]`);
     if (!row) return;
-    row.scrollIntoView({ block: "nearest" });
+    row.scrollIntoView({ block: "center" });
     row.classList.add("hit");
     setTimeout(() => row.classList.remove("hit"), 1200);
   };
@@ -306,7 +309,8 @@ const limitOf = b => b.below !== null && b.below !== undefined ? b.below : b.abo
 // A chip per group hides its rows; a pin per series puts it in the readout on the video. The panel is one row until it
 // is opened (a failed budget opens it), and the readout on the video shows only while it is open.
 function metricTracks(r, live, seek) {
-  const series = metricsOf(r).filter(s => s.points || s.spans || s.marks);
+  const drawn = metricsOf(r).filter(s => s.points || s.spans || s.marks);
+  const series = [...drawn.filter(s => rankOf(r, s) === 0), ...drawn.filter(s => rankOf(r, s) !== 0)];
   const map = Tracks.timemap(r.clock), length = r.length || map.video(r.real) || 1;
   const x = t => map.video(t) / length * W, pct = v => `${v / W * 100}%`;
   const pins = () => PREFS.pins || [...new Set(series.map(groupOf))].map(g => series.find(s => groupOf(s) === g).m).slice(0, 3);
@@ -327,7 +331,7 @@ function metricTracks(r, live, seek) {
   const hidden = new Set(PREFS.hidden || crowded(r, series)), rows = [];
   const chips = $("div", { class: "chips metric" });
   for (const g of new Set(series.map(groupOf))) {
-    const b = $("button", { type: "button", class: "toggle", "aria-pressed": String(!hidden.has(g)), title: `Show the ${g} rows`, text: g });
+    const b = $("button", { type: "button", class: "toggle", "aria-pressed": String(!hidden.has(g)), title: `Show the ${Tracks.groupName(g)} rows`, text: Tracks.groupName(g) });
     b.addEventListener("click", () => {
       hidden.has(g) ? hidden.delete(g) : hidden.add(g);
       b.setAttribute("aria-pressed", String(!hidden.has(g)));
@@ -353,16 +357,25 @@ function metricTracks(r, live, seek) {
       savePrefs();
       lanes.querySelectorAll(".pin-btn").forEach((b, i) => b.setAttribute("aria-pressed", String(PREFS.pins.includes(series[i].m))));
     });
-    const label = $("span", { class: "lane-label metric", text: nameOf(s), title: s.m });
+    const label = $("span", { class: `lane-label${rankOf(r, s) === 0 ? " bad" : ""}`, text: nameOf(s), title: s.m });
     rows.push([groupOf(s), label, lane, pin]);
     lanes.append(label, lane, pin);
   }
-  const show = () => rows.forEach(([g, ...els]) => els.forEach(el => { el.hidden = hidden.has(g); }));
+  const axis = $("div", { class: "axis", "aria-hidden": "true" });
+  for (const t of Tracks.ticks(0, r.real)) {
+    const left = map.video(t) / length * 100;
+    axis.append($("span", { class: `tick${left > 92 ? " last" : ""}${left < 1 ? " first" : ""}`, style: `left:${left}%`, text: Tracks.axisLabel(t) }));
+  }
+  lanes.append(axis);
+  const show = () => {
+    rows.forEach(([g, ...els]) => els.forEach(el => { el.hidden = hidden.has(g); }));
+    axis.hidden = rows.every(([g]) => hidden.has(g));
+  };
   show();
   const fold = $("button", { type: "button", class: "fold", "aria-expanded": String(open), title: "Show the metric rows" },
     icon("chevron"), $("span", { text: "Tracks" }));
   const panel = $("section", { class: `panel tracks${failed ? " bad" : ""}`, "aria-label": "Tracks" },
-    $("div", { class: "head" }, fold, chips, failed ? chip("Budget failed", "bad") : null, $("span", { class: "count", text: Verdict.plural(series.length, "row") })), lanes);
+    $("div", { class: "head" }, fold, chips, failed ? chip("Budget failed", "bad") : null), lanes);
   const paint = () => {
     fold.setAttribute("aria-expanded", String(open));
     lanes.hidden = !open;
@@ -403,17 +416,21 @@ function drawLane(r, s, lane, x, pct, seek, map) {
     for (const v of s.bands || []) svg.append(SVG("line", { class: "band", x1: 0, x2: W, y1: y(v), y2: y(v) }));
     for (const b of limits) svg.append(SVG("line", { class: `limit ${b.ok === false ? "bad" : ""}`, x1: 0, x2: W, y1: y(limitOf(b)), y2: y(limitOf(b)) }));
     lane.append(svg);
+    const first = x(s.points[0][0]) / W, last = x(s.points[s.points.length - 1][0]) / W;
+    if (first > 0.005) lane.append($("span", { class: "nodata", title: "No data", style: `left:0;width:${first * 100}%` }));
+    if (last < 0.995) lane.append($("span", { class: "nodata", title: "No data", style: `left:${last * 100}%;right:0` }));
   } else if (s.kind === "span") {
     const items = s.spans.map(([t, d, ok, label]) => ({ from: x(t), to: x(t + d), t, d, ok, label })).sort((a, b) => a.from - b.from);
     const { row, more } = Tracks.pack(items, 3);
     items.forEach((it, i) => {
       if (row[i] < 0) return;
-      const el = $("i", { class: it.ok === false ? "bad" : "", title: `${it.label || s.m}: ${Tracks.format(it.d, "s")}`,
-        style: `left:${pct(it.from)};width:${pct(Math.max(it.to - it.from, 1))};top:${2 + row[i] * 7}px` });
+      const bad = it.ok === false;
+      const el = $("i", { class: bad ? "bad" : "", title: `${it.label || s.m}: ${Tracks.format(it.d, "s")}`,
+        style: `left:${pct(it.from)};width:${pct(Math.max(it.to - it.from, 1))}${bad ? "" : `;top:${4 + row[i] * 8}px`}` });
       el.addEventListener("click", ev => { ev.stopPropagation(); seek(map.video(it.t) - 0.2); });
       lane.append(el);
     });
-    lane.style.height = `${4 + 7 * Math.max(1, Math.max(...row) + 1)}px`;
+    lane.style.height = `${Math.max(16, 8 + 8 * Math.max(1, Math.max(...row) + 1))}px`;
     if (more + (s.more || 0)) lane.append($("span", { class: "more", text: `+${more + (s.more || 0)}` }));
   } else {
     for (const [t, ok, label] of s.marks) lane.append($("b", { class: ok === false ? "bad" : "", style: `left:${pct(x(t))}`, title: label || s.m }));
@@ -424,8 +441,8 @@ function drawLane(r, s, lane, x, pct, seek, map) {
 const statLine = s => s.stats.p50 === undefined ? `${s.stats.count} marks` :
   `p50 ${Tracks.format(s.stats.p50, s.unit)}, p95 ${Tracks.format(s.stats.p95, s.unit)}, max ${Tracks.format(s.stats.max, s.unit)}`;
 
-// The numbers of the run: input latency first, then one row per series (failing budgets first) with p50, p95, max,
-// and each budget's result. A row jumps the video to the series' worst moment.
+// The numbers of the run: one table, a row for each series (failing budgets first) with p50, p95, max, and each budget as
+// a sentence with its result. A row jumps the video to the series' worst moment.
 const budgetChip = b => b.ok === false ? [VISITS.bad[0], "bad"] : b.ok ? [VISITS.ok[0], "ok"] : [VISITS.unchecked[0], "info"];
 function statsView(r, seek) {
   const series = metricsOf(r), budgets = (r.metrics && r.metrics.budgets) || [];
@@ -434,46 +451,50 @@ function statsView(r, seek) {
   const worst = s => s.points ? s.points.reduce((a, p) => (p[3] ?? p[1]) > (a[3] ?? a[1]) ? p : a)[0]
     : s.spans ? s.spans.reduce((a, p) => p[1] > a[1] ? p : a)[0] : s.marks && s.marks.length ? s.marks[0][0] : null;
   const go = s => { const t = worst(s); if (t !== null) seek(toVideo(r, t) - 0.3); };
-  const input = series.filter(s => groupOf(s) === "input" && s.stats.p50 !== undefined);
-  if (input.length) box.append($("div", { class: "tiles" }, ...input.map(s => $("button", { type: "button", class: "tile", onclick: () => go(s) },
-    $("span", { class: "k", text: nameOf(s) }), $("span", { class: "big", text: Tracks.format(s.stats.p95, s.unit) }),
-    $("span", { class: "t", text: `p95 · p50 ${Tracks.format(s.stats.p50, s.unit)} · max ${Tracks.format(s.stats.max, s.unit)} · ${Verdict.plural(s.stats.count - s.stats.failed, "input")}` }),
-    s.stats.failed ? $("span", { class: "t bad", text: `${s.stats.failed} got no change on the screen` }) : null))));
-  const rank = s => rankOf(r, s);
+  const sentence = b => $("div", { class: `budget${b.ok === false ? " bad" : ""}` }, $("span", { text: Verdict.budgetText(b, r, b.detail) }), chip(...budgetChip(b)));
   const body = $("tbody");
   for (const b of budgets.filter(b => !b.series.length)) body.append($("tr", { class: "bad" },
     $("td", {}, document.createTextNode(b.glob), $("span", { class: "m", text: b.detail || "no data" })),
-    $("td", { colspan: "3", text: "–" }), $("td", {}, chip(...budgetChip(b)))));
-  for (const s of series.slice().sort((a, b) => rank(a) - rank(b))) {
-    const mine = budgetsOf(r, s), n = s.stats.p50 === undefined;
+    $("td", { colspan: "3", text: "-" }), $("td", {}, sentence(b))));
+  for (const s of series.slice().sort((a, b) => rankOf(r, a) - rankOf(r, b))) {
+    const mine = budgetsOf(r, s), none = s.stats.p50 === undefined;
     body.append($("tr", { class: mine.some(b => b.ok === false) ? "bad" : "", tabindex: "0", onclick: () => go(s),
       onkeydown: ev => { if (ev.key === "Enter") go(s); } },
-      $("td", {}, document.createTextNode(nameOf(s)), $("span", { class: "m", text: s.label ? s.m : Verdict.plural(s.stats.count, s.kind) }),
-        ...mine.map(b => $("span", { class: `m${b.ok === false ? " bad" : ""}`, text: Verdict.budgetText(b, r, b.detail) }))),
-      ...(n ? [$("td", { colspan: "3", text: Verdict.plural(s.stats.count, "mark") })] : ["p50", "p95", "max"].map(k => $("td", { text: Tracks.format(s.stats[k], s.unit) }))),
-      $("td", {}, ...mine.map(b => $("span", { title: Verdict.budgetText(b, r, b.detail) }, chip(...budgetChip(b)))))));
+      $("td", {}, document.createTextNode(nameOf(s)), s.label ? $("span", { class: "m", text: s.m }) : null,
+        s.stats.failed && groupOf(s) === "input" ? $("span", { class: "m bad", text: `${Verdict.plural(s.stats.failed, "input")} got no change on the screen` }) : null),
+      ...(none ? [$("td", { colspan: "3", text: Verdict.plural(s.stats.count, "mark") })] : ["p50", "p95", "max"].map(k => $("td", { text: Tracks.format(s.stats[k], s.unit) }))),
+      $("td", {}, ...mine.map(sentence))));
   }
-  box.append($("table", { class: "numbers" }, $("thead", {}, $("tr", {}, ...["Series", "p50", "p95", "max", "Budget"].map(h => $("th", { text: h })))), body));
+  box.append($("table", { class: "numbers stats-table" },
+    $("colgroup", {}, ...["", "w96", "w96", "w96", "budget"].map(c => $("col", c ? { class: c } : {}))),
+    $("thead", {}, $("tr", {}, ...["Series", "p50", "p95", "max", "Budget"].map(h => $("th", { text: h })))), body));
   const quiet = Object.entries((r.metrics && r.metrics.probes) || {}).filter(([, p]) => p.status && p.status !== "ok");
   for (const [name, p] of quiet) box.append($("p", { class: "hint", text: `Probe ${name} ${p.status}${p.note ? ": " + p.note : ""}` }));
   return box;
 }
 
-// Each request (a span with phases) on real time, in start order. A row jumps the video to its start.
+// Each request (a span with phases) as a row of a waterfall, in start order: the request, its bars on one time axis, its
+// status and time. A row jumps the video to its start.
 function networkView(r, seek) {
   const fall = Tracks.waterfall(metricsOf(r));
   if (!fall.rows.length) return placeholder("No requests in this run. The network probe records them: start with --probe network.");
+  const span = fall.to - fall.from || 1;
+  const axis = $("div", { class: "req axis-row", "aria-hidden": "true" }, $("span"), $("div", { class: "axis" },
+    ...Tracks.ticks(fall.from, fall.to).map(t => $("span", { class: "tick", style: `left:${(t - fall.from) / span * 100}%`, text: Tracks.axisLabel(t) }))), $("span"));
   const box = $("div", { class: "net" },
-    $("div", { class: "legend" }, ...fall.names.map((name, i) => $("span", {}, $("i", { class: `p${i % 5}` }), name)),
-      $("span", { class: "t", text: `${clock(fall.from)} to ${clock(fall.to)}` })));
+    $("div", { class: "legend" }, ...fall.names.map((name, i) => $("span", {}, $("i", { class: `p${i % 5}` }), name))), axis);
   const CAP = 500;
   for (const q of fall.rows.slice(0, CAP)) {
-    const bar = $("div", { class: "fall" }, $("span", { class: "whole", style: `left:${q.left * 100}%;width:${Math.max(q.width * 100, 0.3)}%` }),
-      ...q.parts.map(([name, left, width]) => $("span", { class: `p${fall.names.indexOf(name) % 5}`, title: `${name} ${Tracks.format(width * (fall.to - fall.from), "s")}`,
+    const bad = q.ok === false, split = Tracks.request(q.label), tail = split.path.length > 16 ? 12 : 0;
+    const bar = $("div", { class: "fall" }, $("span", { class: "whole", style: `left:${q.left * 100}%;width:${q.width * 100}%` }),
+      ...q.parts.map(([name, left, width]) => $("span", { class: `p${fall.names.indexOf(name) % 5}`, title: `${name} ${Tracks.format(width * span, "s")}`,
         style: `left:${left * 100}%;width:${width * 100}%` })));
-    box.append($("div", { class: `req${q.ok === false ? " bad" : ""}`, tabindex: "0", role: "button", title: q.label, "data-t": q.t,
+    box.append($("div", { class: `req${bad ? " bad" : ""}`, tabindex: "0", role: "button", title: q.label, "data-t": q.t,
       onclick: () => seek(toVideo(r, q.t) - 0.2), onkeydown: ev => { if (ev.key === "Enter") seek(toVideo(r, q.t) - 0.2); } },
-      $("span", { class: "name", text: q.label }), $("span", { class: "d", text: `${q.status ? q.status + " · " : ""}${Tracks.format(q.d, "s")}` }), bar));
+      $("span", { class: "name" }, $("span", { class: "dim", text: `${split.method} ` }), $("span", { class: "dim host", text: split.host }),
+        $("span", { class: "path head", text: tail ? split.path.slice(0, -tail) : split.path }), tail ? $("span", { class: "path tail", text: split.path.slice(-tail) }) : null),
+      bar,
+      $("span", { class: "d" }, q.status ? (bad ? chip(String(q.status), "bad") : $("span", { class: "dim", text: String(q.status) })) : null, $("span", { text: Tracks.format(q.d, "s") }))));
   }
   if (fall.rows.length > CAP) box.append($("p", { class: "hint", text: `${Verdict.plural(fall.rows.length - CAP, "more request")} not listed.` }));
   return box;
@@ -617,7 +638,7 @@ function machineView(r, seek) {
     info.replaceChildren();
     if (!id || !nodes.has(id)) return;
     const here = Machine.verdict(states, id);
-    info.append($("h3", {}, $("span", { text: id }), here ? chip(...VISITS[here]) : chip("Not in this run", "info")));
+    info.append($("h2", {}, $("span", { text: id }), here ? chip(...VISITS[here]) : chip("Not in this run", "info")));
     const visits = states.filter(v => v.name === id);
     const checks = r.events.filter(e => ["wait", "check"].includes(e.kind) && visits.some(v => e.t >= v.t && e.t < v.end));
     if (checks.length) { const ol = $("ol"); checks.forEach(e => ol.append(row(r, e, seek))); info.append(ol); }

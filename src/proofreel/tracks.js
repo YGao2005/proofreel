@@ -111,6 +111,34 @@ const Tracks = (() => {
     return unit === "%" ? `${n}%` : unit ? `${n} ${unit}` : String(n);
   }
 
-  return { along, timemap, bin, pack, valueAt, waterfall, duration, format };
+  // Tick times in [from, to] on a nice step (1, 2, 5 times a power of ten), the smallest step that gives at most max ticks.
+  const STEPS = [1, 2, 5].flatMap(b => [-2, -1, 0, 1, 2, 3, 4].map(e => b * 10 ** e)).sort((x, y) => x - y);
+  function ticks(from, to, max = 10) {
+    if (!(to > from)) return [];
+    const count = s => Math.floor(to / s + 1e-9) - Math.ceil(from / s - 1e-9) + 1;
+    const step = STEPS.find(s => count(s) <= max) || STEPS[STEPS.length - 1];
+    const out = [];
+    for (let k = Math.ceil(from / step - 1e-9); k * step <= to + 1e-9; k++) out.push(+(k * step).toFixed(6));
+    return out;
+  }
+
+  function axisLabel(t) {
+    if (t === 0) return "0 s";
+    if (t >= 60 && t % 60 === 0) return `${t / 60} m`;
+    return Number.isInteger(t) && t < 60 ? `${t} s` : duration(t);
+  }
+
+  const GROUPS = { mem: "Memory", cpu: "CPU", host: "Host", net: "Network", web: "Browser", input: "Input" };
+  const groupName = g => GROUPS[g] || g[0].toUpperCase() + g.slice(1);
+
+  // A request label such as "GET host:8791/api/tags" as its method, host, and path.
+  function request(label) {
+    const [, method, url] = /^(\S+) (\S+)$/.exec(label || "") || [];
+    if (!method) return { method: "", host: "", path: label || "" };
+    const at = url.indexOf("/");
+    return at < 0 ? { method, host: url, path: "" } : { method, host: url.slice(0, at), path: url.slice(at) };
+  }
+
+  return { along, timemap, bin, pack, valueAt, waterfall, duration, format, ticks, axisLabel, groupName, request };
 })();
 if (typeof module === "object") module.exports = Tracks;
