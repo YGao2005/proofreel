@@ -1,0 +1,18 @@
+from linux
+probe network
+probe browser
+start search --title "${TITLE:-Search notes}" --about "A user searches their notes. The matching note must show fast."
+state Home
+step "Open the notes list"
+vm sh "browse ${URL:-http://10.0.2.2:8791}/notes.html"
+wait-text "Your notes" 30
+state "Search"
+step "Search for groceries"
+click-text "Search notes"
+type "milk"
+wait-text "Milk, eggs" 10
+check text "Groceries: Milk, eggs, and bread."
+check no-text "Welcome: Your first note" 5
+check metric net/* p95 --below 0.5
+check metric net/* failed --below 1
+stop
