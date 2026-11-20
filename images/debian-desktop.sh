@@ -35,7 +35,7 @@ autologin-session=xfce
 user-session=xfce
 EOF
 cat > /etc/chromium.d/proofreel <<'EOF'
-export CHROMIUM_FLAGS="$CHROMIUM_FLAGS --no-first-run --no-default-browser-check --password-store=basic --start-maximized"
+export CHROMIUM_FLAGS="$CHROMIUM_FLAGS --no-first-run --no-default-browser-check --password-store=basic --start-maximized --remote-debugging-port=9222"
 EOF
 cat > /etc/chromium/policies/managed/proofreel.json <<'EOF'
 {"DefaultBrowserSettingEnabled": false, "PromotionalTabsEnabled": false, "PasswordManagerEnabled": false,

@@ -3,7 +3,8 @@
 A probe is a plugin (see plugins.py): probe.toml and scripts. `where` says where it runs: on the host (run.py, run
 with this Python) or in the guest (run.sh or run.ps1, over SSH). `default = true` turns it on for every recording on
 its systems. `privacy` says what it can see. [tracks."<series glob>"] tells the page and `stats` how to show a series:
-label, unit, better ("lower" or "higher"), max.
+label, unit, better ("lower" or "higher"), max. A host probe with `tunnel = <guest port>` gets PROOFREEL_TUNNEL, a host
+port on 127.0.0.1 that reaches that port on the guest's 127.0.0.1 while it runs.
 
 The protocol: a probe prints one JSON object on each line.
   {"m": "cpu/app", "v": 42}                               a sample of the series cpu/app
@@ -39,7 +40,8 @@ def select(requested, run):
     with no run VM), plus each requested one ("name" or "name:KEY=VALUE,KEY=VALUE"). "none" turns the defaults off."""
     system = run["os"] if run else None
     chosen = {} if "none" in requested else {
-        name: {} for name in plugins.known("probe") if usable(manifest(name), system, quiet=True)}
+        name: {} for name in plugins.known("probe")
+        if (info := manifest(name)).get("default") and usable(info, system, quiet=True)}
     for item in requested:
         if item != "none":
             name, _, pairs = item.partition(":")
@@ -50,7 +52,8 @@ def select(requested, run):
         info = plugins.manifest("probe", source)
         usable(info, system)
         records.append({"name": info["name"], "version": info["version"], "where": info["where"], "source": str(source),
-                        "values": plugins.resolve(info, given), "tracks": info.get("tracks", {})})
+                        "values": plugins.resolve(info, given), "tracks": info.get("tracks", {}),
+                        "tunnel": info.get("tunnel")})
     return records
 
 
@@ -77,13 +80,13 @@ def prepare(records, run):
             plugins.stage(run, "probe", record["source"], record["values"])
 
 
-def process(record, folder, info, run):
+def process(record, folder, info, run, tunnel=None):
     """(command line, environment) of a probe. A probe is told its values and where it runs, never the password."""
     told = {**record["values"], "PROOFREEL_APP": info.get("app") or "", "PROOFREEL_OS": (run or {}).get("os") or ""}
     if record["where"] == "host":
         return ([sys.executable, "-u", str(Path(record["source"]) / "run.py")],
                 {**os.environ, **told, "PROOFREEL_SESSION": str(folder),
-                 "PROOFREEL_VM_PID": str((run or {}).get("pid") or "")})
+                 "PROOFREEL_VM_PID": str((run or {}).get("pid") or ""), "PROOFREEL_TUNNEL": str(tunnel or "")})
     from ..vm import askpass
     script = run.guest.run_script(plugins.folder(run, "probe", record["name"]), "run", told)
     return run.argv(script, tty=True), {**os.environ, **askpass(run["password"])}
@@ -96,7 +99,8 @@ class Probe:
         self.name, self.status, self.note = record["name"], "starting", ""
         self.counts = {"kept": 0, "size": 0, "rate": 0, "series": 0, "bad": 0}
         self.out = open(Path(folder) / "metrics" / f"{self.name}.jsonl", "a")
-        argv, env = process(record, folder, info, run)
+        port, self.tunnel = run.forward(record["tunnel"]) if record.get("tunnel") and run else (None, None)
+        argv, env = process(record, folder, info, run, port)
         self.process = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                                         stdin=subprocess.DEVNULL, env=env)
         self.thread = threading.Thread(target=self.pump, daemon=True)
@@ -144,6 +148,9 @@ class Probe:
                 self.process.wait()
         self.thread.join(timeout=3)
         self.out.close()
+        if self.tunnel:
+            self.tunnel.kill()
+            self.tunnel.wait()
         if self.status == "starting":
             self.status, self.note = "silent", self.note or f"exit {self.process.returncode}, and no line"
         return {"status": self.status, "note": self.note, **self.counts}

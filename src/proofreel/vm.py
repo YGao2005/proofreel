@@ -16,6 +16,7 @@ shows or plays on the host.
 import json
 import os
 import re
+import socket
 import subprocess
 import tempfile
 import time
@@ -87,6 +88,19 @@ class Run(dict):
         self._shared()
         subprocess.run(["scp", *self._options("-P"), "-o", "ControlMaster=no", "-q", "-r", source, target],
                        env=askpass(self["password"]), check=True, stdin=subprocess.DEVNULL)
+
+    def forward(self, guest_port):
+        """(host port, ssh process): while the process runs, 127.0.0.1:<host port> reaches 127.0.0.1:<guest_port>
+        in the guest. It has its own connection, so the forward ends with the process."""
+        with socket.socket() as free:
+            free.bind(("127.0.0.1", 0))
+            port = free.getsockname()[1]
+        process = subprocess.Popen(
+            ["ssh", *SSH_OPTS, *(["-p", str(self["port"])] if self.get("port") else []), "-N",
+             "-o", "ExitOnForwardFailure=yes", "-L", f"127.0.0.1:{port}:127.0.0.1:{guest_port}", self.target],
+            env=askpass(self["password"]), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL)
+        return port, process
 
     def upload(self, host, guest_path):
         self._scp(host, f"{self.target}:{guest_path}")
