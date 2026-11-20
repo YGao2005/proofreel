@@ -27,7 +27,60 @@ def test_a_pointer_to_a_recorder_that_never_started_is_cleared(home):
     assert recording.current() is None and not recording.POINTER.exists()
     (folder / "frames").mkdir()
     recording.POINTER.write_text(json.dumps({"dir": str(folder), "pid": 0}))
-    assert recording.current()["dir"] == str(folder)
+    assert recording.unstopped()["dir"] == str(folder)
+
+
+def test_a_session_whose_recorder_is_dead_is_not_current_but_is_not_stopped(home):
+    folder = home / "sessions" / "x"
+    (folder / "frames").mkdir(parents=True)
+    recording.POINTER.write_text(json.dumps({"dir": str(folder), "pid": 0}))
+    assert recording.current() is None
+    assert recording.unstopped()["dir"] == str(folder)
+    recording.log("note", "nobody records")
+    assert not (folder / "events.jsonl").exists()
+
+
+def test_start_stops_a_session_whose_recorder_died_then_starts(home, monkeypatch):
+    folder = home / "sessions" / "x"
+    (folder / "frames").mkdir(parents=True)
+    recording.POINTER.write_text(json.dumps({"dir": str(folder), "pid": 0}))
+    stopped = []
+    monkeypatch.setattr(recording, "stop", lambda error=None, **_: stopped.append((error, recording.POINTER.unlink())))
+
+    class Began(Exception):
+        pass
+
+    def popen(*args, **kwargs):
+        raise Began
+
+    monkeypatch.setattr(recording.subprocess, "Popen", popen)
+    with pytest.raises(Began):
+        recording.start("y", "vnc", "", {}, run=None)
+    assert stopped == [(recording.DIED, None)]
+
+
+def test_start_refuses_while_a_recorder_is_alive(home, monkeypatch):
+    folder = home / "sessions" / "x"
+    (folder / "frames").mkdir(parents=True)
+    recording.POINTER.write_text(json.dumps({"dir": str(folder), "pid": 0}))
+    monkeypatch.setattr(recording, "recording", lambda f: True)
+    with pytest.raises(Problem, match="A session is recording"):
+        recording.start("y", "vnc", "", {}, run=None)
+
+
+def test_stop_of_a_dead_recorder_does_not_signal_its_pid(home, monkeypatch):
+    folder = home / "sessions" / "x"
+    (folder / "frames").mkdir(parents=True)
+    (folder / "session.json").write_text("{}")
+    bystander = subprocess.Popen(["sleep", "30"])
+    recording.POINTER.write_text(json.dumps({"dir": str(folder), "pid": bystander.pid}))
+    monkeypatch.setattr("proofreel.render.render", lambda folder, **k: "rendered")
+    try:
+        assert recording.stop() == "rendered"
+        assert bystander.poll() is None
+    finally:
+        bystander.kill()
+        bystander.wait()
 
 
 def test_clean_keeps_the_session_that_is_recording(home):

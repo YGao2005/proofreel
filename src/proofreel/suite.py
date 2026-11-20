@@ -49,7 +49,7 @@ def journey(steps, play, execute):
         error = str(problem) or type(problem).__name__
     finally:
         try:
-            if recording.current():
+            if recording.unstopped():
                 recording.stop(error=error or "The flow did not stop its recording; the suite stopped it.")
         except Exception as problem:
             error = error or f"The recording did not stop: {problem}"

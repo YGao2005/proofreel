@@ -254,7 +254,7 @@ def save(name, warm=False, note="", flow=None, values=None, conditions=None):
 def down():
     """Stop the run VM. A recording on it stops first, with the reason, so its video and page are kept."""
     from . import recording
-    if recording.current():
+    if recording.unstopped():
         recording.stop(error="The run VM was stopped (vm down) during the recording.")
     if CURRENT.exists():
         run = Run.current()

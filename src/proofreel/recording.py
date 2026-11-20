@@ -29,10 +29,12 @@ SESSIONS = Path(os.environ.get("PROOFREEL_SESSIONS", HOME / "sessions"))
 POINTER = HOME / f"{vm.RUN}-session.json"
 VNC_STREAMS = 2
 MAX_WIDTH = 1920
+DIED = "The recorder stopped before proofreel stop."
 
 
-def current():
-    """The recording of this run name: {"dir", "pid"}, or None. A pointer whose recorder is gone is cleared."""
+def unstopped():
+    """The session of this run name that nobody has stopped: {"dir", "pid"}, or None. Its recorder may be dead. A
+    pointer to a session that never took a frame is cleared."""
     if not POINTER.exists():
         return None
     session = json.loads(POINTER.read_text())
@@ -40,6 +42,12 @@ def current():
         POINTER.unlink(missing_ok=True)
         return None
     return session
+
+
+def current():
+    """The recording of this run name: {"dir", "pid"}, or None. Only a live recorder counts."""
+    session = unstopped()
+    return session if session and recording(Path(session["dir"])) else None
 
 
 def session_folder(name):
@@ -72,8 +80,10 @@ def log(kind, text, t=None, end=None, **fields):
 
 def start(name, server, password, info, fps=30, reduce=0, run=None):
     """Make the session folder, start the recorder, and return the folder once the first frame is on disk."""
-    if active := current():
-        raise Problem(f"A session is recording: {active['dir']}. Stop it first: proofreel stop.")
+    if active := unstopped():
+        if recording(Path(active["dir"])):
+            raise Problem(f"A session is recording: {active['dir']}. Stop it first: proofreel stop.")
+        print(f"The recorder of {active['dir']} died. Stopping that session first: {stop(error=DIED)}", file=sys.stderr)
     folder = SESSIONS / f"{name}-{time.strftime('%Y%m%d-%H%M%S')}"
     folder.mkdir(parents=True)
     if run:
@@ -114,11 +124,13 @@ def start(name, server, password, info, fps=30, reduce=0, run=None):
 
 def stop(error=None, plain=False, width=None, keep_frames=False):
     """Stop the recorder, read the guest's crash reports, and render. Returns render's one-line summary."""
-    active = current()
+    active = unstopped()
     if not active:
         raise Problem("No session is recording.")
     folder = Path(active["dir"])
     for sig, seconds in ((signal.SIGTERM, 10), (signal.SIGKILL, 5)):
+        if not recording(folder):
+            break
         try:
             os.kill(active["pid"], sig)
         except ProcessLookupError:
@@ -126,8 +138,6 @@ def stop(error=None, plain=False, width=None, keep_frames=False):
         deadline = time.time() + seconds
         while recording(folder) and time.time() < deadline:
             time.sleep(0.1)
-        if not recording(folder):
-            break
     probes.end_group(active["pid"])
     POINTER.unlink(missing_ok=True)
     (folder / "recorder.lock").unlink(missing_ok=True)
@@ -159,7 +169,7 @@ def stop(error=None, plain=False, width=None, keep_frames=False):
 def clean(days):
     """Delete sessions older than `days` (at least 1), except the one recording now. Returns the deleted folders."""
     cutoff = time.time() - max(days, 1) * 86400
-    keep = Path((current() or {}).get("dir", "/")).resolve()
+    keep = Path((unstopped() or {}).get("dir", "/")).resolve()
     old = [f for f in SESSIONS.glob("*/") if f.resolve() != keep and f.stat().st_mtime < cutoff] \
         if SESSIONS.exists() else []
     for folder in old:

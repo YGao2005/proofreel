@@ -55,7 +55,7 @@ def fake_vms(home, monkeypatch):
 
 
 @pytest.fixture
-def fake_recording(home, monkeypatch):
+def fake_recording(home, monkeypatch, alive):
     """start makes a session folder; stop writes its run.json from the logged checks and the error."""
     def stop(error=None, **_):
         folder = Path(recording.current()["dir"])

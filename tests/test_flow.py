@@ -47,7 +47,7 @@ def test_a_failed_check_goes_on_and_any_other_failure_stops_the_recording(tmp_pa
     assert stopped == ["f.flow:1: find x: exit 1", "f.flow:4: boom: VNC refused"]
 
 
-def test_a_check_that_cannot_run_is_a_failed_check_with_the_reason(tmp_path, monkeypatch):
+def test_a_check_that_cannot_run_is_a_failed_check_with_the_reason(tmp_path, monkeypatch, alive):
     session = tmp_path / "s"
     (session / "frames").mkdir(parents=True)
     monkeypatch.setattr(recording, "POINTER", tmp_path / "active.json")

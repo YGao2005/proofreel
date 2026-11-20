@@ -119,7 +119,7 @@ def test_click_text_without_the_tree_clicks_the_words(macos, monkeypatch):
         cli.locate(args("click-text", "Import", "--role", "AXButton"), None, None)
 
 
-def test_a_check_scoped_to_an_element_that_is_not_there_fails_and_says_why(tmp_path, monkeypatch):
+def test_a_check_scoped_to_an_element_that_is_not_there_fails_and_says_why(tmp_path, monkeypatch, alive):
     session = tmp_path / "s"
     (session / "frames").mkdir(parents=True)
     monkeypatch.setattr(recording, "POINTER", tmp_path / "active.json")
