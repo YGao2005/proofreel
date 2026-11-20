@@ -8,7 +8,7 @@ import tempfile
 from importlib import resources
 from pathlib import Path
 
-__version__ = "0.1.0"
+__version__ = "1.0.0"
 
 HOME = Path(os.environ.get("PROOFREEL_HOME", Path.home() / ".proofreel"))
 

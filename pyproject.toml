@@ -1,6 +1,6 @@
 [project]
 name = "proofreel"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Record an agent driving a screen as a review video and page: a gliding pointer, click rings, auto zoom, captions, and checks."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -17,6 +17,12 @@ proofreel = "proofreel.cli:main"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "src/proofreel/__init__.py"
+
+[tool.hatch.build.targets.sdist]
+include = ["src", "tests", "README.md", "CHANGELOG.md", "LICENSE"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/proofreel"]

@@ -12,6 +12,13 @@ pip install git+https://github.com/YGao2005/proofreel   # Python 3.11+, and ffmp
 proofreel demo               # a made-up session, no VNC needed: open the index.html it prints
 ```
 
+To let Claude Code drive it, add the skill:
+
+```bash
+mkdir -p ~/.claude/skills/proofreel
+curl -fsSL https://raw.githubusercontent.com/YGao2005/proofreel/main/skills/proofreel/SKILL.md -o ~/.claude/skills/proofreel/SKILL.md
+```
+
 ## Quickstart
 
 Start a VM from a saved state, record a session, and publish the review page.
@@ -88,7 +95,7 @@ The tour above is made from these runs. `tools/readme_media.py review-acme` make
 | [The review page](docs/review-page.md) | what the page shows, publishing, review folders, claude.ai features |
 | [How it works](docs/how-it-works.md) | the video, the screens it can record, the session folder, capture, time, camera, drawing |
 
-An agent can read [`skills/proofreel/SKILL.md`](skills/proofreel/SKILL.md) to drive proofreel.
+The skill an agent reads is [`skills/proofreel/SKILL.md`](skills/proofreel/SKILL.md).
 
 ## Limits
 
