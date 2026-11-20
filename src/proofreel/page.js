@@ -41,7 +41,7 @@ const icon = name => {
   p.setAttribute("d", ICONS[name]); s.append(p);
   return s;
 };
-const VIEWS = [["journeys", "Journeys"], ["timeline", "Timeline"], ["stats", "Stats"], ["network", "Network"], ["compare", "Compare", true]];
+const VIEWS = [["journeys", "Journeys"], ["stats", "Stats"], ["network", "Network"], ["compare", "Compare", true]];
 const placeholder = text => $("div", { class: "soon-pane" }, $("p", { class: "placeholder", text }));
 
 // A suite page switches between the journeys of the suite run on show; any other page, between the runs of one journey.
@@ -156,20 +156,7 @@ function render() {
   const stagePanel = $("section", { class: "panel stage", "aria-label": "Recording" },
     ...(recorded ? [$("div", { class: "media" }, screen), timebar] : [placeholder(r.error ? `No video: ${r.error}` : "This run made no video.")]));
 
-  const list = $("ol", { class: "list timeline" });
-  let actions = null, summary = null, visit = 0;
-  for (const e of r.events) {
-    if (e.row === "key") { list.append(row(r, e, seek, e.kind === "state" ? r.states[visit++] : null)); actions = null; continue; }
-    if (!actions) {
-      actions = $("ol");
-      summary = $("summary");
-      list.append($("li", { class: "more" }, $("details", {}, summary, actions)));
-    }
-    actions.append(row(r, e, seek));
-    const n = actions.children.length;
-    summary.textContent = `${n} action${n === 1 ? "" : "s"}`;
-  }
-  const panes = { journeys: journeysView(), timeline: list, stats: statsView(r, seek), network: networkView(r, seek),
+  const panes = { journeys: journeysView(), stats: statsView(r, seek), network: networkView(r, seek),
     compare: placeholder("Two runs side by side: the same state in each, with the frame, the checks, and the time they took.") };
   const views = VIEWS.filter(([name]) => panes[name]);
   if (!panes[view]) view = null;
@@ -186,23 +173,13 @@ function render() {
   show();
   const viewsPanel = $("section", { class: "panel views" }, $("div", { class: "head" }, tabs), body);
   const dock = $("aside", { class: "panel dock", "aria-label": "Review" }, reviewPanel(r), askPanel(r, video));
-  const stack = $("div", { class: "stack", style: "--at:0%" }, stagePanel, flow.element, tracks.panel, viewsPanel, dock);
+  const cols = $("div", { class: "cols" }, $("div", { class: "main" }, stagePanel, tracks.panel), flow.element);
+  const stack = $("div", { class: "stack", style: "--at:0%" }, cols, viewsPanel, dock);
   app.append(stack);
-  const anchor = flow.element || stagePanel;
-  const fit = () => {
-    const media = stagePanel.querySelector(".media");
-    if (media) app.style.setProperty("--fit-h", Math.max(160, Math.floor(innerHeight - (anchor.getBoundingClientRect().bottom + scrollY - media.getBoundingClientRect().height) - 16)) + "px");
-  };
+  const fit = () => app.style.setProperty("--cols-h", Math.max(440, Math.floor(innerHeight - cols.getBoundingClientRect().top - scrollY - 16)) + "px");
   window.onresize = fit;
-  if (window.ResizeObserver) { const watch = new ResizeObserver(fit); [document.body, anchor, timebar].forEach(el => watch.observe(el)); }
-  video.addEventListener("timeupdate", () => {
-    let current = null;
-    const rows = list.querySelectorAll("li[data-t]");
-    for (const li of rows) if (+li.dataset.t <= video.currentTime + 0.05) current = li;
-    const folded = current && current.closest("details:not([open])");
-    const mark = folded ? folded.parentElement : current;
-    for (const li of list.querySelectorAll("li")) li.classList.toggle("now", li === mark);
-  });
+  if (window.ResizeObserver) new ResizeObserver(fit).observe(app.firstChild);
+  fit();
   update();
   place();
   watchReview(r);
@@ -448,73 +425,77 @@ function stage(r, video, overlay) {
   }
 }
 
-function row(r, e, seek, visit) {
+function row(r, e, seek) {
   const status = e.kind === "check" ? chip(e.ok ? "Pass" : "Fail", e.ok ? "ok" : "bad")
-    : e.kind === "wait" ? chip(e.ok ? "Seen" : "Not seen", e.ok ? "ok" : "bad")
-    : visit ? chip(...VISITS[visitVerdict(visit)]) : null;
+    : e.kind === "wait" ? chip(e.ok ? "Seen" : "Not seen", e.ok ? "ok" : "bad") : null;
   const text = $("span", { class: "text" },
-    ["state", "step", "check", "note"].includes(e.kind) || e.text.startsWith(e.kind) ? null : $("span", { class: "kind", text: e.kind + " " }),
+    ["step", "check", "note"].includes(e.kind) || e.text.startsWith(e.kind) ? null : $("span", { class: "kind", text: e.kind + " " }),
     document.createTextNode(e.text + " "), status, e.detail ? $("span", { class: "detail", text: e.detail }) : null);
   const body = $("div", { class: "row", tabindex: "0", role: "button", "aria-label": `Jump to ${clock(e.t)}: ${e.text}` },
-    $("span", { class: "t", text: clock(e.t) }), text, e.shot ? $("img", { src: r.base + e.shot, alt: "", loading: "lazy" }) : $("span"));
-  const li = $("li", { class: e.kind + (visit ? " " + VISITS[visitVerdict(visit)][1] : ""), "data-t": toVideo(r, e.t) }, body);
+    $("span", { class: "t", text: clock(e.t) }), text);
+  const li = $("li", { class: e.kind }, body);
   const go = () => seek(toVideo(r, e.t) - 0.4);
   body.addEventListener("click", go);
   body.addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); go(); } });
   return li;
 }
 
+// The run's flow, top to bottom: a node for each state the run visited, with its time and checks, and under it the steps
+// of that visit. A run with no states is one list of steps. The node and step at the video's time are lit, and the
+// column follows them except for 4 s after the person scrolls it.
 function flowView(r, seek) {
-  const graph = Machine.flow(r);
-  if (!graph.nodes.length) return { element: null, now: () => {} };
-  const NS = "http://www.w3.org/2000/svg";
-  const svg = (tag, attrs = {}) => {
-    const el = document.createElementNS(NS, tag);
-    for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
-    return el;
-  };
-  const buttons = new Map(), steps = $("ol", { class: "steps" });
-  let playing = -1;
-  graph.nodes.forEach((n, i) => {
-    const next = graph.edges.some(e => e.next && e.from === n.id);
-    const checks = n.total ? `${n.passed}/${n.total} checks` : "No checks";
-    const go = () => {
-      const v = n.visits.find(v => v.t > playing + 0.3) || n.visits[0];
-      seek(toVideo(r, v.t) - 0.2);
-    };
-    const button = $("button", { type: "button", class: `node ${VISITS[n.verdict][1]}`, title: `${n.id}: ${VISITS[n.verdict][0]}, ${checks}`, onclick: go },
-      $("span", { class: "name", text: n.id }), $("span", { class: "checks", text: checks }));
-    buttons.set(n.id, button);
-    steps.append($("li", { class: next ? "next" : "" }, button));
-  });
-  const arcs = svg("svg", { class: "arcs", "aria-hidden": "true" });
-  arcs.append(svg("defs"));
-  arcs.firstChild.append(svg("marker", { id: "arc-head", viewBox: "0 0 10 10", refX: "9", refY: "5", markerWidth: "7", markerHeight: "7", orient: "auto" }));
-  arcs.firstChild.firstChild.append(svg("path", { d: "M0,0 L10,5 L0,10 z", class: "head" }));
-  const draw = () => {
-    arcs.querySelectorAll("path.arc").forEach(p => p.remove());
-    let depth = 0;
-    for (const e of graph.edges) {
-      if (e.next) continue;
-      const [a, b] = [buttons.get(e.from), buttons.get(e.to)], span = Math.abs(graph.nodes.findIndex(n => n.id === e.from) - graph.nodes.findIndex(n => n.id === e.to));
-      const [x1, x2] = a === b ? [a.offsetLeft + a.offsetWidth * .65, a.offsetLeft + a.offsetWidth * .35] : [a.offsetLeft + a.offsetWidth / 2, b.offsetLeft + b.offsetWidth / 2];
-      const y = a.offsetTop + a.offsetHeight, h = 16 + 8 * Math.min(span, 4);
-      depth = Math.max(depth, h);
-      const path = svg("path", { class: "arc", d: `M${x1},${y} C${x1},${y + h} ${x2},${y + h} ${x2},${y + 4}`, "marker-end": "url(#arc-head)" });
-      path.append(svg("title"));
-      path.firstChild.textContent = `${e.from} to ${e.to}${e.takes > 1 ? ` (${e.takes} times)` : ""}`;
-      arcs.append(path);
+  const list = Machine.sections(r), body = $("div", { class: "body" }), items = $("ol", { class: "list flow-list" });
+  const nodes = [], steps = [];
+  list.forEach((s, i) => {
+    const tone = VISITS[visitVerdict(s)][1], item = $("li", { class: `visit ${tone}` });
+    if (s.visit) {
+      const checks = s.total ? `${s.passed}/${s.total} checks` : "No checks";
+      const node = $("button", { type: "button", class: "node", title: `${s.name}: ${VISITS[visitVerdict(s)][0]}, ${checks}`,
+        onclick: () => seek(toVideo(r, s.t) - 0.2) },
+        $("span", { class: "name", text: s.name }), $("span", { class: "t", text: clock(s.t) }),
+        $("span", { class: "checks", text: checks }), s.ok === null ? null : chip(...VISITS[tone]));
+      nodes.push(node);
+      item.append(node);
+      if (i > 0 && list[i - 1].visit) items.append($("li", { class: "link", text: s.back ? `back to ${s.back}` : "" }));
+    } else nodes.push(null);
+    const ol = $("ol", { class: "steps" }), mine = [];
+    let group = null, summary = null;
+    for (const e of s.events) {
+      if (e.row === "key") { const li = row(r, e, seek); ol.append(li); mine.push(li); group = null; continue; }
+      if (!group) {
+        group = $("ol"); summary = $("summary");
+        ol.append($("li", { class: "more" }, $("details", {}, summary, group)));
+      }
+      const li = row(r, e, seek);
+      group.append(li); mine.push(li);
+      summary.textContent = `${group.children.length} action${group.children.length === 1 ? "" : "s"}`;
     }
-    steps.style.paddingBottom = depth ? depth + 8 + "px" : "";
+    item.append(ol);
+    items.append(item);
+    steps.push(mine);
+  });
+  const lit = list.length === 1 && !list[0].events.length ? $("p", { class: "placeholder", text: "No steps were recorded." }) : null;
+  body.append(lit || items);
+  let touched = -Infinity, last = "";
+  for (const name of ["wheel", "touchstart", "pointerdown", "keydown"]) body.addEventListener(name, () => { touched = Date.now(); }, { passive: true });
+  const reveal = (el, pad) => {
+    const box = body.getBoundingClientRect(), at = el.getBoundingClientRect();
+    if (at.top < box.top + pad || at.bottom > box.bottom - 8) body.scrollTo({ top: body.scrollTop + at.top - box.top - body.clientHeight / 3, behavior: "smooth" });
   };
-  const track = $("div", { class: "track" }, $("div", { class: "inner" }, steps, arcs));
-  if (window.ResizeObserver) new ResizeObserver(draw).observe(steps);
-  const element = $("section", { class: "panel flow", "aria-label": "User flow" }, $("h2", { text: "User flow" }), track);
   const now = real => {
-    playing = real;
-    const v = Machine.at(r, real);
-    buttons.forEach((b, id) => b.classList.toggle("now", !!v && v.name === id));
+    const { section, event } = Machine.now(list, real), key = `${section}:${event}`;
+    if (key === last) return;
+    last = key;
+    const li = event < 0 ? null : steps[section][event], folded = li && li.closest("details:not([open])");
+    const mark = folded ? folded.parentElement : li;
+    items.querySelectorAll(".now").forEach(el => el.classList.remove("now"));
+    if (nodes[section]) nodes[section].classList.add("now");
+    if (mark) mark.classList.add("now");
+    if (Date.now() - touched < 4000) return;
+    const node = nodes[section];
+    if (mark) reveal(mark, node ? node.offsetHeight + 4 : 0); else if (node) reveal(node, 0);
   };
+  const element = $("aside", { class: "panel flow", "aria-label": "User flow" }, $("h2", { text: "User flow" }), body);
   return { element, now };
 }
 

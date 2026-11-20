@@ -5,41 +5,48 @@ const Machine = require("../../src/proofreel/machine.js");
 const path = (...names) => names.map((name, i) => ({ name, t: i * 10, end: i * 10 + 10, ok: true }));
 const check = (t, ok = true) => ({ kind: "check", t, ok });
 
-test("a node for each state in the order the run reached it, an edge for each transition", () => {
-  const f = Machine.flow({ states: path("Home", "Sign in", "Welcome") });
-  assert.deepStrictEqual(f.nodes.map(n => n.id), ["Home", "Sign in", "Welcome"]);
-  assert.deepStrictEqual(f.edges.map(e => [e.from, e.to, e.next]), [["Home", "Sign in", true], ["Sign in", "Welcome", true]]);
+test("a visit holds the events in its time, and counts the checks, not the waits", () => {
+  const events = [{ kind: "state", t: 0, text: "A" }, { kind: "step", t: 1 }, check(2), check(3, false), { kind: "wait", t: 4, ok: true },
+    { kind: "state", t: 10, text: "B" }, check(11)];
+  const [a, b] = Machine.sections({ states: path("A", "B"), events });
+  assert.deepStrictEqual([a.name, a.events.length, a.passed, a.total], ["A", 4, 1, 2]);
+  assert.deepStrictEqual([b.name, b.events.length, b.passed, b.total], ["B", 1, 1, 1]);
 });
 
-test("a run that goes back to a state keeps one node and shows the edge back", () => {
-  const f = Machine.flow({ states: path("Sign in", "Wrong password", "Sign in", "Welcome") });
-  assert.deepStrictEqual(f.nodes.map(n => n.id), ["Sign in", "Wrong password", "Welcome"]);
-  assert.deepStrictEqual(f.edges.map(e => [e.from, e.to, e.next]),
-    [["Sign in", "Wrong password", true], ["Wrong password", "Sign in", false], ["Sign in", "Welcome", false]]);
-  assert.strictEqual(f.nodes[0].visits.length, 2);
+test("a section takes the verdict of its visit", () => {
+  const states = [{ name: "A", t: 0, end: 1, ok: true }, { name: "B", t: 1, end: 2, ok: null }, { name: "C", t: 2, end: 3, ok: false }];
+  assert.deepStrictEqual(Machine.sections({ states }).map(s => s.ok), [true, null, false]);
 });
 
-test("a repeated transition is one edge that counts its takes", () => {
-  const f = Machine.flow({ states: path("A", "B", "A", "B") });
-  assert.deepStrictEqual(f.edges.map(e => [e.from, e.to, e.takes]), [["A", "B", 2], ["B", "A", 1]]);
+test("a return to a state seen before says so; a first visit does not", () => {
+  const list = Machine.sections({ states: path("Sign in", "Wrong password", "Sign in", "Welcome") });
+  assert.deepStrictEqual(list.map(s => s.back), [null, null, "Sign in", null]);
 });
 
-test("a node counts the checks that ran in its visits, as the header does, and not the waits", () => {
-  const events = [check(1), check(2, false), { kind: "wait", t: 12, ok: true }, { kind: "step", t: 13 }, check(25)];
-  const f = Machine.flow({ states: path("A", "B", "C"), events });
-  assert.deepStrictEqual(f.nodes.map(n => [n.passed, n.total]), [[1, 2], [0, 0], [1, 1]]);
+test("the last visit holds every later event", () => {
+  const [a] = Machine.sections({ states: path("A"), events: [check(5), check(99)] });
+  assert.strictEqual(a.events.length, 2);
 });
 
-test("a verdict is bad when a visit failed, ok when one passed, unchecked when none was checked", () => {
-  const states = [{ name: "A", t: 0, end: 1, ok: true }, { name: "B", t: 1, end: 2, ok: null }, { name: "C", t: 2, end: 3, ok: false },
-    { name: "A", t: 3, end: 4, ok: false }];
-  assert.deepStrictEqual(Machine.flow({ states }).nodes.map(n => n.verdict), ["bad", "unchecked", "bad"]);
-  assert.strictEqual(Machine.flow({ states: path("A") }).nodes[0].verdict, "ok");
+test("events before the first state go to an unnamed section", () => {
+  const list = Machine.sections({ states: [{ name: "A", t: 5, end: 9, ok: true }], events: [{ kind: "step", t: 1 }, check(6)] });
+  assert.deepStrictEqual(list.map(s => [s.name, s.events.length]), [[null, 1], ["A", 1]]);
 });
 
-test("a run with no states has no flow", () => {
-  assert.deepStrictEqual(Machine.flow({ states: [] }), { nodes: [], edges: [] });
-  assert.deepStrictEqual(Machine.flow({}), { nodes: [], edges: [] });
+test("a run with no states is one unnamed section with every event but the state marks", () => {
+  const list = Machine.sections({ events: [{ kind: "step", t: 1 }, check(2)] });
+  assert.deepStrictEqual(list.map(s => [s.name, s.visit, s.events.length, s.passed, s.total]), [[null, null, 2, 1, 1]]);
+  assert.strictEqual(Machine.sections({})[0].events.length, 0);
+});
+
+test("the current visit and event for a time", () => {
+  const events = [{ kind: "step", t: 1 }, check(2), { kind: "step", t: 12 }];
+  const list = Machine.sections({ states: path("A", "B"), events });
+  assert.deepStrictEqual(Machine.now(list, 0), { section: 0, event: -1 });
+  assert.deepStrictEqual(Machine.now(list, 2.5), { section: 0, event: 1 });
+  assert.deepStrictEqual(Machine.now(list, 10), { section: 1, event: -1 });
+  assert.deepStrictEqual(Machine.now(list, 15), { section: 1, event: 0 });
+  assert.deepStrictEqual(Machine.now(Machine.sections({ events }), 1.5), { section: 0, event: 0 });
 });
 
 test("the state at a time is the visit that holds it", () => {

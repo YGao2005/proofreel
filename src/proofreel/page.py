@@ -1,7 +1,7 @@
 """The review page. One template for a single run and for a run history published to one URL.
 
-The page draws itself from embedded run data: the video, the user flow (machine.js) of the run's states, the metric
-tracks, and a tab strip for the journeys, timeline, stats, and network. On claude.ai, the artifact's own comments work
+The page draws itself from embedded run data: the video, the user flow (machine.js) of the run's states and steps, the
+metric tracks, and a tab strip for the journeys, stats, and network. On claude.ai, the artifact's own comments work
 on any row, and the page adds a shared Approve / Needs work review and questions about the current frame. Opened as a
 plain file, it is a static page.
 """

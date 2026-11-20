@@ -1,29 +1,31 @@
 const Machine = (() => {
-  function flow(run) {
-    const checks = (run.events || []).filter(e => e.kind === "check");
-    const nodes = new Map(), edges = new Map();
-    let from = null;
-    for (const v of run.states || []) {
-      if (!nodes.has(v.name)) nodes.set(v.name, { id: v.name, passed: 0, total: 0, visits: [] });
-      const node = nodes.get(v.name), mine = checks.filter(e => e.t >= v.t && (v.end == null || e.t < v.end));
-      node.visits.push({ t: v.t, ok: v.ok });
-      node.total += mine.length;
-      node.passed += mine.filter(e => e.ok).length;
-      if (from !== null) {
-        const key = JSON.stringify([from, v.name]);
-        if (!edges.has(key)) edges.set(key, { from, to: v.name, takes: 0 });
-        edges.get(key).takes++;
-      }
-      from = v.name;
-    }
-    const list = [...nodes.values()], at = id => list.findIndex(n => n.id === id);
-    for (const n of list) n.verdict = n.visits.some(v => v.ok === false) ? "bad" : n.visits.some(v => v.ok) ? "ok" : "unchecked";
-    return { nodes: list, edges: [...edges.values()].map(e => ({ ...e, next: at(e.to) === at(e.from) + 1 })) };
-  }
   function at(run, t) {
     return (run.states || []).find(v => v.t <= t && (v.end == null || t < v.end)) || null;
   }
+  function sections(run) {
+    const events = (run.events || []).filter(e => e.kind !== "state"), states = run.states || [];
+    const part = (visit, from, to, back) => {
+      const mine = events.filter(e => e.t >= from && e.t < to), checks = mine.filter(e => e.kind === "check");
+      return { visit, name: visit ? visit.name : null, t: from, ok: visit ? visit.ok : null, back, events: mine,
+        passed: checks.filter(e => e.ok).length, total: checks.length };
+    };
+    if (!states.length) return [part(null, -Infinity, Infinity, null)];
+    const seen = new Set(), out = [];
+    if (events.some(e => e.t < states[0].t)) out.push(part(null, -Infinity, states[0].t, null));
+    states.forEach((v, i) => {
+      out.push(part(v, v.t, i === states.length - 1 || v.end == null ? Infinity : v.end, seen.has(v.name) ? v.name : null));
+      seen.add(v.name);
+    });
+    return out;
+  }
+  function now(list, t) {
+    let i = 0;
+    list.forEach((s, k) => { if (s.t <= t) i = k; });
+    let j = -1;
+    list[i].events.forEach((e, k) => { if (e.t <= t + 0.05) j = k; });
+    return { section: i, event: j };
+  }
 
-  return { flow, at };
+  return { at, sections, now };
 })();
 if (typeof module === "object") module.exports = Machine;

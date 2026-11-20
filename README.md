@@ -9,10 +9,11 @@ review video and a page that a person can check in a minute.
   change on the screen plays at up to 8x, with a smooth ramp in and out.
 - **The video fits about 30 s.** Busy time plays at up to 2.5x when the session is long, a wait for the screen plays
   at 3x, and a badge shows the speed whenever it is above 1x.
-- **The page is the review.** It has the video, a scrub bar with a mark for each step and check, a States track
-  under it, and a side panel with the timeline of actions and thumbnails. A click on a row or a state jumps the video
-  to that moment. A failed check marks the page *Problem*. On a wide screen the page fits the window and only the side
-  panel scrolls.
+- **The page is the review.** On a wide screen the video, a scrub bar with a mark for each step and check, and a
+  folded Tracks row are on the left. The user flow is on the right: a node for each state the run visited, with its
+  time and checks, and the steps of that visit under it. A click on a node or a step jumps the video to that moment.
+  The page fits the window, and only the flow scrolls. Journeys, Stats, and Network are tabs below. A failed check
+  marks the page *Problem*.
 - **Saved states for VMs.** Save a VM as a named state, such as `clean-os`, `app-installed`, or
   `signed-in-mid-onboarding`. Then start each test from that state in seconds. A warm state keeps the memory, so the
   test starts with the apps already open. A state that a flow makes records the flow, so you can make it again when
