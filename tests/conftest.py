@@ -1,3 +1,5 @@
+import os
+
 import pytest
 
 from proofreel import qemu, recording, vm
@@ -17,3 +19,21 @@ def home(tmp_path, monkeypatch):
                                (qemu, "FOLDER", "qemu"), (qemu, "FIRMWARE", "firmware.gz")):
         monkeypatch.setattr(module, name, tmp_path / path)
     return tmp_path
+
+
+@pytest.fixture
+def chrome():
+    """A Google Chrome launched by Playwright. Without Playwright or Chrome the test skips, except in CI, where it fails."""
+    if os.environ.get("CI"):
+        from playwright.sync_api import sync_playwright
+    else:
+        sync_playwright = pytest.importorskip("playwright.sync_api").sync_playwright
+    with sync_playwright() as p:
+        try:
+            browser = p.chromium.launch(channel="chrome")
+        except Exception:
+            if os.environ.get("CI"):
+                raise
+            pytest.skip("no Chrome to launch")
+        yield browser
+        browser.close()
