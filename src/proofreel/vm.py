@@ -248,7 +248,7 @@ def save(name, warm=False, note="", flow=None, values=None, conditions=None):
             raise
         drop(name)
         raise Problem(f"The warm state {name} did not restore, so it was deleted: {error}") from None
-    print(f"Saved state {name}{' (warm)' if warm else ''} from {run['state']}. {RUN} runs on.")
+    print(f"Saved state {name}{' (warm)' if warm else ''}. The VM {RUN} still runs from it; proofreel vm down stops it.")
 
 
 def down():
