@@ -33,7 +33,7 @@ To let Claude Code drive it, add the plugin in Claude Code:
 ## Quickstart
 
 Make the `linux` state once. It downloads Debian (about 0.4 GB), installs Xfce and Chromium, and saves the disk. It takes
-about 4 minutes and needs QEMU. A state that exists is not made again; `proofreel vm drop linux` removes it.
+about 5 minutes and needs QEMU. A state that exists is not made again; `proofreel vm drop linux` removes it.
 
 ```bash
 proofreel vm image                           # once: the linux state (Debian, Xfce, Chromium)
@@ -65,8 +65,9 @@ proofreel vm down
 Publishing is in [the review page](docs/review-page.md). To use an existing VNC screen in place of a VM, set
 `PROOFREEL_VNC=127.0.0.1::5900` and `PROOFREEL_PASSWORD=...`.
 
-A flow is a text file with one command on each line, so a journey runs again the same way. A suite runs many flows,
-each from a clean start:
+A flow is a text file with one command on each line, so a journey runs again the same way. Write each line without the
+word `proofreel`, and write `vm sh 'browse URL'` for the page step. [`examples/acme-notes/flows`](examples/acme-notes/flows)
+has flows to copy. A suite runs many flows, each from a clean start:
 
 ```bash
 proofreel run flows/sign-up.flow --set EMAIL=sam@example.com
