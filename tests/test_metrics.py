@@ -58,7 +58,7 @@ def test_stats_over_a_series_glob_and_a_window(tmp_path):
     assert found.stat("cpu/a", "mean") == 25 and found.stat("cpu/a", "p50") == 25 and found.stat("cpu/*", "max") == 90
     assert found.stat("cpu/a", "mean", since=102) == 35 and found.stat("cpu/a", "last") == 40
     assert found.stat("net/*", "failed") == 1 and found.stat("net/*", "count") == 1
-    assert found.stat("gpu/*", "mean") is None and found.stat("gpu/*", "count") == 0
+    assert found.stat("gpu/*", "mean") is None and found.stat("gpu/*", "count") is None and found.stat("gpu/*", "failed") is None
     with pytest.raises(Problem, match="Unknown stat"):
         found.stat("cpu/a", "p42")
 
@@ -74,6 +74,9 @@ def test_a_budget_passes_fails_or_cannot_run_without_data(tmp_path):
     assert metrics.check(folder, "host/*", "mean", above=10, wait=0)[0]
     with pytest.raises(Problem, match="No gpu/\\* data in the run. Series: host/cpu"):
         metrics.check(folder, "gpu/*", "max", below=1, wait=0)
+    # WHY: "0 failed requests" with no network probe is no evidence, so it must not pass.
+    with pytest.raises(Problem, match="No net/\\* data in the run"):
+        metrics.check(folder, "net/*", "failed", below=1, wait=0)
 
 
 def test_the_summary_says_what_failed_then_one_line_for_each_series(tmp_path):

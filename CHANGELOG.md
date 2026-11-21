@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Fix:** a `count` or `failed` budget with no data in its window now fails ("No net/* data in the run"), as the docs say. Before, `net/* failed --below 1` passed when the network probe was not installed, so a run with failed requests could pass.
 - Tracks start folded on every run, also when a budget failed; the Budget failed chip still shows on the folded row. Opened, they stay open while you switch runs.
 - In Flow, a click on a state that this run did not visit opens a run that did, at that state (a run where it failed first, else the newest). The "In other runs" buttons also go to the state.
 

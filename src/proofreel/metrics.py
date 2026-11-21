@@ -124,6 +124,8 @@ class Metrics:
         if stat not in STATS:
             raise Problem(f"Unknown stat {stat!r}. Use one of: {', '.join(STATS)}.")
         chosen = self.select(glob, since, until)
+        if not chosen:
+            return None
         if stat == "count":
             return len(chosen)
         if stat == "failed":
