@@ -2,8 +2,6 @@ import pytest
 
 from proofreel import page
 
-playwright = pytest.importorskip("playwright.sync_api")
-
 
 def run(title, *path, failed_budget=False):
     states = [{"name": name, "t": i * 2 + 1, "end": i * 2 + 3, "ok": True} for i, name in enumerate(path)]
@@ -17,17 +15,11 @@ def run(title, *path, failed_budget=False):
 
 
 @pytest.fixture
-def view(tmp_path):
+def view(tmp_path, chrome):
     (tmp_path / "index.html").write_text(page.document([run("Sign in", "Home", "Welcome"), run("Wrong password", "Home", "Error", failed_budget=True)]))
-    with playwright.sync_playwright() as p:
-        try:
-            browser = p.chromium.launch(channel="chrome")
-        except Exception:
-            pytest.skip("no Chrome to launch")
-        tab = browser.new_page(viewport={"width": 1440, "height": 900})
-        tab.goto((tmp_path / "index.html").as_uri())
-        yield tab
-        browser.close()
+    tab = chrome.new_page(viewport={"width": 1440, "height": 900})
+    tab.goto((tmp_path / "index.html").as_uri())
+    return tab
 
 
 def test_tracks_start_folded_even_when_a_budget_failed_and_stay_as_set_across_runs(view):
