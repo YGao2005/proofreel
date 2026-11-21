@@ -23,7 +23,7 @@ if (SUITE && !location.hash) view = "journeys";
 const MACHINE = RUNS.some(x => x.states && x.states.length);
 const VISITS = { ok: [Verdict.VISIT.ok, "ok"], bad: [Verdict.VISIT.bad, "bad"], unchecked: [Verdict.VISIT.unchecked, "info"] };
 const visitVerdict = v => v.ok === false ? "bad" : v.ok ? "ok" : "unchecked";
-let startAt = null;
+let startAt = null, tracksOpen = false, pickState = null;
 const fromHash = () => {
   const m = /^#run-(\d+)(?:&t=(\d+(?:\.\d+)?))?$/.exec(location.hash);
   if (m && +m[1] >= 1 && +m[1] <= RUNS.length) { run = +m[1] - 1; startAt = m[2] === undefined ? null : +m[2]; }
@@ -306,15 +306,15 @@ const limitOf = b => b.below !== null && b.below !== undefined ? b.below : b.abo
 
 // One row on the video's time axis for each series, the way its record looks: samples as a line in their lo-hi
 // envelope, spans in rows (+N when more do not fit), marks as ticks. Sped-up stretches are hatched and labelled.
-// A chip per group hides its rows; a pin per series puts it in the readout on the video. The panel is one row until it
-// is opened (a failed budget opens it), and the readout on the video shows only while it is open.
+// A chip per group hides its rows; a pin per series puts it in the readout on the video. The panel is one row until the
+// viewer opens it, and stays open across runs; the readout on the video shows only while it is open.
 function metricTracks(r, live, seek) {
   const drawn = metricsOf(r).filter(s => s.points || s.spans || s.marks);
   const series = [...drawn.filter(s => rankOf(r, s) === 0), ...drawn.filter(s => rankOf(r, s) !== 0)];
   const map = Tracks.timemap(r.clock), length = r.length || map.video(r.real) || 1;
   const x = t => map.video(t) / length * W, pct = v => `${v / W * 100}%`;
   const pins = () => PREFS.pins || [...new Set(series.map(groupOf))].map(g => series.find(s => groupOf(s) === g).m).slice(0, 3);
-  let open = false, at = 0;
+  let open = tracksOpen, at = 0;
   const readout = real => {
     at = real;
     const shown = series.filter(s => pins().includes(s.m));
@@ -326,7 +326,6 @@ function metricTracks(r, live, seek) {
   const hatch = lane => stretches.forEach(st => lane.append($("span", { class: "stretch", style: `left:${st.from / length * 100}%;width:${(st.to - st.from) / length * 100}%`,
     title: `Plays at up to ${Math.round(st.speed)}x` })));
   const failed = ((r.metrics && r.metrics.budgets) || []).some(b => b.ok === false);
-  open = failed || !!PREFS.open;
   const lanes = $("div", { class: "lanes" });
   const hidden = new Set(PREFS.hidden || crowded(r, series)), rows = [];
   const chips = $("div", { class: "chips metric" });
@@ -382,7 +381,7 @@ function metricTracks(r, live, seek) {
     chips.hidden = !open;
     readout(at);
   };
-  fold.addEventListener("click", () => { open = !open; PREFS.open = open; savePrefs(); paint(); });
+  fold.addEventListener("click", () => { tracksOpen = open = !open; paint(); });
   paint();
   return { readout, panel };
 }
@@ -598,7 +597,17 @@ function machineView(r, seek) {
     drawing.append(g);
   }
   const nodes = new Map(), halos = new Map();
-  let pinned = null, following = null;
+  let pinned = pickState, following = null;
+  pickState = null;
+  // A state this run never visits opens the run that does (the failing one first, else the newest) at that state.
+  const elsewhere = id => {
+    const has = RUNS.map((x, i) => [i, Machine.verdict(x.states || [], id)]).filter(([i, v]) => v && i !== current);
+    return (has.find(([, v]) => v === "bad") || has[has.length - 1] || [])[0];
+  };
+  const open = (i, id) => {
+    pickState = id;
+    location.hash = `run-${i + 1}&t=${Math.max(0, RUNS[i].states.find(v => v.name === id).t - 0.2).toFixed(1)}`;
+  };
   const failing = states.find(v => v.ok === false);
   const shown = () => pinned || (failing ? failing.name : following);
   const sum = id => {
@@ -612,9 +621,10 @@ function machineView(r, seek) {
       transform: `translate(${n.x},${n.y})` },
       svg("rect", { width: n.w, height: n.h, rx: 6 }),
       svg("text", { x: n.w / 2, y: n.h / 2 + 4.5, class: "name" }, first ? n.id : name(n.id)));
-    if (!first) g.setAttribute("aria-label", `${n.id}, ${here ? `${{ ok: "passed", bad: "failed", unchecked: "not checked" }[here]}, ${sum(n.id)}` : "not in this run"}`);
+    if (!first) g.setAttribute("aria-label", `${n.id}, ${here ? `${{ ok: "passed", bad: "failed", unchecked: "not checked" }[here]}, ${sum(n.id)}` : `opens ${RUNS[elsewhere(n.id)].title}`}`);
     if (!first) {
       const pick = () => {
+        if (!here) return open(elsewhere(n.id), n.id);
         pinned = pinned === n.id ? null : n.id;
         details();
         const v = states.find(v => v.name === n.id);
@@ -638,7 +648,7 @@ function machineView(r, seek) {
     info.replaceChildren();
     if (!id || !nodes.has(id)) return;
     const here = Machine.verdict(states, id);
-    info.append($("h2", {}, $("span", { text: id }), here ? chip(...VISITS[here]) : chip("Not in this run", "info")));
+    info.append($("h2", {}, $("span", { text: id }), chip(...VISITS[here])));
     const visits = states.filter(v => v.name === id);
     const checks = r.events.filter(e => ["wait", "check"].includes(e.kind) && visits.some(v => e.t >= v.t && e.t < v.end));
     if (checks.length) { const ol = $("ol"); checks.forEach(e => ol.append(row(r, e, seek))); info.append(ol); }
@@ -647,7 +657,7 @@ function machineView(r, seek) {
       const others = $("div", { class: "choices" });
       RUNS.forEach((x, i) => {
         const v = Machine.verdict(x.states, id);
-        if (v && i !== current) others.append($("button", { type: "button", class: "btn small", onclick: () => { location.hash = `run-${i + 1}`; } },
+        if (v && i !== current) others.append($("button", { type: "button", class: "btn small", onclick: () => open(i, id) },
           $("span", { text: x.title }), chip(...VISITS[v])));
       });
       if (others.children.length) info.append($("p", { class: "others", text: "In other runs:" }), others);

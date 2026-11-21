@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Tracks start folded on every run, also when a budget failed; the Budget failed chip still shows on the folded row. Opened, they stay open while you switch runs.
+- In Flow, a click on a state that this run did not visit opens a run that did, at that state (a run where it failed first, else the newest). The "In other runs" buttons also go to the state.
+
 ## 1.1.0
 
 - **Review page redesign:** a Pass, Fail, or No checks verdict by the title, with a cause line that jumps to the first failure (a click on a failed request opens Network); Approve and Needs work beside the title; one type and colour system (IBM Plex); a redrawn Flow with its details under it; Tracks with a time axis that lines up with the scrub bar; a Network waterfall; one Stats table that writes each budget as a sentence; keyboard keys (Space, arrows, J, K, N, Esc) and a `#run-N&t=SECONDS` link. Budgets count apart from screen checks.
