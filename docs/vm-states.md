@@ -215,6 +215,9 @@ proofreel vm down
 
 - Chrome comes from `PROOFREEL_CHROME`, then the newest Chromium of Playwright (`playwright install chromium`), then
   Google Chrome in `/Applications`, then `chromium` or `google-chrome` on PATH.
+- A watchdog starts with Chrome and ends it after `PROOFREEL_IDLE` seconds (default 1800) with no proofreel command
+  and no recording. It also ends Chrome's helpers and the run profile. The next command says: "The browser stopped
+  after 30 min with no proofreel command. Start it again: proofreel vm up web." `vm down` ends the watchdog.
 - Chrome is `--headless=new --mute-audio --hide-scrollbars`, and its DevTools port listens on 127.0.0.1 only. The run
   record's `screen` is `cdp://127.0.0.1:<port>` (a VNC run has `host::port`). `--vnc cdp://127.0.0.1:<port>` drives
   any Chrome that you started with `--remote-debugging-port`.

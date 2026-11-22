@@ -49,3 +49,11 @@ def chrome_path():
         if os.environ.get("CI"):
             raise
         pytest.skip("no Chrome to launch")
+
+
+@pytest.fixture(scope="session", autouse=True)
+def idle_browsers():
+    """A Chrome that a test leaves, or that a killed pytest leaves, ends itself after 2 minutes (idle.py)."""
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setenv("PROOFREEL_IDLE", "120")
+        yield

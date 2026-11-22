@@ -30,6 +30,7 @@ SESSIONS = Path(os.environ.get("PROOFREEL_SESSIONS", HOME / "sessions"))
 POINTER = HOME / f"{vm.RUN}-session.json"
 VNC_STREAMS = 2
 MAX_WIDTH = 1920
+BEAT_SECONDS = 2
 DIED = "The recorder stopped before proofreel stop."
 
 
@@ -99,7 +100,8 @@ def start(name, server, password, info, fps=30, reduce=0, run=None):
         with open(folder / "recorder.log", "w") as out:
             recorder = subprocess.Popen([sys.executable, "-m", "proofreel.recording", str(folder), server, str(fps),
                                          str(reduce)], stdout=out, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
-                                        env={**os.environ, "PROOFREEL_SCREEN_PASSWORD": password or ""},
+                                        env={**os.environ, "PROOFREEL_SCREEN_PASSWORD": password or "",
+                                             "PROOFREEL_BEAT": (run or {}).get("beat", "")},
                                         start_new_session=True)
         POINTER.write_text(json.dumps({"dir": str(folder), "pid": recorder.pid}))
         deadline = time.time() + 15
@@ -263,8 +265,11 @@ def record(folder, server, password, fps, reduce=0):
     for thread in writers + capturers:
         thread.start()
     started = probes.launch(folder)
+    beat = Path(os.environ["PROOFREEL_BEAT"]) if os.environ.get("PROOFREEL_BEAT") else None
     while not stop.is_set():
-        stop.wait(0.5)
+        if beat:
+            beat.touch()
+        stop.wait(BEAT_SECONDS)
     for thread in capturers:
         thread.join(timeout=5)
     for _ in writers:
