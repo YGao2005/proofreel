@@ -29,7 +29,9 @@ inputs:
       Default is the version of the action tag (v1.2.2, or v1 for the newest 1.x), and source for a branch or a SHA.
     default: ""
   fail-on-problem:
-    description: Fail the job when a journey has the verdict problem. Set false to only report.
+    description: >
+      Fail the job when a journey has the verdict problem. Set false to only report. A journey with no checks
+      is reported as "no checks", never as a pass.
     default: "true"
   working-directory:
     description: The folder to run in. Flow paths and start are relative to it.
@@ -43,7 +45,7 @@ outputs:
     description: The folder with the review page (index.html and runs/).
     value: ${{ steps.suite.outputs.review-dir }}
   exit-code:
-    description: The exit code of proofreel suite. 0 all good, 1 a journey has a problem, 2 the suite could not run.
+    description: The exit code of proofreel suite. 2 means it could not run. The verdicts are in the review folder.
     value: ${{ steps.suite.outputs.exit-code }}
 
 runs:
@@ -66,27 +68,11 @@ runs:
 
     - name: Install proofreel
       shell: bash
+      run: '"$ACTION_PATH/ci/install.sh" "$VERSION" "$ACTION_REF" "$ACTION_PATH"'
       env:
         VERSION: ${{ inputs.version }}
         ACTION_REF: ${{ github.action_ref }}
         ACTION_PATH: ${{ github.action_path }}
-      run: |
-        v="$VERSION"
-        if [ -z "$v" ]; then
-          case "$ACTION_REF" in
-            v[0-9]*.[0-9]*.[0-9]*) v="${ACTION_REF#v}" ;;
-            v[0-9]*) v="major:${ACTION_REF#v}" ;;
-            *) v=source ;;
-          esac
-        fi
-        case "$v" in
-          source) spec="$ACTION_PATH" ;;
-          latest) spec=proofreel ;;
-          major:*) spec="proofreel>=${v#major:},<$(( ${v#major:} + 1 ))" ;;
-          *) spec="proofreel==$v" ;;
-        esac
-        python -m pip install --quiet "$spec"
-        proofreel --version
 
     - name: Start the app
       if: inputs.start != ''
@@ -141,15 +127,14 @@ runs:
         path: ${{ steps.suite.outputs.review-dir }}
         if-no-files-found: ignore
 
-    - name: Fail when a journey has a problem
+    - name: Read the verdicts
       shell: bash
       env:
         CODE: ${{ steps.suite.outputs.exit-code }}
         FAIL: ${{ inputs.fail-on-problem }}
+        REVIEW: ${{ steps.suite.outputs.review-dir }}
       run: |
-        if [ "$CODE" = 1 ] && [ "$FAIL" != true ]; then
-          echo "A journey has a problem. fail-on-problem is false, so the job passes."
-        elif [ "$CODE" != 0 ]; then
-          echo "proofreel suite exited with $CODE." >&2
-          exit "$CODE"
+        [ "$CODE" -lt 2 ] || { echo "proofreel suite could not run (exit $CODE)." >&2; exit "$CODE"; }
+        if ! proofreel ci check "$REVIEW" && [ "$FAIL" = true ]; then
+          echo "A journey has a problem." >&2; exit 1
         fi

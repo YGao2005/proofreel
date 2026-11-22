@@ -374,6 +374,8 @@ def parser():
     s.add_argument("--set", action="append", default=[])
     s.add_argument("--out", help="the review folder (default: a new suite folder in the sessions folder)")
     s.add_argument("--title")
+    s = sub.add_parser("ci", help="helpers for CI (see docs/ci.md)")
+    s.add_argument("args", nargs=argparse.REMAINDER)
     s = sub.add_parser("render")
     s.add_argument("dir")
     s.add_argument("--plain", action="store_true")
@@ -545,6 +547,9 @@ def command(argv):
                                      a.title)
             print(published(*result))
             return 1 if any(mark == "FAIL" for mark, _, _ in rows) else 0
+        case "ci":
+            from . import ci
+            return ci.main(a.args)
         case "render":
             from .render import render
             return print(render(recording.session_folder(a.dir), framed=not a.plain, width=a.width))
