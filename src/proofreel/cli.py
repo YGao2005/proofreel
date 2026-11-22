@@ -534,14 +534,15 @@ def main(argv=None):
 
 
 def watch(a, force=False):
-    """Save the text of the screen for the summary. A screen that cannot be read leaves no save: the run goes on."""
+    """Save the text of the screen for the summary. A screen that cannot be read leaves no save and a warning: the
+    run goes on, and the summary has no line for that step."""
     if active := recording.current():
         try:
             server, password, run = target(a)
             with connect(server, password, run.guest.keys if run else None) as screen:
                 summary.save(active["dir"], screen_text(screen), force)
-        except Exception:
-            pass
+        except Exception as error:
+            print(f"proofreel: could not read the screen text for the summary ({error}).", file=sys.stderr)
 
 
 def command(argv):
