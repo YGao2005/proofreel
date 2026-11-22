@@ -115,6 +115,10 @@ def test_a_saved_web_state_keeps_the_profile_and_drop_removes_it(runs, tmp_path)
     assert not chrome.folder(vm.MACHINE).exists() and chrome.exists("signed-in")
     vm.drop("signed-in")
     assert not chrome.exists("signed-in")
+    end = time.time() + 5
+    while time.time() < end and not subprocess.run(["pgrep", "-f", "--", f"--user-data-dir={chrome.folder(vm.MACHINE)}"],
+                                                   capture_output=True).returncode:
+        time.sleep(0.1)
     assert subprocess.run(["pgrep", "-f", "--", f"--user-data-dir={chrome.folder(vm.MACHINE)}"],
                           capture_output=True).returncode == 1
 
