@@ -2,11 +2,11 @@
 
 ## Unreleased
 
+- **Any agent:** the skill no longer names Claude in its main path (the Artifact steps are a note for Claude Code), `pip install` ships it, and `proofreel skill install [--to DIR]` copies it to `~/.agents/skills` for Codex, Antigravity, and Cursor.
 - **Browser runner:** a web app records in a headless, muted Chrome on the host, with no VM. `vm up web` starts it (no `vm image` or `vm base`), `vm save` keeps the profile (cookies, storage) as a state, and `vm drop` and `vm down` clean up. Flows, checks, the recording, and the page are the same as in a VM. Text comes from the page (`find`, `click-text`, `wait-text`, `check text`, `--in`), not from OCR. The run record's `vnc` and `vnc_password` are now `screen` and `screen_password`.
 - New `open <url>` command for every run VM: the browser tab of `web`, `browse` in Linux, `open` in macOS, `start` in Windows. A `web` run has no shell: `vm sh`, `check sh`, and `check running` say to use `check cmd`.
 - `websocket-client` is now a dependency, not only the `browser` extra.
 - **Fix:** a recording with no probes no longer ends with a traceback in `recorder.log`.
-
 - **Fix:** a `count` or `failed` budget with no data in its window now fails ("No net/* data in the run"), as the docs say. Before, `net/* failed --below 1` passed when the network probe was not installed, so a run with failed requests could pass.
 - Tracks start folded on every run, also when a budget failed; the Budget failed chip still shows on the folded row. Opened, they stay open while you switch runs.
 - In Flow, a click on a state that this run did not visit opens a run that did, at that state (a run where it failed first, else the newest). The "In other runs" buttons also go to the state.

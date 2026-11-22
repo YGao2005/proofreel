@@ -23,7 +23,10 @@ build-backend = "hatchling.build"
 path = "src/proofreel/__init__.py"
 
 [tool.hatch.build.targets.sdist]
-include = ["src", "tests", "README.md", "CHANGELOG.md", "LICENSE"]
+include = ["src", "skills", "tests", "README.md", "CHANGELOG.md", "LICENSE"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/proofreel"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"skills/proofreel" = "proofreel/skill"
