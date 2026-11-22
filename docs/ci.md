@@ -75,10 +75,12 @@ warning for it. Add `check` lines to the flow.
 
 Outputs: `mode` (`pages` or `artifact`) and `link`.
 
-**Pages.** The review goes to the `gh-pages` branch under `pr/NUMBER/`, and every other folder stays. When another job
-pushes first, the action fetches the new head and pushes again (6 tries). The link is
-`https://OWNER.github.io/REPO/pr/NUMBER/`. In the settings of the repository, set Pages to serve the `gh-pages`
-branch. The folder of an old pull request stays until you delete it.
+**Pages.** The review goes to the `gh-pages` branch under `pr/NUMBER/`. Every other folder stays, except `pr/N/`
+folders of closed pull requests, which the action deletes (if it cannot read the list of open pull requests, it
+deletes nothing). The branch is always one commit with no parent, so old videos do not fill the history. When another
+job pushes first, the push is refused, and the action reads the new head and tries again (6 tries). The link is
+`https://OWNER.github.io/REPO/pr/NUMBER/?v=SHA`; the `?v=` part keeps the CDN from showing an old page. In the
+settings of the repository, set Pages to serve the `gh-pages` branch.
 
 **Artifact.** The review stays in the artifact of the run, and the link goes to the run. The comment has no picture.
 

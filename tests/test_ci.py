@@ -111,6 +111,33 @@ def test_pages_makes_the_branch_and_keeps_other_folders(tmp_path):
     assert listing(fresh) == [".nojekyll", "pr/1/index.html"]
 
 
+def count(remote):
+    out = subprocess.run(["git", "rev-list", "--count", "gh-pages"], cwd=remote, capture_output=True, text=True)
+    return int(out.stdout)
+
+
+def test_pages_keeps_one_commit_and_drops_closed_pull_requests(tmp_path):
+    staged = tmp_path / "s"
+    staged.mkdir()
+    (staged / "index.html").write_text("new")
+    remote = bare(tmp_path, {"example/index.html": "keep", "index.html": "root", "pr/1/index.html": "closed",
+                             "pr/2/index.html": "open", "pr/notes/x.txt": "not a number"})
+    ci.pages(staged, str(remote), "pr/7", keep={2})
+    assert listing(remote) == ["example/index.html", "index.html", "pr/2/index.html", "pr/7/index.html", "pr/notes/x.txt"]
+    assert count(remote) == 1
+    ci.pages(staged, str(remote), "pr/7", keep={2})
+    ci.pages(staged, str(remote), "pr/8", keep=None)
+    assert count(remote) == 1 and "pr/7/index.html" in listing(remote)
+
+
+def test_a_pull_request_list_that_fails_prunes_nothing():
+    def broken(*args):
+        raise Problem("gh failed")
+
+    assert ci.open_prs("o/r", broken) is None
+    assert ci.open_prs("o/r", lambda *a: "3\n12\n") == {3, 12}
+
+
 def test_pages_retries_when_another_job_pushes_first(tmp_path, monkeypatch):
     staged = tmp_path / "s"
     staged.mkdir()
@@ -133,8 +160,8 @@ def test_pages_retries_when_another_job_pushes_first(tmp_path, monkeypatch):
 
     monkeypatch.setattr(ci, "git", racing)
     monkeypatch.setattr(ci.time, "sleep", lambda s: None)
-    ci.pages(staged, str(remote), "pr/5")
-    assert listing(remote) == ["a.txt", "pr/5/index.html", "pr/9/index.html"]
+    ci.pages(staged, str(remote), "pr/5", keep={5, 9})
+    assert raced and listing(remote) == ["a.txt", "pr/5/index.html", "pr/9/index.html"] and count(remote) == 1
 
 
 def test_pages_refuses_a_bad_folder(tmp_path):
@@ -172,7 +199,7 @@ def test_comment_names_the_commit_and_each_verdict(tmp_path):
     assert "[`0123456`](https://github.com/o/r/commit/0123456789abcdef)" in body
     assert "| Journey 0 | works | 3.5 s |" in body and "| Journey 1 | no checks | 3.5 s |" in body
     assert "problem: `b / @​me is on the screen` (not found)" in body
-    assert "![Journey 2](https://o.github.io/r/pr/3/runs/j2-1/poster.jpg)" in body
+    assert "![Journey 2](https://o.github.io/r/pr/3/runs/j2-1/poster.jpg?v=0123456)](https://o.github.io/r/pr/3/?v=0123456)" in body
     assert "passed" not in body and "PASS" not in body
 
 

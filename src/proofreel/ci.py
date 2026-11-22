@@ -85,36 +85,50 @@ def git(folder, *args, token=""):
     return done.stdout
 
 
-def pages(staged, remote, dest, branch="gh-pages", attempts=6, token=""):
-    """Put the staged folder at dest on the branch of remote, and keep every other folder. When another job pushes
-    first, fetch the new head and put the folder there again, up to attempts times."""
+def open_prs(repo, run=None):
+    """The numbers of the open pull requests of repo, or None when the list cannot be read (then nothing is pruned)."""
+    try:
+        listed = (run or gh)("api", "--paginate", f"repos/{repo}/pulls?state=open&per_page=100", "--jq", ".[].number")
+    except Problem:
+        return None
+    return {int(n) for n in listed.split()}
+
+
+def pages(staged, remote, dest, branch="gh-pages", attempts=6, token="", keep=None):
+    """Put the staged folder at dest on the branch of remote, and keep every other folder. The branch is always one
+    commit with no parent, so old videos do not stay in its history. The push is a force push that holds only while
+    the branch is still the commit that was read; when another job pushed first, read the new head and do it again,
+    up to attempts times. keep is the set of open pull request numbers: a folder pr/N for another N is deleted."""
     if not DEST.fullmatch(dest) or ".." in dest.split("/"):
         raise Problem(f"Bad folder name {dest!r}.")
-    with tempfile.TemporaryDirectory() as work:
-        git(work, "init", "-q")
-        git(work, "remote", "add", "origin", remote)
-        for attempt in range(attempts):
-            try:
-                git(work, "fetch", "-q", "--depth", "1", "origin", branch, token=token)
-                git(work, "checkout", "-q", "-B", branch, "FETCH_HEAD")
-            except Problem:
-                if attempt == 0:
-                    git(work, "checkout", "-q", "--orphan", branch)
-                    (Path(work) / ".nojekyll").touch()
+    for attempt in range(attempts):
+        with tempfile.TemporaryDirectory() as work:
+            git(work, "init", "-q")
+            git(work, "remote", "add", "origin", remote)
+            head = git(work, "ls-remote", "origin", f"refs/heads/{branch}", token=token).split()
+            if head:
+                git(work, "fetch", "-q", "--depth", "1", "origin", head[0], token=token)
+                git(work, "checkout", "-q", "--detach", "FETCH_HEAD")
+            else:
+                (Path(work) / ".nojekyll").touch()
             shutil.rmtree(Path(work) / dest, ignore_errors=True)
             shutil.copytree(staged, Path(work) / dest)
+            for old in (Path(work) / "pr").glob("*") if keep is not None else ():
+                if old.name.isdigit() and int(old.name) not in keep and f"pr/{old.name}" != dest:
+                    shutil.rmtree(old)
             git(work, "add", "-A")
-            if not git(work, "status", "--porcelain"):
+            if head and not git(work, "status", "--porcelain"):
                 return
+            git(work, "checkout", "-q", "--orphan", "publish")
             git(work, "commit", "-q", "-m", f"proofreel: {dest}")
             try:
-                git(work, "push", "-q", "origin", f"HEAD:refs/heads/{branch}", token=token)
+                git(work, "push", "-q", f"--force-with-lease={branch}:{head[0] if head else ''}", "origin",
+                    f"HEAD:refs/heads/{branch}", token=token)
                 return
             except Problem as problem:
                 if attempt == attempts - 1:
                     raise Problem(f"Could not push {branch} after {attempts} tries. {problem}") from None
                 time.sleep(1 + attempt)
-                git(work, "reset", "-q", "--hard")
 
 
 def wait_live(url, seconds=180):
@@ -158,7 +172,7 @@ def publish(review, mode, ctx, token, server="https://github.com", output=None):
         remote = f"{server.replace('https://', f'https://x-access-token:{token}@')}/{ctx['repo']}.git"
         try:
             with tempfile.TemporaryDirectory() as staged:
-                pages(stage(review, Path(staged) / "s"), remote, f"pr/{ctx['pr']}", token=token)
+                pages(stage(review, Path(staged) / "s"), remote, f"pr/{ctx['pr']}", token=token, keep=open_prs(ctx["repo"]))
             link = f"https://{owner.lower()}.github.io/{name}/pr/{ctx['pr']}/"
             if not wait_live(link):
                 note = "Pages was slow to update. The page may take a minute to show."
@@ -202,9 +216,10 @@ def comment(review, ctx, link, mode="pages", note=""):
              "| Journey | Result | Time |", "|---|---|---|"]
     lines += [f"| {md(r['title'], 60)} | {result(r)} | {r['seconds']:.1f} s |" for r in rows]
     shown = next((r for r in rows if r["verdict"] == "problem"), rows[0] if rows else None)
+    fresh = f"?v={ctx['sha'][:7]}" if mode == "pages" and ctx.get("sha") else ""
     if mode == "pages" and shown and shown["poster"]:
-        lines += ["", f"[![{md(shown['title'], 60)}]({link}{shown['poster']})]({link})"]
-    lines += ["", f"[Open the full review]({link})" if mode == "pages" else
+        lines += ["", f"[![{md(shown['title'], 60)}]({link}{shown['poster']}{fresh})]({link}{fresh})"]
+    lines += ["", f"[Open the full review]({link}{fresh})" if mode == "pages" else
               f"[Open the run]({link}) and download the `proofreel-review` artifact at the bottom of the page."]
     if note:
         lines += ["", f"Note: {md(note, 300)}"]

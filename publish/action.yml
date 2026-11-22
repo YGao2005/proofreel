@@ -53,6 +53,7 @@ runs:
       shell: bash
       env:
         GITHUB_TOKEN: ${{ inputs.token }}
+        GH_TOKEN: ${{ inputs.token }}
         MODE: ${{ inputs.publish }}
       run: proofreel ci publish "$RUNNER_TEMP/proofreel-review" --mode "$MODE"
 
