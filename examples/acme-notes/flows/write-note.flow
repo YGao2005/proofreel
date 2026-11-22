@@ -1,10 +1,8 @@
-from linux
-probe network
-probe browser
+from web
 start write-note --title "Write and save a note" --about "A user writes a note and saves it. The note must show in the list."
 state Home
 step "Open the notes list"
-vm sh "browse ${URL:-http://10.0.2.2:8791}/notes.html"
+open ${URL:-http://127.0.0.1:8791}/notes.html
 wait-text "Your notes" 30
 state "Editor"
 step "Write a note"

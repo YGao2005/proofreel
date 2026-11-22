@@ -1,6 +1,6 @@
 # proofreel
 
-Video proof that your coding agent's change works. proofreel lets Claude Code drive your app in a clean VM as a user
+Video proof that your coding agent's change works. proofreel lets Claude Code drive your app in a clean browser or VM as a user
 would, record it, and publish a review page that a person can check in a minute.
 
 **[See a real review page →](https://claude.ai/artifact/PeehtyBLEMVUsxokb5FqbT)** (the Acme Notes example: three
@@ -11,17 +11,16 @@ journeys that pass and one with a failed network budget)
 ## Install
 
 ```bash
-pip install "proofreel[network,browser]"   # Python 3.11+, on an Apple Silicon Mac
-proofreel demo               # a made-up session, no VM needed: open the index.html it prints
+brew install ffmpeg          # it makes the video
+pip install proofreel        # Python 3.11+, on an Apple Silicon Mac; a web app needs Chrome too
+proofreel demo               # a made-up session: open the index.html it prints
 ```
 
-Install the tools for the guests you use:
+For native apps, add the VM tools for the guests you use (see [Native apps in a VM](#native-apps-in-a-vm)):
 
-- `brew install ffmpeg`: always. It makes the video.
-- `brew install qemu`: for a Linux or Windows guest (QEMU).
 - `brew install cirruslabs/cli/tart`: for a macOS guest (Tart).
-
-The `network` and `browser` extras add the network and browser probes that the Acme Notes budgets use.
+- `brew install qemu`: for a Linux or Windows guest (QEMU).
+- `pip install "proofreel[network]"`: the proxy that measures requests in a Linux VM (a web run needs no extra).
 
 To let Claude Code drive it, add the plugin in Claude Code:
 
@@ -40,24 +39,25 @@ To let Claude Code drive it, add the plugin in Claude Code:
 
 ## Quickstart
 
-Make the `linux` state once. It downloads Debian (about 0.4 GB), installs Xfce and Chromium, and saves the disk. It takes
-about 5 minutes and needs QEMU. A state that exists is not made again; `proofreel vm drop linux` removes it.
-
-```bash
-proofreel vm image                           # once: the linux state (Debian, Xfce, Chromium)
-```
-
-Then start a VM from the state, record a session, and publish the review page. The example app is in this repo:
+A web app runs in a headless Chrome on your machine: nothing shows on screen, and there is no VM and no image to make.
+The example app is in this repo. Three flows record and publish in about 40 seconds (measured on an Apple Silicon Mac):
 
 ```bash
 git clone https://github.com/YGao2005/proofreel && cd proofreel
 python3 examples/acme-notes/server.py &      # a made-up app on port 8791
-proofreel vm up linux                        # a run VM, cloned from a saved state in seconds
+proofreel suite examples/acme-notes/flows --out review-acme
+open review-acme/index.html
+```
+
+The same journey by hand, one command at a time:
+
+```bash
+proofreel vm up web                          # a headless Chrome, started in a second
 proofreel start sign-in --title "Sign in" --about "A returning user signs in."
 proofreel step "Open Acme Notes"
-proofreel vm sh 'browse http://10.0.2.2:8791/'    # open a page in Chromium on the screen
+proofreel open http://127.0.0.1:8791/        # the app is on this machine, at 127.0.0.1
 proofreel wait-text "Welcome back" 30
-proofreel click-text "Email"                 # finds the words on the screen, then clicks them
+proofreel click-text "Email"                 # finds the words on the page, then clicks them
 proofreel type "sam@example.com"
 proofreel key tab
 proofreel click-text "Sign in"
@@ -69,13 +69,36 @@ proofreel vm down
 ```
 
 `stop` prints the session folder to give to `publish`. `proofreel click 512 400` clicks a point on the screen.
+A web run measures requests (`net/*`) and web vitals with no flag, so a budget such as
+`check metric net/* failed --below 1` works at once.
 
 Publishing is in [the review page](docs/review-page.md). To use an existing VNC screen in place of a VM, set
 `PROOFREEL_VNC=127.0.0.1::5900` and `PROOFREEL_PASSWORD=...`.
 
+## Native apps in a VM
+
+A native Mac, Linux, or Windows app runs in a VM from a saved state, so each run starts clean. For a Mac app, make a
+macOS state once, install the app, and start each test from it ([VM states](docs/vm-states.md)):
+
+```bash
+proofreel vm base macos-26 ghcr.io/cirruslabs/macos-tahoe-vanilla:26.0   # once: a clean OS
+proofreel vm up macos-26                     # a throwaway run VM, cloned in seconds
+```
+
+For a Linux guest with Chromium (or a Windows guest), make the `linux` state once. It downloads Debian (about 0.4 GB)
+and takes about 5 minutes. A state that exists is not made again; `proofreel vm drop linux` removes it:
+
+```bash
+proofreel vm image                           # once: the linux state (Debian, Xfce, Chromium)
+proofreel vm up linux
+proofreel open http://10.0.2.2:8791/         # in a Linux VM, the host is at 10.0.2.2
+```
+
+The commands after that are the same as for a web app.
+
 A flow is a text file with one command on each line, so a journey runs again the same way. Write each line without the
-word `proofreel`, and write `vm sh 'browse URL'` for the page step. [`examples/acme-notes/flows`](examples/acme-notes/flows)
-has flows to copy. A suite runs many flows, each from a clean VM:
+word `proofreel`, and begin with `from web` (or another state) and `open URL` for the page step. [`examples/acme-notes/flows`](examples/acme-notes/flows)
+has flows to copy. A suite runs many flows, each from a clean browser or VM:
 
 ```bash
 proofreel run flows/sign-up.flow --set EMAIL=sam@example.com

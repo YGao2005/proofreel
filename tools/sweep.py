@@ -4,7 +4,8 @@
 
 Each round runs the suite once against a working server (every journey must pass) and search.flow once against a
 server with BROKEN=1 (it must fail on the failed-requests budget, and only on it). It starts each server itself on
-port 8791, so stop any other Acme Notes server first. Needs the linux state and the network and browser extras.
+port 8791, so stop any other Acme Notes server first. The flows run in the `web` browser runner: no VM, and Chrome
+on this machine.
 It prints one line for each unexpected result and exits 1 when there is one.
 """
 
