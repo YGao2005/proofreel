@@ -143,6 +143,17 @@ http://127.0.0.1:8790, read the page, and press Approve (A), Approve + next (Shi
 `wait` prints your decision and exits; the inbox then shows "Picked up by <name>". `proofreel inbox check --here`
 reads decisions later, and `proofreel inbox stop` ends the server. The server listens on this machine only.
 
+A decision goes to the agent 10 seconds after you press the button. Until the agent reads it, Undo takes it back and
+the item waits again. The inbox keeps a copy of each page and every decision: Sent shows the page next to what you
+sent, so a later run in the same folder does not change it. Items are not deleted.
+
+**From your phone.** Install Tailscale on the Mac and on the phone. On the Mac, run `tailscale serve --bg 8790`. Then run
+`proofreel inbox serve --also <mac>.<tailnet>.ts.net`, and open the `https://` link on the phone. The list of waiting
+items opens first; tap an item to read it. The Approve, Needs work, and Reject buttons stay at the bottom of the screen.
+`--also` saves the host names and starts the server in the background with them; pass `--also ""` to close them. `inbox list` shows
+the open names. Never put the inbox on a public tunnel with no login in front: the page carries its token, so anyone with
+the link can decide. A Cloudflare Tunnel with Cloudflare Access is the other safe option.
+
 ## In CI
 
 A GitHub Action replays your saved flows on each pull request and comments with the verdicts, a picture, and a link

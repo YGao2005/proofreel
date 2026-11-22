@@ -127,8 +127,10 @@ function render() {
     try { localStorage.setItem("proofreel-zoom", zoom ? "1" : "0"); } catch (err) {}
     update();
   }) : null;
-  const fullButton = screen.requestFullscreen ? $("button", { type: "button", class: "btn tool icon-only", title: "Full screen",
-    "aria-label": "Full screen", onclick: () => screen.requestFullscreen().catch(() => {}) }, icon("full")) : null;
+  // WHY: iPhone Safari has no element full screen, only the video's own player.
+  const goFull = screen.requestFullscreen ? () => screen.requestFullscreen().catch(() => {}) : video.webkitEnterFullscreen ? () => video.webkitEnterFullscreen() : null;
+  const fullButton = goFull ? $("button", { type: "button", class: "btn tool icon-only", title: "Full screen",
+    "aria-label": "Full screen", onclick: goFull }, icon("full")) : null;
   const play = $("button", { type: "button", class: "btn tool icon-only play", "aria-label": "Play", onclick: () => video.paused ? video.play().catch(() => {}) : video.pause() }, icon("play"));
   const paint = () => { play.replaceChildren(icon(video.paused ? "play" : "pause")); play.setAttribute("aria-label", video.paused ? "Play" : "Pause"); };
   const mark = () => {

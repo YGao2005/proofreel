@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.4.1
+
+The review inbox works from a phone, and its list shows when each item came.
+
+- **Times:** each queue item shows the clock time it was added ("1:36 PM", or "Sat 1:36 PM" on another day), and decided items show the time of the decision. The top bar of an open item shows how long it waits ("waiting 1h 11m"). The second line of an item is the agent and PR ("agent-1 · #12"), so items added in the same minute are easy to tell apart.
+- **Phone layout:** under 700 px wide, the queue is a full-width screen. Tap an item to read its page, and use "Queue" to go back. The decision buttons and the notes box stay fixed at the bottom.
+- **Undo and history:** a decision goes to the agent 10 s after the press, and Undo takes it back until the agent reads it. Each item keeps a copy of its page, and Sent shows that page with the decision, so you can look at it again later.
+- **Full screen:** the Full screen button of a review page works inside the inbox. On an iPhone, it opens the video in the system player.
+- **Private tunnels:** `proofreel inbox serve --also box.example.ts.net` makes the server accept that exact host name (and `https://` or `http://` origins from it), for example behind `tailscale serve --bg 8790`. The names are saved, and the server restarts in the background with them. The default is unchanged: only 127.0.0.1 and localhost. No wildcards, and no suffix matching. `inbox list` and `serve` print the open names.
+
 ## 1.4.0
 
 One review inbox for every agent, and truer timing in macOS VM recordings.

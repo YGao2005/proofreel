@@ -1,6 +1,6 @@
 const TOKEN = document.querySelector('meta[name="inbox-token"]').content;
 const NS = "http://www.w3.org/2000/svg";
-const ICONS = { check: "M5 12.5l4.5 4.5L19 7.5", x: "M6.5 6.5l11 11M17.5 6.5l-11 11", next: "M5 12h14M13 6l6 6-6 6", note: "M4 5h16v11H10l-4 4v-4H4zM12 8.5v4M10 10.5h4" };
+const ICONS = { check: "M5 12.5l4.5 4.5L19 7.5", x: "M6.5 6.5l11 11M17.5 6.5l-11 11", back: "M15 5l-7 7 7 7", next: "M5 12h14M13 6l6 6-6 6", note: "M4 5h16v11H10l-4 4v-4H4zM12 8.5v4M10 10.5h4" };
 const VERDICT = { works: ["Works", "ok"], problem: ["Problem", "bad"], shown: ["No checks", ""] };
 const DECIDED = { approve: ["Approved", "ok"], approve_next: ["Approved, next mission", "ok"], needs_work: ["Needs work", "bad"], reject: ["Rejected", ""] };
 const COMPOSE = {
@@ -25,14 +25,20 @@ const icon = name => {
   svg.setAttribute("viewBox", "0 0 24 24"); svg.setAttribute("class", "icon"); svg.setAttribute("aria-hidden", "true");
   path.setAttribute("d", ICONS[name]); svg.append(path); return svg;
 };
-const ago = at => { const m = Math.max(0, Math.floor((Date.now() / 1000 - at) / 60)); return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`; };
+const waited = at => {
+  const m = Math.max(0, Math.floor((Date.now() / 1000 - at) / 60)), days = Math.floor(m / 1440);
+  return days >= 2 ? `${days} days` : days ? "yesterday" : m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${m % 60}m`;
+};
 const clock = at => new Date(at * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+const stamp = at => new Date(at * 1000).toDateString() === new Date().toDateString() ? clock(at) : `${new Date(at * 1000).toLocaleDateString([], { weekday: "short" })} ${clock(at)}`;
+const who = i => [i.from, i.pr ? `#${i.pr}` : [i.repo, i.branch].filter(Boolean).join("/")].filter(Boolean).join(" · ");
 const place = i => [i.repo && i.branch ? `${i.repo}/${i.branch}` : i.repo, i.pr ? `PR #${i.pr}` : ""].filter(Boolean).join(" · ");
-const delivery = i => i.picked ? [`Picked up by ${i.from || "the agent"} at ${clock(i.picked.at)}`, "ok"] : ["Not picked up yet", "warn"];
+const holding = i => i.decision && !i.picked && Date.now() / 1000 < i.decision.at + i.hold;
+const delivery = i => i.picked ? [`Picked up by ${i.from || "the agent"} at ${clock(i.picked.at)}`, "ok"] : holding(i) ? ["Sending…", "warn"] : ["Not picked up yet", "warn"];
 
-let list = [], seen = "", drawn = "", view = "waiting", selected = null, mode = null;
+let screen = "list", list = [], seen = "", drawn = "", view = "waiting", selected = null, mode = null;
 const shown = () => view === "waiting" ? list.filter(i => !i.decision) : list.filter(i => i.decision).sort((a, b) => b.decision.at - a.decision.at);
-const stateOf = i => i ? `${i.id} ${!!i.decision} ${!!i.picked}` : "";
+const stateOf = i => i ? `${i.id} ${!!i.decision} ${!!i.picked} ${holding(i)}` : "";
 const current = () => shown().find(i => i.id === selected);
 
 function renderQueue() {
@@ -50,14 +56,16 @@ function renderQueue() {
     const state = i.decision ? delivery(i) : null;
     return h("button", { type: "button", class: "row", "aria-current": String(i.id === selected), onclick: () => select(i.id) },
       h("span", { class: "title", text: i.title, title: i.title }), label ? h("span", { class: `chip ${css}`, text: label }) : null,
-      h("span", { class: "sub" }, h("span", { class: "fold", text: [i.from, place(i)].filter(Boolean).join(" · ") }),
-        h("span", { class: "when mono", text: i.decision ? clock(i.decision.at) : ago(i.added) })),
+      h("span", { class: "sub" }, h("span", { class: "fold", text: who(i) }),
+        h("span", { class: "when mono", text: stamp(i.decision ? i.decision.at : i.added) })),
       state ? h("span", { class: "sub" }, h("span", { class: `chip ${state[1]}`, text: state[0] })) : null);
   }));
 }
 
+function showScreen(name) { screen = name; document.querySelector(".app").dataset.screen = name; }
+
 function select(id) {
-  selected = id; mode = null; drawer.hidden = true; openBtn.setAttribute("aria-expanded", "false");
+  selected = id; mode = null; showScreen("item"); drawer.hidden = true; openBtn.setAttribute("aria-expanded", "false");
   renderItem();
 }
 
@@ -72,19 +80,23 @@ function renderItem() {
       view === "waiting" ? h("p", {}, "An agent adds a proof with ", h("code", { text: "proofreel inbox add" }), ". It shows here.") : null));
     return;
   }
-  if (!i.decision) { mainEl.append(h("iframe", { sandbox: "allow-scripts", src: i.url, title: `Review page: ${i.title}` })); return; }
-  const [label, css] = DECIDED[i.decision.verdict], [state] = delivery(i);
-  mainEl.append(h("article", { class: "sent" }, h("div", { class: "name" }, h("span", { class: `chip ${css}`, text: label }), h("h1", { text: i.title })),
-    h("pre", { text: i.decision.text }), h("p", { text: `Sent at ${clock(i.decision.at)}. ${state}.` })));
+  mainEl.append(h("iframe", { sandbox: "allow-scripts", allow: "fullscreen", src: i.url, title: `Review page: ${i.title}` }));
 }
 
 function renderBar(i) {
-  barEl.replaceChildren();
+  barEl.replaceChildren(h("button", { type: "button", class: "btn tool back", "aria-label": "Back to the queue", onclick: () => showScreen("list") }, icon("back"), "Queue"));
   if (!i) { barEl.append(h("div", { class: "who" }, h("b", { text: "Review inbox" }))); return; }
-  const sep = () => h("span", { class: "sep", text: "·" });
-  barEl.append(h("div", { class: "who" }, h("span", { text: i.from || "An agent" }), i.repo ? [sep(), h("span", { class: "mono fold wide", text: place(i) })] : null,
-    !i.decision ? [sep(), h("span", { text: `waiting ${ago(i.added)}` })] : null));
-  if (i.decision) return;
+  const sep = wide => h("span", { class: `sep${wide ? " wide" : ""}`, text: "·" });
+  barEl.append(h("div", { class: "who" }, h("span", { text: i.from || "An agent" }), i.repo ? [sep(true), h("span", { class: "mono fold wide", text: place(i) })] : null,
+    !i.decision ? [sep(), h("span", { text: `waiting ${waited(i.added)}` })] : null));
+  if (i.decision) {
+    const [label, css] = DECIDED[i.decision.verdict], [state] = delivery(i);
+    barEl.append(h("div", { class: "acts sent" }, h("span", { class: `chip ${css}`, text: label }),
+      h("span", { class: "said fold", text: i.decision.text, title: `${i.decision.text}\nSent at ${stamp(i.decision.at)}. ${state}.` }),
+      h("span", { class: "state", text: state }),
+      i.picked ? null : h("button", { type: "button", class: "btn tool", text: "Undo", onclick: () => undo(i) })));
+    return;
+  }
   const label = text => h("span", { class: "label", text });
   const press = m => { mode = mode === m ? null : m; renderBar(i); };
   barEl.append(h("div", { class: "acts" },
@@ -113,8 +125,29 @@ async function send(i, verdict, text = "", error = null) {
     return;
   }
   mode = null;
+  const sent = await answer.json();
   await refresh();
-  el("#live").textContent = "Decision sent.";
+  toast(`${DECIDED[verdict][0]}: ${i.title}. It goes to ${i.from || "the agent"} in ${sent.hold} s.`, i);
+}
+
+let toastTimer = null;
+function toast(text, i) {
+  el(".toast")?.remove();
+  clearTimeout(toastTimer);
+  const box = h("div", { class: "toast", role: "status" }, h("span", { text }), i ? h("button", { type: "button", class: "btn tool", text: "Undo", onclick: () => undo(i) }) : null);
+  document.body.append(box);
+  toastTimer = setTimeout(() => box.remove(), (i ? i.hold || 10 : 4) * 1000);
+}
+
+async function undo(i) {
+  const answer = await fetch("/undo", { method: "POST", headers: { "Content-Type": "application/json", "X-Inbox-Token": TOKEN }, body: JSON.stringify({ id: i.id }) });
+  const body = await answer.json().catch(() => ({}));
+  el(".toast")?.remove();
+  if (!answer.ok) { toast(body.error || "The decision was not taken back."); return; }
+  view = "waiting"; selected = i.id; mode = null;
+  await refresh();
+  renderItem();
+  toast(`Taken back: ${i.title} waits again.`);
 }
 
 async function refresh() {
@@ -125,6 +158,7 @@ async function refresh() {
 }
 
 document.querySelectorAll(".seg button").forEach(b => b.addEventListener("click", () => { view = b.dataset.view; selected = (shown()[0] || {}).id; mode = null; renderItem(); }));
+showScreen("list");
 openBtn.addEventListener("click", () => { drawer.hidden = !drawer.hidden; openBtn.setAttribute("aria-expanded", String(!drawer.hidden)); });
 document.addEventListener("keydown", ev => {
   if (ev.target.closest("textarea, input") || ev.metaKey || ev.ctrlKey || ev.altKey) { if (ev.key === "Escape" && mode) { mode = null; renderBar(current()); } return; }
