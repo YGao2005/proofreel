@@ -3,6 +3,7 @@ import http.client
 import json
 import threading
 import time
+from pathlib import Path
 
 import pytest
 
@@ -14,6 +15,7 @@ def box(tmp_path, monkeypatch):
     """A fresh inbox folder, and a proof page to queue."""
     monkeypatch.setattr(inbox, "FOLDER", tmp_path / "inbox")
     monkeypatch.setattr(inbox, "POLL", 0.02)
+    monkeypatch.setattr(inbox, "HOLD", 0)
     (tmp_path / "proof").mkdir()
     (tmp_path / "proof" / "index.html").write_text("<!doctype html><title>Proof</title><h1>The proof page</h1>")
     (tmp_path / "secret.txt").write_text("outside")
@@ -28,9 +30,27 @@ def test_an_item_survives_a_round_trip_and_its_id_is_readable(box):
     item = queued(box)
     assert item["id"].startswith("spaces-upload-") and len(item["id"]) == len("spaces-upload-") + 4
     assert inbox.load(item["id"]) == item
-    assert (item["from"], item["pr"], item["on_approve"], item["page"]) == ("nomi-95", 7, "merge it", str(box / "proof" / "index.html"))
+    assert (item["from"], item["pr"], item["on_approve"], item["source"]) == ("nomi-95", 7, "merge it", str(box / "proof" / "index.html"))
     assert [i["id"] for i in inbox.items()] == [item["id"]]
     assert "waiting" in inbox.listing()[0]
+
+
+def test_the_item_keeps_its_page_when_a_later_run_writes_the_same_folder(box):
+    item = queued(box)
+    (box / "proof" / "index.html").write_text("a later run")
+    assert "The proof page" in Path(item["page"]).read_text() and Path(item["page"]).is_relative_to(inbox.FOLDER)
+
+
+def test_a_decision_waits_a_moment_and_can_be_taken_back_until_the_agent_reads_it(box, monkeypatch):
+    monkeypatch.setattr(inbox, "HOLD", 0.3)
+    item = queued(box)
+    inbox.decide(item["id"], "approve")
+    assert inbox.wait(item["id"], 0.1) is None and inbox.check() == []
+    assert "decision" not in inbox.undo(item["id"])
+    inbox.decide(item["id"], "reject", "wrong repo")
+    assert inbox.wait(item["id"]) == "Rejected: wrong repo. Close the branch."
+    with pytest.raises(Problem, match="read it already"):
+        inbox.undo(item["id"])
 
 
 def test_a_missing_page_and_an_unknown_id_are_problems(box):
@@ -112,7 +132,7 @@ def test_the_server_shows_the_page_the_queue_and_the_item_files(box, running):
 
 def test_files_outside_the_item_folder_and_a_foreign_host_are_refused(box, running):
     item = queued(box)
-    for path in ("../secret.txt", "..%2Fsecret.txt", "%2e%2e/secret.txt", "/etc/passwd"):
+    for path in ("../secret.txt", "../../token", "..%2Fsecret.txt", "%2e%2e/secret.txt", "/etc/passwd"):
         assert request(running, "GET", f"/item/{item['id']}/{path}")[0] == 404
     assert request(running, "GET", "/item/nothing/index.html")[0] == 404
     assert request(running, "GET", "/items", Host="evil.example")[0] == 403
@@ -126,6 +146,11 @@ def test_a_decision_needs_the_token_and_the_servers_own_origin(box, running):
     assert post(running, item, **{"X-Inbox-Token": "wrong", "Origin": origin})[0] == 403
     assert post(running, item, **{"X-Inbox-Token": secret, "Origin": "http://evil.example"})[0] == 403
     assert post(running, item, **{"X-Inbox-Token": secret})[0] == 403
+    assert not inbox.load(item["id"]).get("decision")
+    inbox.decide(item["id"], "approve")
+    undo = json.dumps({"id": item["id"]})
+    assert request(running, "POST", "/undo", undo, **{"X-Inbox-Token": "wrong", "Origin": origin})[0] == 403
+    assert request(running, "POST", "/undo", undo, **{"X-Inbox-Token": secret, "Origin": origin})[0] == 200
     assert not inbox.load(item["id"]).get("decision")
     good = {"X-Inbox-Token": secret, "Origin": origin}
     assert post(running, item, **good)[0] == 200
@@ -198,7 +223,10 @@ def test_the_person_presses_needs_work_and_the_item_has_the_decision(box, runnin
         deadline = time.time() + 10
         while not inbox.load(item["id"]).get("decision") and time.time() < deadline:
             time.sleep(0.1)
-    assert inbox.load(item["id"])["decision"]["text"] == "Needs work: Fix the title"
+        assert inbox.load(item["id"])["decision"]["text"] == "Needs work: Fix the title"
+        web.click(*screen.center(screen.matches(web.lines(), "Undo")[-1]))
+        assert screen.wait_for(web, "waits again", 5)
+    assert not inbox.load(item["id"]).get("decision")
 
 
 def test_a_review_page_in_the_inbox_can_go_full_screen(box, running, browser):

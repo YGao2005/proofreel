@@ -11,6 +11,7 @@ import mimetypes
 import os
 import re
 import secrets
+import shutil
 import signal
 import socket
 import subprocess
@@ -26,6 +27,8 @@ from . import HOME, Problem, page, session
 FOLDER = HOME / "inbox"
 PORT = 8790
 POLL = 1
+HOLD = 10
+KEEP_MAX = 500 << 20
 MAX_BODY = 65536
 RANGE = re.compile(r"bytes=(\d+)-(\d*)")
 ASSETS = resources.files("proofreel")
@@ -95,11 +98,22 @@ def add(target, title=None, from_="", pr=None, on_approve=""):
         raise Problem(f"{target} is not a review folder or an HTML page.")
     title = title or title_of(file)
     slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")[:40] or "item"
-    item = {"id": f"{slug}-{secrets.token_hex(2)}", "title": title, "page": str(file), "from": from_, "pr": pr,
+    id = f"{slug}-{secrets.token_hex(2)}"
+    item = {"id": id, "title": title, "page": str(keep(file, id)), "source": str(file), "from": from_, "pr": pr,
             "commit": session.revision(), "on_approve": on_approve, "verdict": verdict_of(file.parent),
             "added": int(time.time()), **here()}
     save(item)
     return item
+
+
+def keep(file, id):
+    """A copy of the page folder in the inbox, so a later run that writes the same folder does not change the item."""
+    size = sum(f.stat().st_size for f in file.parent.rglob("*") if f.is_file())
+    if size > KEEP_MAX:
+        raise Problem(f"{file.parent} has {size >> 20} MB. The inbox keeps a copy of each page; keep it under {KEEP_MAX >> 20} MB.")
+    copy = FOLDER / "pages" / id
+    shutil.copytree(file.parent, copy, symlinks=True)
+    return copy / file.name
 
 
 def message(item, verdict, text):
@@ -120,9 +134,26 @@ def decide(id, verdict, text=""):
         raise Problem(f"{id} has a decision already.")
     if verdict in ("approve_next", "needs_work") and not text:
         raise Problem("This decision needs a text.")
-    item = {**item, "decision": {"verdict": verdict, "text": message(item, verdict, text), "at": int(time.time())}}
+    item = {**item, "decision": {"verdict": verdict, "text": message(item, verdict, text), "at": round(time.time(), 3)}}
     save(item)
     return item
+
+
+def undo(id):
+    """Take back a decision that no agent has read. Returns the item."""
+    item = load(id)
+    if not item.get("decision"):
+        raise Problem(f"{id} has no decision.")
+    if item.get("picked"):
+        raise Problem(f"{item['from'] or 'The agent'} read it already. Tell it the change yourself.")
+    item = {k: v for k, v in item.items() if k != "decision"}
+    save(item)
+    return item
+
+
+def delivered(item):
+    """A decision goes to the agent HOLD seconds after it is made, so the person can undo a wrong press."""
+    return bool(item.get("decision")) and time.time() - item["decision"]["at"] >= HOLD
 
 
 def pick(item):
@@ -135,7 +166,7 @@ def pick(item):
 def wait(id, timeout=None):
     """The decision text of an item, once there is one. None when timeout seconds pass first."""
     end = None if timeout is None else time.time() + timeout
-    while not (item := load(id)).get("decision"):
+    while not delivered(item := load(id)):
         if end is not None and time.time() >= end:
             return None
         time.sleep(POLL)
@@ -145,7 +176,7 @@ def wait(id, timeout=None):
 def check(only_here=False):
     """The decision texts that no agent has read yet (of this repo and branch with only_here)."""
     place = here()
-    return [pick(i) for i in items() if i.get("decision") and not i.get("picked")
+    return [pick(i) for i in items() if delivered(i) and not i.get("picked")
             and (not only_here or (i["repo"], i["branch"]) == (place["repo"], place["branch"]))]
 
 
@@ -203,7 +234,8 @@ def document(secret):
 
 
 def public(item):
-    return {**{k: v for k, v in item.items() if k != "page"}, "url": f"/item/{item['id']}/{Path(item['page']).name}"}
+    return {**{k: v for k, v in item.items() if k not in ("page", "source")}, "hold": HOLD,
+            "url": f"/item/{item['id']}/{Path(item['page']).name}"}
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -277,7 +309,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             pass
 
     def do_POST(self):
-        if not self.local() or self.path != "/decide":
+        if not self.local() or self.path not in ("/decide", "/undo"):
             return self.send(404, "Not found.")
         if not self.origin_ok() or not hmac.compare_digest(self.headers.get("X-Inbox-Token", ""), self.server.secret):
             return self.reply(403, {"error": "Not allowed."})
@@ -285,7 +317,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             size = int(self.headers.get("Content-Length", ""))
             body = json.loads(self.rfile.read(size)) if 0 < size <= MAX_BODY else {}
             with self.server.lock:
-                item = decide(body["id"], body["verdict"], str(body.get("text", "")))
+                item = undo(body["id"]) if self.path == "/undo" else decide(body["id"], body["verdict"], str(body.get("text", "")))
         except (ValueError, KeyError, TypeError):
             return self.reply(400, {"error": "Bad request."})
         except Problem as problem:

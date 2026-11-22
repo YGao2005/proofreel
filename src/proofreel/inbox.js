@@ -33,11 +33,12 @@ const clock = at => new Date(at * 1000).toLocaleTimeString([], { hour: "numeric"
 const stamp = at => new Date(at * 1000).toDateString() === new Date().toDateString() ? clock(at) : `${new Date(at * 1000).toLocaleDateString([], { weekday: "short" })} ${clock(at)}`;
 const who = i => [i.from, i.pr ? `#${i.pr}` : [i.repo, i.branch].filter(Boolean).join("/")].filter(Boolean).join(" · ");
 const place = i => [i.repo && i.branch ? `${i.repo}/${i.branch}` : i.repo, i.pr ? `PR #${i.pr}` : ""].filter(Boolean).join(" · ");
-const delivery = i => i.picked ? [`Picked up by ${i.from || "the agent"} at ${clock(i.picked.at)}`, "ok"] : ["Not picked up yet", "warn"];
+const holding = i => i.decision && !i.picked && Date.now() / 1000 < i.decision.at + i.hold;
+const delivery = i => i.picked ? [`Picked up by ${i.from || "the agent"} at ${clock(i.picked.at)}`, "ok"] : holding(i) ? ["Sending…", "warn"] : ["Not picked up yet", "warn"];
 
 let screen = "list", list = [], seen = "", drawn = "", view = "waiting", selected = null, mode = null;
 const shown = () => view === "waiting" ? list.filter(i => !i.decision) : list.filter(i => i.decision).sort((a, b) => b.decision.at - a.decision.at);
-const stateOf = i => i ? `${i.id} ${!!i.decision} ${!!i.picked}` : "";
+const stateOf = i => i ? `${i.id} ${!!i.decision} ${!!i.picked} ${holding(i)}` : "";
 const current = () => shown().find(i => i.id === selected);
 
 function renderQueue() {
@@ -79,10 +80,7 @@ function renderItem() {
       view === "waiting" ? h("p", {}, "An agent adds a proof with ", h("code", { text: "proofreel inbox add" }), ". It shows here.") : null));
     return;
   }
-  if (!i.decision) { mainEl.append(h("iframe", { sandbox: "allow-scripts", allow: "fullscreen", src: i.url, title: `Review page: ${i.title}` })); return; }
-  const [label, css] = DECIDED[i.decision.verdict], [state] = delivery(i);
-  mainEl.append(h("article", { class: "sent" }, h("div", { class: "name" }, h("span", { class: `chip ${css}`, text: label }), h("h1", { text: i.title })),
-    h("pre", { text: i.decision.text }), h("p", { text: `Sent at ${clock(i.decision.at)}. ${state}.` })));
+  mainEl.append(h("iframe", { sandbox: "allow-scripts", allow: "fullscreen", src: i.url, title: `Review page: ${i.title}` }));
 }
 
 function renderBar(i) {
@@ -91,7 +89,14 @@ function renderBar(i) {
   const sep = wide => h("span", { class: `sep${wide ? " wide" : ""}`, text: "·" });
   barEl.append(h("div", { class: "who" }, h("span", { text: i.from || "An agent" }), i.repo ? [sep(true), h("span", { class: "mono fold wide", text: place(i) })] : null,
     !i.decision ? [sep(), h("span", { text: `waiting ${waited(i.added)}` })] : null));
-  if (i.decision) return;
+  if (i.decision) {
+    const [label, css] = DECIDED[i.decision.verdict], [state] = delivery(i);
+    barEl.append(h("div", { class: "acts sent" }, h("span", { class: `chip ${css}`, text: label }),
+      h("span", { class: "said fold", text: i.decision.text, title: `${i.decision.text}\nSent at ${stamp(i.decision.at)}. ${state}.` }),
+      h("span", { class: "state", text: state }),
+      i.picked ? null : h("button", { type: "button", class: "btn tool", text: "Undo", onclick: () => undo(i) })));
+    return;
+  }
   const label = text => h("span", { class: "label", text });
   const press = m => { mode = mode === m ? null : m; renderBar(i); };
   barEl.append(h("div", { class: "acts" },
@@ -120,8 +125,29 @@ async function send(i, verdict, text = "", error = null) {
     return;
   }
   mode = null;
+  const sent = await answer.json();
   await refresh();
-  el("#live").textContent = "Decision sent.";
+  toast(`${DECIDED[verdict][0]}: ${i.title}. It goes to ${i.from || "the agent"} in ${sent.hold} s.`, i);
+}
+
+let toastTimer = null;
+function toast(text, i) {
+  el(".toast")?.remove();
+  clearTimeout(toastTimer);
+  const box = h("div", { class: "toast", role: "status" }, h("span", { text }), i ? h("button", { type: "button", class: "btn tool", text: "Undo", onclick: () => undo(i) }) : null);
+  document.body.append(box);
+  toastTimer = setTimeout(() => box.remove(), (i ? i.hold || 10 : 4) * 1000);
+}
+
+async function undo(i) {
+  const answer = await fetch("/undo", { method: "POST", headers: { "Content-Type": "application/json", "X-Inbox-Token": TOKEN }, body: JSON.stringify({ id: i.id }) });
+  const body = await answer.json().catch(() => ({}));
+  el(".toast")?.remove();
+  if (!answer.ok) { toast(body.error || "The decision was not taken back."); return; }
+  view = "waiting"; selected = i.id; mode = null;
+  await refresh();
+  renderItem();
+  toast(`Taken back: ${i.title} waits again.`);
 }
 
 async function refresh() {
