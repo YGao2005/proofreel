@@ -268,10 +268,13 @@ def run_check(args, screen, run=None):
 
 
 def published(page, files, runs, new):
-    """What the Artifact tool needs: the page, every file it uses, and its runtime capabilities."""
+    """Write artifact.json next to the page (what an Artifact tool needs: the page, every file it uses, and its
+    runtime capabilities) and return one line for the person or agent. Only an agent with that tool reads the file."""
     from .page import CAPABILITIES
-    return json.dumps({"page": str(page.resolve()), "runs": runs, "files": files, "new": new,
-                       "capabilities": CAPABILITIES}, indent=2)
+    data = Path(page).parent / "artifact.json"
+    data.write_text(json.dumps({"page": str(page.resolve()), "runs": runs, "files": files, "new": new,
+                                "capabilities": CAPABILITIES}, indent=2))
+    return f"Page: {page.resolve()} ({len(files)} files). For an Artifact tool: {data.resolve()}"
 
 
 def load_flow(path, values):

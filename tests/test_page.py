@@ -123,3 +123,14 @@ def test_a_budget_check_of_an_older_run_is_marked_from_the_run_budgets():
     events = page.upgrade(run)["events"]
     assert "budget" not in events[0]
     assert events[1]["budget"] == {"glob": "net/*", "stat": "failed", "below": 1.0, "above": None}
+
+
+def test_publishing_prints_one_line_and_keeps_the_artifact_data_in_a_file(tmp_path):
+    from proofreel import cli
+    page = tmp_path / "index.html"
+    page.write_text("<!doctype html>")
+    files = [str(page), *(str(tmp_path / f"runs/a/shots/{n}.jpg") for n in range(30))]
+    line = cli.published(page, files, ["a"], files)
+    data = json.loads((tmp_path / "artifact.json").read_text())
+    assert "\n" not in line and "31 files" in line and str(tmp_path / "artifact.json") in line
+    assert data["files"] == files and data["capabilities"] and data["page"] == str(page.resolve())
