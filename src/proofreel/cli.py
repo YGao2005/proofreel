@@ -554,10 +554,8 @@ def command(argv):
         case "skill":
             folder = install_skill(a.to)
             return print(f"Wrote {folder}/SKILL.md\n"
-                  "Codex: reads .agents/skills in the project and ~/.agents/skills.\n"
-                  "Antigravity: reads .agents/skills in the project and ~/.agents/skills.\n"
-                  "Cursor: reads .agents/skills in the project and ~/.agents/skills.\n"
-                  "Other agents: tell it to follow the skill at the path above.")
+                  "Codex, Antigravity, and Cursor read .agents/skills in a project and ~/.agents/skills.\n"
+                  "Another agent: tell it to follow the skill at the path above.")
         case "demo":
             from .demo import demo
             return demo(Path(a.dir), a.broken)
