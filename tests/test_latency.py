@@ -88,3 +88,35 @@ def test_a_click_past_the_frame_edge_still_measures(tmp_path):
     assert latency.measure(tmp_path, events, *shown, scale=1.0) == 1
     line = json.loads((tmp_path / "metrics" / "input.jsonl").read_text())
     assert line["ok"] and line["d"] == pytest.approx(0.2, abs=line["err"] + 0.02)
+
+
+def test_a_page_load_just_before_an_input_does_not_hide_the_answer(tmp_path):
+    def draw(d, t):
+        if t < 1.05:
+            return
+        field = (10, 100, 255) if t >= 1.35 else "grey"
+        d.rectangle((300, 200, 700, 260), outline=field, width=3)
+        d.text((320, 222), "milk" if t >= 1.6 else "Search notes", fill="black")
+        d.text((320, 400), "Groceries: Milk, eggs" if t >= 1.6 else "Welcome: Your first note", fill="black")
+    shown = frames(tmp_path, draw)
+    events = [{"t": 1.0, "end": 1.02, "kind": "open", "text": "open /notes"},
+              {"t": 1.3, "kind": "click", "text": "click Search", "x": 500, "y": 230},
+              {"t": 1.55, "end": 1.7, "kind": "type", "text": "type milk"}]
+    assert latency.measure(tmp_path, events, *shown, scale=1.0) == 2
+    click, key = [json.loads(line) for line in (tmp_path / "metrics" / "input.jsonl").read_text().splitlines()]
+    assert click["ok"] and click["d"] == pytest.approx(0.05, abs=click["err"] + 0.02)
+    assert key["ok"] and key["d"] == pytest.approx(0.05, abs=key["err"] + 0.02)
+
+
+def test_an_answer_settles_before_the_next_input(tmp_path):
+    def draw(d, t):
+        if t >= 1.1:
+            d.rectangle((480, 280, 520, 320), fill=(10, 100, 255))
+        for n in range(int(max(0, t - 1.25) * 10)):
+            d.rectangle((400 + 20 * n, 340, 412 + 20 * n, 360), fill="black")
+    shown = frames(tmp_path, draw)
+    events = [{"t": 1.0, "kind": "click", "text": "click Save", "x": 500, "y": 300},
+              {"t": 1.2, "end": 1.8, "kind": "type", "text": "type xxxxxx"}]
+    latency.measure(tmp_path, events, *shown, scale=1.0)
+    click = json.loads((tmp_path / "metrics" / "input.jsonl").read_text().splitlines()[0])
+    assert click["settle"] < 0.2

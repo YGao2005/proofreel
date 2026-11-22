@@ -11,13 +11,13 @@ A session folder holds:
 import multiprocessing
 import os
 import subprocess
-from bisect import bisect_right
+from bisect import bisect_left, bisect_right
 
 from PIL import Image, ImageChops, ImageStat
 
 from . import Problem, draw, latency, metrics, page
 from .motion import FPS, Camera, Clock, Pointer, ease, fit, spans
-from .session import CHIP, RING, VERDICT, Session, path_line
+from .session import ACTS, CHIP, RING, VERDICT, Session, path_line
 
 CHANGED = 1.5
 INSET = 0.88
@@ -165,6 +165,7 @@ def video(folder, events, frames, times, start, end, framed, width, crf, target)
 
 
 def shots(folder, events, frames, times, start):
+    """A picture for each chip: the screen a moment after it, and before the next action starts."""
     out = folder / "shots"
     out.mkdir(exist_ok=True)
     real = [t - start for t in times]
@@ -172,7 +173,8 @@ def shots(folder, events, frames, times, start):
         if e["kind"] not in CHIP:
             continue
         after = e.get("end", e["t"]) + (0.2 if e["kind"] in VERDICT else 1.0)
-        index = max(0, min(len(frames) - 1, bisect_right(real, after) - 1))
+        following = next((later["t"] for later in events[n + 1:] if later["kind"] in ACTS), float("inf"))
+        index = max(0, min(len(frames) - 1, bisect_right(real, after) - 1, bisect_left(real, following) - 1))
         image = Image.open(frames[index]).convert("RGB")
         image.thumbnail((640, 640))
         image.save(out / f"{n}.jpg", quality=78)
