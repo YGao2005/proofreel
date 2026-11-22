@@ -19,6 +19,8 @@ from .screen import Keyboard
 
 SCHEME = "cdp://"
 LINES = (Path(__file__).parent / "lines.js").read_text()
+PAINTED = "Promise.race([new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))), " \
+          "new Promise(r => setTimeout(r, 3000))])"
 BUTTONS = {1: ("left", 1), 2: ("middle", 4), 3: ("right", 2)}
 MODIFIERS = {"alt": 1, "option": 1, "ctrl": 2, "control": 2, "meta": 4, "command": 4, "cmd": 4, "shift": 8}
 KEYS = {"enter": ("Enter", "Enter", 13), "return": ("Enter", "Enter", 13), "tab": ("Tab", "Tab", 9),
@@ -128,6 +130,7 @@ class WebScreen(Keyboard):
             raise Problem(f"The browser could not open {url}: {result['errorText']}.")
         if "loaderId" in result:
             self.event("Page.loadEventFired", timeout)
+            self.call("Runtime.evaluate", expression=PAINTED, awaitPromise=True)
         return started, time.time()
 
     def mouse(self, kind, x, y, button=1, count=0, held=0):

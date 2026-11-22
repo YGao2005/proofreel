@@ -94,6 +94,12 @@ def test_open_waits_for_the_page_and_a_dead_address_is_a_problem(page, tmp_path)
         page.open("http://127.0.0.1:1/")
 
 
+def test_open_returns_after_the_page_has_painted(page, tmp_path):
+    (tmp_path / "slow.html").write_text("<h1>Slow page</h1><script>onload = () => setTimeout(() => { for (let t = Date.now(); Date.now() - t < 600;); })</script>")
+    started, ended = page.open((tmp_path / "slow.html").as_uri())
+    assert ended - started >= 0.5
+
+
 def test_a_key_that_does_not_exist_is_a_problem():
     with pytest.raises(Problem, match="Unknown key 'nope'"):
         cdp.keystroke("nope")
