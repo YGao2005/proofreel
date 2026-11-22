@@ -41,7 +41,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(404, {"error": "not found"})
         note = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
         note = {"id": NOTES[-1]["id"] + 1, "title": note.get("title", ""), "body": note.get("body", "")}
-        NOTES.append(note)
+        if os.environ.get("BROKEN") != "save":
+            NOTES.append(note)
         # WHY: a server that runs for many recordings must not push "Note saved" off the screen; keep the 2 first notes and the newest KEEP.
         del NOTES[2:-KEEP]
         self.send(201, note)

@@ -62,11 +62,13 @@ def journey(steps, play, execute):
     return session, error
 
 
-def result(session, error):
-    """What one run shows of its journey: its verdict, and the result of each check."""
+def result(session, error, run_id):
+    """What one run shows of its journey: its verdict, and the result of each check. The flow's ${RUN} of this run is
+    left out of the check, because each run has its own."""
     if session and (Path(session) / "run.json").exists():
         run = json.loads((Path(session) / "run.json").read_text())
-        return run["verdict"], [(e["text"], bool(e.get("ok"))) for e in run["events"] if e["kind"] == "check"]
+        return run["verdict"], [(e["text"].replace(run_id, "${RUN}"), bool(e.get("ok"))) for e in run["events"]
+                                if e["kind"] == "check"]
     return "problem", []
 
 
@@ -76,7 +78,8 @@ def run(targets, load, play, execute, state=None, out=None, title=None, repeat=1
     suite run, and a (mark, name, error) row for each journey)."""
     if repeat < 1:
         raise Problem("--repeat takes a number from 1.")
-    flows = [load(path) for path in flow_files(targets)]
+    paths = flow_files(targets)
+    flows = [load(path) for path in paths]
     for steps in flows:
         steps.state = steps.state or state
         if not steps.state:
@@ -87,13 +90,16 @@ def run(targets, load, play, execute, state=None, out=None, title=None, repeat=1
     out = Path(out) if out else recording.SESSIONS / f"suite-{stamp}"
     suite = {"id": stamp, "title": title}
     rows, results, new = [], None, []
-    for steps in flows:
-        name = Path(steps.name).stem
-        runs = []
+    for path, flow in zip(paths, flows):
+        name = Path(flow.name).stem
+        runs, ids = [], []
         for attempt in range(1, repeat + 1):
+            steps = load(path)
+            steps.state = flow.state
             print(f"Journey {steps.name} from {steps.state}" + (f", run {attempt} of {repeat}" if repeat > 1 else ""))
             runs.append(journey(steps, play, execute))
-        seen = [result(session, error) for session, error in runs]
+            ids.append(steps.run)
+        seen = [result(*one, run_id) for one, run_id in zip(runs, ids)]
         passed = sum(verdict != "problem" for verdict, _ in seen)
         flaky = {"passed": passed, "of": repeat} if any(r != seen[0] for r in seen) else None
         for attempt, (session, error) in enumerate(runs, 1):

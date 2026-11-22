@@ -40,6 +40,10 @@ A problem prints one line that says what to do.
 proofreel run flows/sign-up.flow --set EMAIL=sam@example.com
 ```
 
+`${RUN}` is a short unique id, made each time a flow is read (a suite reads a flow again for each run). A server on the
+host keeps its data between runs, so a check can pass on what an earlier run saved. Type data with `${RUN}` in it, such
+as `type "Trip plan ${RUN}"`, and check for the same text, or reset the server yourself. `--set RUN=...` gives your own.
+
 A line `from <state>` names the saved VM state that the flow starts from. `run` refuses a run VM from another
 saved state.
 

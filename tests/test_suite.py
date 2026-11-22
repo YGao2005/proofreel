@@ -135,6 +135,25 @@ def test_a_journey_that_differs_between_runs_is_flaky_and_not_a_pass(tmp_path, f
     assert fake_vms.count("up warm") == 6
 
 
+def test_each_repeat_reads_the_flow_again_and_a_run_id_in_a_check_is_not_a_difference(tmp_path, fake_vms, fake_recording):
+    folder = flows(tmp_path, a="start a\ncheck text good\ncheck text ${RUN}\nstop\n")
+    ids = []
+
+    def execute(words):
+        if words[0] == "start":
+            words = [words[0], f"a-{len(ids) + 1}"]
+            ids.append(None)
+        if words[:2] == ["check", "text"] and words[2] != "good":
+            ids[-1] = words[2]
+            recording.log("check", words[2], ok=True)
+            return 0
+        return fake_recording(words)
+
+    _, rows = suite.run([folder], lambda path: cli.load_flow(path, {}), cli.play, execute, state="warm",
+                        out=tmp_path / "review", repeat=3)
+    assert rows == [("PASS", "a", None)] and len(set(ids)) == 3 and all(len(run) == 8 for run in ids)
+
+
 def test_a_suite_reads_every_flow_and_finds_every_state_before_a_vm_starts(tmp_path, fake_vms, fake_recording):
     folder = flows(tmp_path, a="from warm\nnote one\n", b="note two\n")
     with pytest.raises(Problem, match="b.flow names no state"):

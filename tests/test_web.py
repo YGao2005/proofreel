@@ -265,3 +265,38 @@ def test_a_web_recording_holds_reduced_motion_unless_the_flow_asks_for_full_moti
 def test_full_motion_is_only_for_a_web_run(home):
     with pytest.raises(Problem, match="--full-motion is for a web run"):
         cli.command(["--vnc", "127.0.0.1::1", "start", "x", "--full-motion"])
+
+
+def acme_server():
+    import importlib.util
+    from pathlib import Path
+    spec = importlib.util.spec_from_file_location("acme_server", Path(__file__).parent.parent / "examples/acme-notes/server.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), module.Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server, module
+
+
+def test_a_check_for_data_that_an_earlier_run_saved_passes_on_a_broken_save_and_run_makes_it_fail(runs, tmp_path, monkeypatch):
+    from pathlib import Path
+    server, acme = acme_server()
+    url = f"http://127.0.0.1:{server.server_port}"
+    old = tmp_path / "old.flow"
+    old.write_text("from web\nopen ${URL}/notes.html\nwait-text \"Your notes\" 20\nclick-text \"Title\"\ntype \"Trip plan\"\n"
+                   "click-text \"Write a note\"\ntype \"Book the train on Friday\"\nclick-text \"Save note\"\n"
+                   "wait-text \"Note saved\" 10\ncheck text \"Trip plan: Book the train on Friday\" 3\n")
+    new = tmp_path / "new.flow"
+    new.write_text(old.read_text().replace('"Trip plan"', '"Trip plan ${RUN}"').replace("Trip plan: Book", "Trip plan ${RUN}: Book"))
+    acme.NOTES.append({"id": 9, "title": "Trip plan", "body": "Book the train on Friday"})
+    monkeypatch.setenv("BROKEN", "save")
+    try:
+        vm.up("web")
+        assert cli.run_flow(old, {"URL": url}) == 0
+        vm.down()
+        vm.up("web")
+        assert cli.run_flow(new, {"URL": url}) == 1
+        assert cli.load_flow(new, {"URL": url}).run != cli.load_flow(new, {"URL": url}).run
+        assert cli.load_flow(new, {"URL": url, "RUN": "mine"}).run == "mine"
+    finally:
+        server.shutdown()
