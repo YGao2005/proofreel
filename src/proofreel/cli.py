@@ -48,6 +48,8 @@
   render <session> [--plain] [--width W]                Make the video and page of a session again. A session is
                                                         its folder or its name in the sessions folder.
   publish <session> --out <dir>                         Add a run to a review folder: one page, every run, one URL.
+  skill install [--to DIR]                              Copy the skill to ~/.agents/skills/proofreel (Codex, Antigravity,
+                                                        and Cursor read it), or to DIR/proofreel for another agent.
   demo [dir]                                            Render a made-up session (no VNC needed).
   clean [--days 7]                                      Delete sessions older than this.
   vm image|base|up|save|build|states|conditions|drop|down|sh|put|get   VMs (Tart or QEMU) or the headless Chrome of
@@ -382,6 +384,9 @@ def parser():
     s = sub.add_parser("demo")
     s.add_argument("dir", nargs="?", default=str(recording.SESSIONS / "demo"))
     s.add_argument("--broken", action="store_true", help="type the name wrong, so the last check fails")
+    s = sub.add_parser("skill", help="copy the agent skill where a coding agent reads it")
+    s.add_argument("action", choices=["install"])
+    s.add_argument("--to", help="a folder; the skill goes to DIR/proofreel (default: ~/.agents/skills)")
     s = sub.add_parser("stats")
     s.add_argument("session", nargs="?")
     s.add_argument("--json", action="store_true")
@@ -433,6 +438,18 @@ def parser():
     v.add_argument("guest")
     v.add_argument("host")
     return p
+
+
+def install_skill(to):
+    """Copy the skill folder to to/proofreel, over an older copy. Returns the new folder."""
+    import shutil
+    here = Path(__file__).parent
+    source = next((p for p in (here / "skill", here.parents[1] / "skills" / "proofreel") if (p / "SKILL.md").exists()), None)
+    if not source:
+        raise Problem("The skill files are missing from this install.")
+    target = Path(to or Path.home() / ".agents" / "skills").expanduser() / "proofreel"
+    shutil.copytree(source, target, dirs_exist_ok=True)
+    return target
 
 
 def stats(a):
@@ -534,6 +551,11 @@ def command(argv):
         case "publish":
             from .page import publish
             return print(published(*publish(recording.session_folder(a.session), a.out)))
+        case "skill":
+            folder = install_skill(a.to)
+            return print(f"Wrote {folder}/SKILL.md\n"
+                  "Codex, Antigravity, and Cursor read .agents/skills in a project and ~/.agents/skills.\n"
+                  "Another agent: tell it to follow the skill at the path above.")
         case "demo":
             from .demo import demo
             return demo(Path(a.dir), a.broken)

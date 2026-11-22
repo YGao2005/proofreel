@@ -30,6 +30,14 @@ To let Claude Code drive it, add the plugin in Claude Code:
 /plugin install proofreel@proofreel
 ```
 
+## Use it with your agent
+
+| Agent | How |
+|---|---|
+| Claude Code | The plugin above. |
+| Codex, Antigravity, Cursor | `proofreel skill install` (copies the skill to `~/.agents/skills/proofreel`, which they read). |
+| Any other agent that runs shell commands | Run `proofreel skill install --to .`, then add this line to its `AGENTS.md`: `To test an app, run proofreel --help and follow the skill at ./proofreel/SKILL.md.` |
+
 ## Quickstart
 
 Make the `linux` state once. It downloads Debian (about 0.4 GB), installs Xfce and Chromium, and saves the disk. It takes
