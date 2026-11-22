@@ -239,3 +239,29 @@ def test_a_web_recording_measures_requests_and_vitals_with_no_flags(runs, site, 
     assert any(json.loads(line)["m"] == "web/heap" for line in (folder / "metrics" / "browser.jsonl").read_text().splitlines())
     check = [json.loads(line) for line in (folder / "events.jsonl").read_text().splitlines() if '"check"' in line][-1]
     assert check["detail"] == "failed 1"
+
+
+REDUCED = "matchMedia('(prefers-reduced-motion: reduce)').matches"
+
+
+def asked(runs, screen_address, expression):
+    with screen.connect(screen_address) as web:
+        return web.call("Runtime.evaluate", expression=expression, returnByValue=True)["result"]["value"]
+
+
+@pytest.mark.parametrize("options, held", [([], True), (["--full-motion"], False)])
+def test_a_web_recording_holds_reduced_motion_unless_the_flow_asks_for_full_motion(runs, options, held):
+    address = vm.up("web")["screen"]
+    assert asked(runs, address, REDUCED) is False
+    assert cli.command(["start", "motion", "--probe", "none", *options]) is None
+    assert asked(runs, address, REDUCED) is held
+    cli.command(["stop"])
+    assert asked(runs, address, REDUCED) is False
+    [folder] = (runs / "sessions").iterdir()
+    assert json.loads((folder / "session.json").read_text())["meta"].get("motion") == ("reduced" if held else None)
+    vm.down()
+
+
+def test_full_motion_is_only_for_a_web_run(home):
+    with pytest.raises(Problem, match="--full-motion is for a web run"):
+        cli.command(["start", "x", "--full-motion", "--vnc", "127.0.0.1::1"])

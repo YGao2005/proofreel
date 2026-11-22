@@ -9,6 +9,9 @@ input, textarea, button { font: inherit; padding: 10px 14px; width: 100%; box-si
 button { background: #2b6cb0; color: #fff; border: 0; border-radius: 8px; }
 li { margin: 4px 0; }
 h1, p { margin: 8px 0; }
+li, #status { animation: rise 600ms ease-out; }
+@keyframes rise { from { opacity: 0; transform: translateY(12px); } }
+@media (prefers-reduced-motion: reduce) { li, #status { animation: none; } }
 </style>
 <main>
   <h1>Your notes</h1>

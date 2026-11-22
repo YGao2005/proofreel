@@ -1,6 +1,6 @@
 """proofreel: record an agent driving a screen as a review video and page.
 
-  start <name> [--title T] [--about A] [--meta K=V] [--app NAME] [--probe NAME[:K=V,...]] [--condition NAME[:K=V,...]]
+  start <name> [--title T] [--about A] [--meta K=V] [--app NAME] [--probe NAME[:K=V,...]] [--condition NAME[:K=V,...]] [--full-motion]
                                                         Start recording. Every later action and check is logged. --app
                                                         names the app under test: its crash fails the run. --probe adds
                                                         a probe (none: no default probes). --condition applies a
@@ -69,7 +69,7 @@ import sys
 import time
 from pathlib import Path
 
-from . import HOME, Problem, __version__, ax, conditions, flow, guest, image, metrics, plugins, probes, recording, summary
+from . import HOME, Problem, __version__, ax, conditions, emulation, flow, guest, image, metrics, plugins, probes, recording, summary
 from .recording import log
 from . import vm as vms
 from .screen import center, connect, find, fold, inside, matches, poll, screen_text, wait_for
@@ -115,10 +115,15 @@ def start(args):
         raise Problem("A condition needs a run VM: proofreel vm up <state>.")
     faked = [*(run["conditions"] if run else []),
              *(conditions.record(*plugins.spec(item), run["os"], recording=True) for item in args.condition)]
+    if args.full_motion and not (run and run["os"] == "web"):
+        raise Problem("--full-motion is for a web run: proofreel vm up web.")
+    web = bool(run and run["os"] == "web")
     if run:
         meta.setdefault("from state", run["state"])
+    if web and not args.full_motion:
+        meta.setdefault("motion", "reduced")
     info = {"title": args.title or args.name, "about": args.about, "meta": meta, "app": args.app, "conditions": faked,
-            "probes": probes.select(args.probe, run)}
+            "probes": probes.select(args.probe, run), **({"emulate": emulation.commands(not args.full_motion)} if web else {})}
     print(f"Recording {recording.start(args.name, server, password, info, args.fps, args.reduce, run)}")
 
 
@@ -327,6 +332,7 @@ def parser():
     s.add_argument("--reduce", type=int, default=0, help="keep 1/N of the pixels per side (0 = at most 1920 px wide)")
     s.add_argument("--probe", action="append", default=[])
     s.add_argument("--condition", action="append", default=[])
+    s.add_argument("--full-motion", action="store_true", help="web: keep the page's animations (the default is prefers-reduced-motion)")
     s = sub.add_parser("stop")
     s.add_argument("--keep-frames", action="store_true")
     s.add_argument("--plain", action="store_true")

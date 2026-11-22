@@ -233,12 +233,15 @@ def close_browser(address):
         pass
 
 
-def screencast(address, stop, deliver):
+def screencast(address, stop, deliver, emulate=()):
     """Give deliver(time, (width, height), write) a frame at the start, then one at each change of the page, until the
-    event stop is set. A browser that stops answering is tried again."""
+    event stop is set. A browser that stops answering is tried again. emulate is pairs of (set, clear) commands: this
+    connection holds each change while it records, and clears it at the end (see emulation.py)."""
     while not stop.is_set():
         try:
             with WebScreen(address) as screen:
+                for change, _ in emulate:
+                    screen.call(change[0], **change[1])
                 width, height = screen.size()
                 screen.call("Page.startScreencast", format="jpeg", quality=90, maxWidth=width, maxHeight=height)
                 first = screen.call("Page.captureScreenshot", format="jpeg", quality=90)["data"]
@@ -252,5 +255,7 @@ def screencast(address, stop, deliver):
                         size = (round(params["metadata"]["deviceWidth"]), round(params["metadata"]["deviceHeight"]))
                         deliver(time.time(), size, lambda path, data=params["data"]: path.write_bytes(base64.b64decode(data)))
                     screen.events.clear()
+                for _, clear in emulate:
+                    screen.call(clear[0], **clear[1])
         except Problem:
             stop.wait(0.5)

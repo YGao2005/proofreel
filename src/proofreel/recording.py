@@ -253,7 +253,8 @@ def record(folder, server, password, fps, reduce=0):
 
     if server.startswith("cdp://"):
         from . import cdp
-        sources = [lambda: cdp.screencast(server, stop, deliver)]
+        emulate = json.loads((folder / "session.json").read_text()).get("emulate", [])
+        sources = [lambda: cdp.screencast(server, stop, deliver, emulate)]
     else:
         sources = [lambda n=n: vnc_capture(server, password, n / fps, fps, stop, deliver, reduce)
                    for n in range(VNC_STREAMS)]
