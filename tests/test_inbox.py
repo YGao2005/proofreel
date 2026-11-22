@@ -199,3 +199,20 @@ def test_the_person_presses_needs_work_and_the_item_has_the_decision(box, runnin
         while not inbox.load(item["id"]).get("decision") and time.time() < deadline:
             time.sleep(0.1)
     assert inbox.load(item["id"])["decision"]["text"] == "Needs work: Fix the title"
+
+
+def test_a_review_page_in_the_inbox_can_go_full_screen(box, running, browser):
+    (box / "full").mkdir()
+    (box / "full" / "index.html").write_text(
+        '<body style="margin:0"><button style="width:100vw; height:100vh" onclick="document.body.requestFullscreen()">Full</button>')
+    inbox.add(box / "full", "Full screen")
+    # WHY: the page text reader cannot see into the frame, so the check reads the inbox's own document.
+    shown = "document.fullscreenElement ? document.fullscreenElement.tagName : ''"
+    with screen.connect(browser["screen"]) as web:
+        web.open(f"http://127.0.0.1:{running.server_port}/")
+        assert screen.wait_for(web, "waiting 0m", 10)
+        web.click(700, 450)
+        deadline = time.time() + 5
+        while web.call("Runtime.evaluate", expression=shown, returnByValue=True)["result"]["value"] != "IFRAME":
+            assert time.time() < deadline, "The review page did not go full screen."
+            time.sleep(0.1)

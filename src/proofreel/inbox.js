@@ -79,7 +79,7 @@ function renderItem() {
       view === "waiting" ? h("p", {}, "An agent adds a proof with ", h("code", { text: "proofreel inbox add" }), ". It shows here.") : null));
     return;
   }
-  if (!i.decision) { mainEl.append(h("iframe", { sandbox: "allow-scripts", src: i.url, title: `Review page: ${i.title}` })); return; }
+  if (!i.decision) { mainEl.append(h("iframe", { sandbox: "allow-scripts", allow: "fullscreen", src: i.url, title: `Review page: ${i.title}` })); return; }
   const [label, css] = DECIDED[i.decision.verdict], [state] = delivery(i);
   mainEl.append(h("article", { class: "sent" }, h("div", { class: "name" }, h("span", { class: `chip ${css}`, text: label }), h("h1", { text: i.title })),
     h("pre", { text: i.decision.text }), h("p", { text: `Sent at ${clock(i.decision.at)}. ${state}.` })));
