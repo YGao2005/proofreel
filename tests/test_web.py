@@ -219,6 +219,8 @@ def test_a_web_recording_measures_requests_and_vitals_with_no_flags(runs, site, 
     assert cli.command(["start", "web-net"]) is None
     cli.command(["open", site + "/"])
     cli.command(["wait-text", "Fetched", "10"])
+    # WHY: a span reaches the file a moment after the page sees the answer.
+    time.sleep(1)
     assert cli.command(["check", "metric", "net/*", "failed", "--below", "1"]) == 1
     cli.command(["stop"])
     vm.down()
