@@ -1,0 +1,57 @@
+name: proofreel publish
+description: Publish the review folder that the proofreel action made. It runs no code from the pull request.
+branding:
+  icon: video
+  color: purple
+
+inputs:
+  artifact:
+    description: The name of the artifact that has the review folder.
+    default: proofreel-review
+  publish:
+    description: >
+      pages puts the review on the gh-pages branch under pr/NUMBER/. artifact leaves it in the artifact of the run.
+      auto is pages, and artifact for a fork or when the push fails.
+    default: auto
+  token:
+    description: A token that can write contents and pull requests.
+    default: ${{ github.token }}
+  version:
+    description: The proofreel to install. Same as the version input of the proofreel action.
+    default: ""
+
+outputs:
+  mode:
+    description: pages or artifact.
+    value: ${{ steps.publish.outputs.mode }}
+  link:
+    description: Where to see the review.
+    value: ${{ steps.publish.outputs.link }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    - name: Install proofreel
+      shell: bash
+      run: '"$ACTION_PATH/../ci/install.sh" "$VERSION" "$ACTION_REF" "$ACTION_PATH/.."'
+      env:
+        VERSION: ${{ inputs.version }}
+        ACTION_REF: ${{ github.action_ref }}
+        ACTION_PATH: ${{ github.action_path }}
+
+    - uses: actions/download-artifact@v4
+      with:
+        name: ${{ inputs.artifact }}
+        path: ${{ runner.temp }}/proofreel-review
+
+    - name: Publish
+      id: publish
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.token }}
+        MODE: ${{ inputs.publish }}
+      run: proofreel ci publish "$RUNNER_TEMP/proofreel-review" --mode "$MODE"
