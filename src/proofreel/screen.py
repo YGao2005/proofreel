@@ -1,4 +1,4 @@
-"""Drive a VNC screen as a person does, and read its text.
+"""Drive a VNC screen as a person does, and read its text. connect() also gives a browser screen (cdp.py).
 
 Coordinates are screen pixels of the VNC framebuffer (on a Retina macOS guest, 2x the points).
 """
@@ -22,7 +22,28 @@ GLIDE, GLIDE_STEPS, GLIDE_SECONDS = (40, 24), 10, 0.15
 FRAME_WAITS = (2, 4, 8)
 
 
-class Screen:
+class Keyboard:
+    """Holding and tapping a key, from pressing it and releasing it."""
+
+    def hold(self, key, seconds):
+        pressed, _ = self.press(key, True)
+        time.sleep(seconds)
+        released, _ = self.press(key, False)
+        return pressed, released
+
+    def tap(self, key, count, press, gap):
+        first = None
+        for index in range(count):
+            if index:
+                time.sleep(gap)
+            pressed, _ = self.press(key, True)
+            first = first or pressed
+            time.sleep(press)
+            released, _ = self.press(key, False)
+        return first, released
+
+
+class Screen(Keyboard):
     def __init__(self, server, password=None, keys=None):
         """keys: key names that this screen's VNC server needs as other names (see guest.py)."""
         self.server, self.password, self.keys = server, password, keys or {}
@@ -113,23 +134,6 @@ class Screen:
             time.sleep(0.05)
         return first, last
 
-    def hold(self, key, seconds):
-        pressed, _ = self.press(key, True)
-        time.sleep(seconds)
-        released, _ = self.press(key, False)
-        return pressed, released
-
-    def tap(self, key, count, press, gap):
-        first = None
-        for index in range(count):
-            if index:
-                time.sleep(gap)
-            pressed, _ = self.press(key, True)
-            first = first or pressed
-            time.sleep(press)
-            released, _ = self.press(key, False)
-        return first, released
-
     def press(self, key, down):
         name = self.name(key)
         at = time.time()
@@ -208,7 +212,18 @@ def _tesseract(png):
             for v in lines.values()]
 
 
+def connect(address, password=None, keys=None):
+    """The screen at an address: a browser (cdp://host:port) or a VNC server (host::port)."""
+    if address.startswith("cdp://"):
+        from .cdp import WebScreen
+        return WebScreen(address, password, keys)
+    return Screen(address, password, keys)
+
+
 def screen_text(screen):
+    """The text lines on the screen now. A browser screen reads them from the page; any other is read by OCR."""
+    if hasattr(screen, "lines"):
+        return screen.lines()
     with tempfile.TemporaryDirectory() as tmp:
         png = Path(tmp) / "screen.png"
         screen.capture(png)

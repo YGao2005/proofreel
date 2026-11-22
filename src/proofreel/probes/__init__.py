@@ -250,7 +250,8 @@ def launch(folder):
 
 
 def finish(folder, started):
-    write_status(folder, {probe.name: probe.stop() for probe in started})
+    if started:
+        write_status(folder, {probe.name: probe.stop() for probe in started})
 
 
 def write_status(folder, status):

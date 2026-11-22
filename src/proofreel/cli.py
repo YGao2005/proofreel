@@ -15,6 +15,8 @@
   step <text> | note <text>                             Name the next part (a caption in the video), or add a note.
   click <x> <y> [--double|--right] | move <x> <y> | drag <x1> <y1> <x2> <y2> | type <text> | key <keys...>
                                                         The pointer glides in, as a hand does, so a hover lands.
+  open <url>                                            Show the page in the browser of the run VM: the browser of a
+                                                        `web` run, or the guest's (Linux: browse, macOS: open).
   hold <key> <seconds|down|up> | tap <key> [count]      Hold a key, or only press or release it; tap it count times.
                                                         A macOS run VM posts modifiers (fn, option, command, control,
                                                         shift; r... for the right key) in the guest.
@@ -48,10 +50,12 @@
   publish <session> --out <dir>                         Add a run to a review folder: one page, every run, one URL.
   demo [dir]                                            Render a made-up session (no VNC needed).
   clean [--days 7]                                      Delete sessions older than this.
-  vm image|base|up|save|build|states|conditions|drop|down|sh|put|get   VMs (Tart or QEMU), their saved states, and the
-                                                        conditions a state can fake (see: proofreel vm -h).
+  vm image|base|up|save|build|states|conditions|drop|down|sh|put|get   VMs (Tart or QEMU) or the headless Chrome of
+                                                        `vm up web`, their saved states, and the conditions a state
+                                                        can fake (see: proofreel vm -h).
 
-The screen is the run VM of `proofreel vm up`, or --vnc host::port with --password, or PROOFREEL_VNC.
+The screen is the run VM of `proofreel vm up`, or --vnc host::port (a browser: cdp://host:port) with --password, or
+PROOFREEL_VNC.
 """
 
 import argparse
@@ -66,7 +70,7 @@ from pathlib import Path
 from . import HOME, Problem, __version__, ax, conditions, flow, guest, image, metrics, plugins, probes, recording
 from .recording import log
 from . import vm as vms
-from .screen import Screen, center, find, fold, inside, matches, poll, screen_text, wait_for
+from .screen import center, connect, find, fold, inside, matches, poll, screen_text, wait_for
 
 
 
@@ -78,8 +82,8 @@ def target(args):
         return os.environ["PROOFREEL_VNC"], os.environ.get("PROOFREEL_PASSWORD"), None
     if vms.CURRENT.exists():
         run = vms.Run.current()
-        return run["vnc"], run["vnc_password"], run
-    raise Problem("No screen. Use --vnc host::port, PROOFREEL_VNC, or proofreel vm up <state>.")
+        return run["screen"], run["screen_password"], run
+    raise Problem("No screen. Use --vnc host::port, PROOFREEL_VNC, or proofreel vm up <state> (a web app: proofreel vm up web).")
 
 
 def start(args):
@@ -315,6 +319,8 @@ def parser():
     s.add_argument("--app")
     s.add_argument("--nth", type=int, default=1)
     s.add_argument("--timeout", type=float, default=10)
+    s = sub.add_parser("open")
+    s.add_argument("url")
     s = sub.add_parser("click")
     s.add_argument("x", type=int)
     s.add_argument("y", type=int)
@@ -389,7 +395,8 @@ def parser():
     v.add_argument("name")
     v.add_argument("image")
     v.add_argument("--backend", choices=["tart", "qemu"], default="tart")
-    v.add_argument("--os", choices=list(guest.GUESTS), default="macos", help="the guest system")
+    v.add_argument("--os", choices=[name for name, g in guest.GUESTS.items() if g.shell], default="macos",
+                   help="the guest system")
     v.add_argument("--user", default="admin")
     v.add_argument("--guest-password", default="admin")
     v = vm.add_parser("image", help="make the Linux browser state from nothing (Debian, Xfce, Chromium)")
@@ -545,7 +552,7 @@ def command(argv):
             log("check", f"check {a.kind} {' '.join(a.args)}", ok=False, detail=f"The check could not run: {problem}")
             return 1
         raise Problem(problem)
-    with Screen(server, password, run.guest.keys if run else None) as screen:
+    with connect(server, password, run.guest.keys if run else None) as screen:
         return act(a, screen, run)
 
 
@@ -578,6 +585,10 @@ def act(a, screen, run):
         case "tap":
             log("tap", f"tap {a.key}" + (f" {a.count} times" if a.count > 1 else ""),
                 *system.tap(run, screen, a.key, a.count))
+        case "open":
+            if not a.url.startswith(("http://", "https://", "file://", "about:")):
+                raise Problem(f"open takes a URL that starts with http://, https://, or file://, not {a.url!r}.")
+            log("open", f"open {a.url}", *system.open(run, screen, a.url))
         case "shot": screen.capture(a.text)
         case "find":
             lines = find(screen, a.text, scope(a.within, screen, run)) if a.text else screen_text(screen)

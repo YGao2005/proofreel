@@ -22,7 +22,7 @@ def test_saving_over_the_run_state_keeps_its_parent(home, tmp_path, monkeypatch)
 
     class Backend:
         save = staticmethod(lambda name, run, warm: {"memory": 4096, "cpu": 4})
-        resume = staticmethod(lambda name, run, warm: {"vm": "r", "ip": "127.0.0.1", "vnc": "v"})
+        resume = staticmethod(lambda name, run, warm: {"vm": "r", "ip": "127.0.0.1", "screen": "v"})
 
     monkeypatch.setattr(vm, "backend", lambda kind: Backend)
     monkeypatch.setattr(vm, "start", lambda info, name, fields: fields)
@@ -94,7 +94,7 @@ def test_a_run_vm_never_has_the_name_of_a_state():
 def test_every_command_shares_one_ssh_connection_for_each_boot(home, monkeypatch):
     calls = []
     monkeypatch.setattr(vm.subprocess, "run", lambda args, **_: calls.append(args))
-    run = vm.Run({"id": "abc123", "user": "u", "ip": "10.0.0.2", "password": "p"})
+    run = vm.Run({"id": "abc123", "os": "linux", "user": "u", "ip": "10.0.0.2", "password": "p"})
     run.ssh("true")
     assert calls[0][-3:] == ["ControlPersist=600", "-fN", "u@10.0.0.2"]
     assert calls[1][-4:] == ["-o", "ControlMaster=no", "u@10.0.0.2", "true"]

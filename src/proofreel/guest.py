@@ -2,9 +2,9 @@
 
 A guest owns the jobs that only some systems have, or that each system does in its own way: crash reports, a step
 before a cold save, modifier keys that its VNC server sends differently or cannot send, the accessibility tree,
-helpers that run in the guest, how to find a running process, and the folder and shell for plugins (`home`,
-`script`, `run_script`). A new system, or a new
-job for one, is a change in this file only.
+helpers that run in the guest, how to find a running process, how to open a web page (`open`), and the folder and shell
+for plugins (`home`, `script`, `run_script`). The `web` system is a browser on the host: it has no shell (`shell` is
+False). A new system, or a new job for one, is a change in this file only.
 """
 
 import shlex
@@ -25,7 +25,24 @@ class Guest:
     keys = {}
     home = ""
     ax = False
+    shell = True
     desktop = ""
+
+    def need_shell(self):
+        if not self.shell:
+            raise Problem("The browser runner has no shell. To run a command on the host, use check cmd.")
+
+    def open(self, run, screen, url):
+        """Show the page in the guest's browser. Returns (start, end) in host time."""
+        raise Problem("open needs a run VM of a system that has a browser: proofreel vm up <state>.")
+
+    def command(self, run, command):
+        """Run a command in the guest to open a page, timed in host time."""
+        started = time.time()
+        result = run.ssh(command, check=False, timeout=60)
+        if result.returncode:
+            raise Problem(f"open failed in the {self.name} guest: {(result.stderr or result.stdout).strip()[-300:]}")
+        return started, time.time()
 
     def script(self, step):
         """The file name of a plugin step's script on this system."""
@@ -65,6 +82,9 @@ class Guest:
     def running(self, run, process):
         """A process with this exact name runs in the run VM."""
         return run.ssh(f"pgrep -x {shlex.quote(process)}", check=False, timeout=30).returncode == 0
+
+    def open(self, run, screen, url):
+        return self.command(run, f"open {shlex.quote(url)}")
 
 
 class MacOS(Guest):
@@ -125,6 +145,9 @@ class Linux(Guest):
     desktop = "pgrep -x xfce4-panel >/dev/null || pgrep -x gnome-shell >/dev/null"
     home = "/var/tmp/proofreel"
 
+    def open(self, run, screen, url):
+        return self.command(run, f"browse {shlex.quote(url)}")
+
 
 class Windows(Guest):
     name = "windows"
@@ -147,12 +170,26 @@ class Windows(Guest):
         return run.ssh(powershell(f"if (Get-Process -Name '{name}' -ErrorAction SilentlyContinue) {{ exit 0 }} exit 1"),
                        check=False, timeout=30).returncode == 0
 
+    def open(self, run, screen, url):
+        return self.command(run, f'start "" "{url}"')
+
     def before_save(self, run):
         # WHY: Windows keeps the last screen size and scales it to a new one. With none saved, it fills the screen.
         run.ssh(r"reg delete HKLM\SYSTEM\CurrentControlSet\Control\GraphicsDrivers\Configuration /f", check=False)
 
 
-GUESTS = {guest.name: guest for guest in (MacOS(), Linux(), Windows())}
+class Web(Guest):
+    name = "web"
+    shell = False
+
+    def open(self, run, screen, url):
+        return screen.open(url)
+
+    def running(self, run, process):
+        self.need_shell()
+
+
+GUESTS = {guest.name: guest for guest in (MacOS(), Linux(), Windows(), Web())}
 
 
 def of(info):

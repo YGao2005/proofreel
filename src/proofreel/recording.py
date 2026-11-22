@@ -1,7 +1,7 @@
 """One recording at a time for each run name (PROOFREEL_VM): start, log, stop, and the recorder process itself.
 
-`start` makes the session folder and starts one detached recorder: `python -m proofreel.recording <folder> <server>
-<fps> <reduce>`, with the VNC password in the environment. The recorder holds an exclusive lock on
+`start` makes the session folder and starts one detached recorder: `python -m proofreel.recording <folder> <screen>
+<fps> <reduce>`, with the screen password in the environment. The recorder holds an exclusive lock on
 `<folder>/recorder.lock` for as long as it lives, so "is it still recording?" never depends on a pid. It writes
 frames/<n>.jpg, times.txt (the unix time of each frame), and screen.txt (the screen size), until SIGTERM. It also
 runs the session's probes (see probes) as its children, in its own process group, so `stop` ends them all. The
@@ -9,6 +9,7 @@ conditions that last one recording are applied before the recorder starts, and r
 
 Some VNC servers (Apple Virtualization, so Tart macOS guests) send nothing while the screen stays the same. Each
 capture asks for a whole frame, and VNC_STREAMS connections take turns, because one full update takes a round trip.
+A browser screen (`cdp://`) sends a frame only when the page changes, so the recorder takes one at the start.
 """
 
 import fcntl
@@ -98,7 +99,7 @@ def start(name, server, password, info, fps=30, reduce=0, run=None):
         with open(folder / "recorder.log", "w") as out:
             recorder = subprocess.Popen([sys.executable, "-m", "proofreel.recording", str(folder), server, str(fps),
                                          str(reduce)], stdout=out, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
-                                        env={**os.environ, "PROOFREEL_VNC_PASSWORD": password or ""},
+                                        env={**os.environ, "PROOFREEL_SCREEN_PASSWORD": password or ""},
                                         start_new_session=True)
         POINTER.write_text(json.dumps({"dir": str(folder), "pid": recorder.pid}))
         deadline = time.time() + 15
@@ -177,10 +178,49 @@ def clean(days):
     return old
 
 
-def record(folder, server, password, fps, reduce=0):
-    """The recorder process: capture until SIGTERM, holding the folder's lock the whole time."""
+def save_frame(image, path, reduce):
+    image = image.convert("RGB")
+    factor = reduce or -(-image.width // MAX_WIDTH)
+    (image.reduce(factor) if factor > 1 else image).save(path, quality=90)
+
+
+def vnc_capture(server, password, offset, fps, stop, deliver, reduce):
+    """One of VNC_STREAMS connections that ask for a whole frame in turn, offset seconds after the first."""
     from vncdotool import api
 
+    def connect():
+        while not stop.is_set():
+            try:
+                return api.connect(server, password=password or None, timeout=1)
+            except Exception:
+                stop.wait(0.5)
+
+    stop.wait(offset)
+    client = connect()
+    while not stop.is_set():
+        started = time.time()
+        try:
+            client.refreshScreen(incremental=False)
+        except Exception:
+            try:
+                client.disconnect()
+            except Exception:
+                pass
+            client = connect()
+            continue
+        screen = client.screen.copy()
+        deliver(started, screen.size, lambda path: save_frame(screen, path, reduce))
+        stop.wait(max(0.0, VNC_STREAMS / fps - (time.time() - started)))
+    if client:
+        try:
+            client.disconnect()
+        except Exception:
+            pass
+
+
+def record(folder, server, password, fps, reduce=0):
+    """The recorder process: capture until SIGTERM, holding the folder's lock the whole time. The frames come from
+    VNC_STREAMS VNC connections, or from the screencast of a browser screen (cdp.py)."""
     folder = Path(folder)
     lock = open(folder / "recorder.lock", "w")
     fcntl.flock(lock, fcntl.LOCK_EX)
@@ -195,50 +235,28 @@ def record(folder, server, password, fps, reduce=0):
 
     def writer():
         while (job := jobs.get()) is not None:
-            image, path = job
-            image = image.convert("RGB")
-            factor = reduce or -(-image.width // MAX_WIDTH)
-            (image.reduce(factor) if factor > 1 else image).save(path, quality=90)
+            job()
 
-    def connect():
-        while not stop.is_set():
-            try:
-                return api.connect(server, password=password or None, timeout=1)
-            except Exception:
-                stop.wait(0.5)
+    def deliver(requested, size, write):
+        """Queue a frame: write(path) saves it. size is the pixel space of the events (screen.txt)."""
+        with guard:
+            if size != state["size"]:
+                state["size"] = size
+                (folder / "screen.txt").write_text(f"{size[0]} {size[1]}\n")
+            path = frames / f"{state['index']:06d}.jpg"
+            jobs.put(lambda: write(path))
+            times.write(f"{requested:.3f} {time.time():.3f}\n")
+            times.flush()
+            state["index"] += 1
 
-    def capture(offset):
-        stop.wait(offset)
-        client = connect()
-        while not stop.is_set():
-            started = time.time()
-            try:
-                client.refreshScreen(incremental=False)
-            except Exception:
-                try:
-                    client.disconnect()
-                except Exception:
-                    pass
-                client = connect()
-                continue
-            screen = client.screen.copy()
-            with guard:
-                if screen.size != state["size"]:
-                    state["size"] = screen.size
-                    (folder / "screen.txt").write_text(f"{screen.width} {screen.height}\n")
-                jobs.put((screen, frames / f"{state['index']:06d}.jpg"))
-                times.write(f"{started:.3f} {time.time():.3f}\n")
-                times.flush()
-                state["index"] += 1
-            stop.wait(max(0.0, VNC_STREAMS / fps - (time.time() - started)))
-        if client:
-            try:
-                client.disconnect()
-            except Exception:
-                pass
-
+    if server.startswith("cdp://"):
+        from . import cdp
+        sources = [lambda: cdp.screencast(server, stop, deliver)]
+    else:
+        sources = [lambda n=n: vnc_capture(server, password, n / fps, fps, stop, deliver, reduce)
+                   for n in range(VNC_STREAMS)]
     writers = [threading.Thread(target=writer, daemon=True) for _ in range(3)]
-    capturers = [threading.Thread(target=capture, args=(n / fps,), daemon=True) for n in range(VNC_STREAMS)]
+    capturers = [threading.Thread(target=source, daemon=True) for source in sources]
     for thread in writers + capturers:
         thread.start()
     started = probes.launch(folder)
@@ -252,10 +270,12 @@ def record(folder, server, password, fps, reduce=0):
         thread.join()
     times.close()
     probes.finish(folder, started)
-    api.shutdown()
+    if not server.startswith("cdp://"):
+        from vncdotool import api
+        api.shutdown()
 
 
 if __name__ == "__main__":
     args = sys.argv[1:]
-    record(args[0], args[1], os.environ.get("PROOFREEL_VNC_PASSWORD", ""), float(args[2]),
+    record(args[0], args[1], os.environ.get("PROOFREEL_SCREEN_PASSWORD", ""), float(args[2]),
            int(args[3]) if len(args) > 3 else 0)

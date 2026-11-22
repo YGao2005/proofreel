@@ -2,7 +2,8 @@ import os
 
 import pytest
 
-from proofreel import qemu, recording, vm
+from proofreel import Problem, qemu, recording, vm
+from proofreel import chrome as runner
 
 
 @pytest.fixture
@@ -16,7 +17,7 @@ def home(tmp_path, monkeypatch):
     """A fresh proofreel home for one test: states, the run record, sessions, and QEMU files live in tmp_path."""
     for module, name, path in ((vm, "HOME", ""), (vm, "STATES", "states"), (vm, "CURRENT", "run.json"),
                                (recording, "POINTER", "session.json"), (recording, "SESSIONS", "sessions"),
-                               (qemu, "FOLDER", "qemu"), (qemu, "FIRMWARE", "firmware.gz")):
+                               (qemu, "FOLDER", "qemu"), (runner, "FOLDER", "chrome"), (qemu, "FIRMWARE", "firmware.gz")):
         monkeypatch.setattr(module, name, tmp_path / path)
     return tmp_path
 
@@ -37,3 +38,14 @@ def chrome():
             pytest.skip("no Chrome to launch")
         yield browser
         browser.close()
+
+
+@pytest.fixture(scope="session")
+def chrome_path():
+    """A Chrome for the browser runner. Without one the test skips, except in CI, where it fails."""
+    try:
+        return runner.find_chrome()
+    except Problem:
+        if os.environ.get("CI"):
+            raise
+        pytest.skip("no Chrome to launch")

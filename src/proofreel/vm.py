@@ -5,9 +5,10 @@ into a throwaway run VM in seconds (APFS copy on write), so each test starts fro
 saved while it runs (memory too), so `up` resumes it with the apps already open. A state built by a flow records the
 flow, so `build` makes it again when the app changes.
 
-Each state names its backend, `tart` (macOS and Linux guests) or `qemu` (Windows 11 ARM and Linux guests), and its
-guest system (`os`, see guest.py). A backend module has exists, base, up, save, resume, stop, and drop. This module
-keeps the state files, the run record, and SSH.
+Each state names its backend, `tart` (macOS and Linux guests), `qemu` (Windows 11 ARM and Linux guests), or `chrome`
+(a headless browser on the host, see chrome.py), and its guest system (`os`, see guest.py). A backend module has
+exists, base, up, save, resume, stop, drop, and host_address. This module keeps the state files, the run record, and
+SSH. The run record's `screen` is the address of the screen: `host::port` for VNC, `cdp://host:port` for a browser.
 
 A run VM is headless and isolated from the host: no window, no audio device, no shared clipboard. Nothing it does
 shows or plays on the host.
@@ -30,6 +31,8 @@ RUN = os.environ.get("PROOFREEL_VM", "pr-run")
 CURRENT = HOME / f"{RUN}.json"
 NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,62}")
 MACHINE = f"{RUN}.vm"
+WEB = {"name": "web", "backend": "chrome", "os": "web", "user": "", "password": "", "created": "built in",
+       "builtin": True}
 SSH_OPTS = ["-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "LogLevel=ERROR",
             "-o", "ConnectTimeout=5", "-o", "PubkeyAuthentication=no"]
 
@@ -58,6 +61,7 @@ class Run(dict):
 
     @property
     def target(self):
+        self.guest.need_shell()
         return f"{self['user']}@{self['ip']}"
 
     @property
@@ -113,7 +117,9 @@ class Run(dict):
         self._scp(f"{self.target}:{guest_path}", host)
 
     def close(self):
-        subprocess.run(["ssh", *self._options("-p"), "-O", "exit", self.target], capture_output=True, check=False)
+        if self.guest.shell:
+            subprocess.run(["ssh", *self._options("-p"), "-O", "exit", self.target], capture_output=True,
+                           check=False)
 
 
 def sandboxed():
@@ -135,13 +141,29 @@ def free_port(first=0, host="127.0.0.1"):
     raise Problem(f"No free port on {host}.")
 
 
+def alive(pid):
+    """True while the process runs. A child that ended and was not waited for counts as ended."""
+    try:
+        if os.waitpid(pid, os.WNOHANG)[0]:
+            return False
+    except ChildProcessError:
+        pass
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+
+
 def backend(name):
-    from . import qemu, tart
-    return {"tart": tart, "qemu": qemu}[name]
+    from . import chrome, qemu, tart
+    return {"tart": tart, "qemu": qemu, "chrome": chrome}[name]
 
 
 def state_info(name):
     path = STATES / f"{name}.json"
+    if not path.exists() and name == WEB["name"]:
+        return dict(WEB)
     if not path.exists():
         raise Problem(f"No state {name!r}. See: proofreel vm states.")
     info = json.loads(path.read_text())
@@ -182,10 +204,13 @@ def askpass(password):
 
 
 def start(info, name, fields, desktop=True):
-    """Record the run VM that a backend booted, then wait for SSH, and for the desktop if the guest has one."""
+    """Record the run VM that a backend booted, then wait for SSH, and for the desktop if the guest has one. A guest
+    with no shell (a browser) is ready when the backend returns."""
     run = Run({**fields, "id": uuid.uuid4().hex, "state": name, "backend": info["backend"], "os": info["os"],
                "user": info["user"], "password": info["password"], "conditions": info.get("conditions", [])})
     CURRENT.write_text(json.dumps(run))
+    if not run.guest.shell:
+        return run
     wait(lambda: run.ssh("exit 0", check=False, timeout=10).returncode == 0, 240, "SSH in the VM did not start.")
     if desktop and run.guest.desktop:
         wait(lambda: run.ssh(run.guest.desktop, check=False, timeout=10).returncode == 0, 180,
@@ -211,8 +236,8 @@ def up(name, display=None, memory=None, cpu=None, warmable=False):
     down()
     HOME.mkdir(parents=True, exist_ok=True)
     run = start(info, name, backend(info["backend"]).up(name, info, display, memory, cpu, warmable))
-    print(f"{RUN} is up from {name}{' (warm)' if info.get('warm') else ''}: vnc {run['vnc']}, ip {run['ip']}"
-          f"{':' + str(run['port']) if run.get('port') else ''}.")
+    where = f", ip {run['ip']}{':' + str(run['port']) if run.get('port') else ''}" if run.get("ip") else ""
+    print(f"{RUN} is up from {name}{' (warm)' if info.get('warm') else ''}: screen {run['screen']}{where}.")
     from . import conditions
     for record in info.get("conditions", []):
         conditions.check(run, record)
@@ -223,6 +248,8 @@ def save(name, warm=False, note="", flow=None, values=None, conditions=None):
     """Save the run VM as a state, then keep it running. Warm keeps memory: apps stay open. The state keeps the
     conditions of the state the run VM came from, and the ones given."""
     check_name(name)
+    if name == WEB["name"]:
+        raise Problem(f"{name} is the built-in browser state. Save under another name.")
     from . import plugins, recording
     if recording.current():
         raise Problem("A session is recording. Stop it first: proofreel stop.")
@@ -262,7 +289,7 @@ def down():
         if run.get("pid"):
             subprocess.run(["kill", str(run["pid"])], capture_output=True)
     CURRENT.unlink(missing_ok=True)
-    for kind in ("tart", "qemu"):
+    for kind in ("tart", "qemu", "chrome"):
         backend(kind).stop()
 
 
@@ -277,6 +304,8 @@ def drop(name):
 def states():
     """The states as a tree: each under the state it was made from."""
     infos = {p.stem: json.loads(p.read_text()) for p in sorted(STATES.glob("*.json"))} if STATES.exists() else {}
+    if any(info.get("parent") == WEB["name"] for info in infos.values()):
+        infos = {WEB["name"]: WEB, **infos}
     def loops(name):
         seen, step = set(), infos[name].get("parent")
         while step in infos and step not in seen:
