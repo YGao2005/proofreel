@@ -4,9 +4,9 @@ For an input (a click at its press, a key or typing at its first key), the refer
 before it. The frames after it are compared with the reference in a region: REGION screen pixels around a click, the
 whole screen for keys. Pixels that already changed in the BEFORE seconds before the input (a blinking caret, a
 spinner) are masked, but only after the answer to the action before it settled: a page load or a focus ring is that
-action's answer, not motion in the background. The first frame that differs is the answer. A frame was taken some
-time between its request and its arrival, and the change came between the frame before and that one, so the latency
-is the middle of that time and its error is half of it. The screen has settled when it shows no change for QUIET
+action's answer, not motion in the background. The first frame that differs is the answer. A frame shows the screen
+at its shown time (session.shown), and the change came between the frame before and that one, so the latency is the
+middle of that time and its error is half of it. The screen has settled when it shows no change for QUIET
 seconds, or when the next action starts.
 
 measure() writes metrics/input.jsonl in the probe protocol: a span input/click or input/key for each answer, with
@@ -92,9 +92,9 @@ def answer(frames, taken, arrived, event, kind, scale, settled, after):
             "settle": round(taken[last] - press, 3), "a": round(press + latency, 4)}, taken[last]
 
 
-def measure(folder, events, frames, requested, arrived, scale):
-    """Write metrics/input.jsonl for every click and key of the session. Returns how many it measured."""
-    taken = [(r + a) / 2 for r, a in zip(requested, arrived)]
+def measure(folder, events, frames, taken, arrived, scale):
+    """Write metrics/input.jsonl for every click and key of the session. taken: the shown time of each frame.
+    Returns how many it measured."""
     acts = [e for e in events if e["kind"] in ACTS]
     lines, settled = [], float("-inf")
     for e, after in zip(acts, [e["t"] for e in acts[1:]] + [float("inf")]):
