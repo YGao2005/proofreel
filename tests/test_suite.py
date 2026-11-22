@@ -180,4 +180,6 @@ def test_a_suite_journey_gets_the_flows_probes_and_recording_conditions_at_start
     path.write_text("from warm\nprobe host-load\ncondition slow-network:profile=edge\nstart x\nnote hi\n")
     ran = []
     cli.play(cli.load_flow(path, {}), lambda words: ran.append(words))
-    assert ran == [["start", "x", "--probe=host-load", "--condition=slow-network:profile=edge"], ["note", "hi"]]
+    digest = cli.load_flow(path, {}).digest
+    assert ran == [["start", "x", "--probe=host-load", "--condition=slow-network:profile=edge", f"--meta=flow=f.flow {digest}"],
+                   ["note", "hi"]]

@@ -119,6 +119,13 @@ proofreel event click 'click "Save"' --x 640 --y 410
 proofreel event check "The file is saved" --ok
 ```
 
+A check that `event check` logs was decided by the other tool, not by proofreel. It still counts for the verdict, and the
+page and the printed summary mark it `(reported)`.
+
+Each run also records where it came from, in its details on the page: the git commit of the directory where `start` ran
+(`commit 1a2b3c4`, with `, uncommitted changes` when a tracked file differs; nothing outside a git repo), and, for a flow,
+its name and a short hash of the file (`flow sign-in.flow 9f8e7d6c`). The hash is of the file text, so a `--set` value does not change it.
+
 ## Click by the accessibility tree (macOS guests)
 
 Text recognition finds what the screen shows. In a macOS run VM, proofreel can also read the accessibility (AX)

@@ -103,3 +103,18 @@ def test_a_session_is_found_by_its_folder_or_its_bare_name(tmp_path, monkeypatch
     assert recording.session_folder(str(tmp_path / "sign-in-1")) == tmp_path / "sign-in-1"
     with pytest.raises(Problem, match="No session 'gone'"):
         recording.session_folder("gone")
+
+
+def test_a_check_that_another_tool_decided_is_logged_as_reported_and_a_run_records_its_commit(home, monkeypatch, alive):
+    import json
+    from proofreel import cli, session
+    monkeypatch.setattr(session, "revision", lambda cwd=None: "abc1234, uncommitted changes")
+    started = {}
+    monkeypatch.setattr(cli.recording, "start", lambda name, server, password, info, *a: started.update(info) or "folder")
+    cli.command(["--vnc", "127.0.0.1::1", "start", "x", "--meta", "from=me"])
+    assert started["meta"] == {"from": "me", "commit": "abc1234, uncommitted changes"}
+    logged = []
+    monkeypatch.setattr(cli, "log", lambda kind, text, t=None, end=None, **fields: logged.append((kind, text, fields)))
+    cli.command(["event", "check", "the file is saved", "--ok"])
+    cli.command(["event", "click", "go"])
+    assert logged == [("check", "the file is saved", {"ok": True, "reported": True}), ("click", "go", {})]

@@ -11,6 +11,7 @@ be; the waits and checks after it prove it (see session.visits). A failed check 
 on. Any other failure stops the flow.
 """
 
+import hashlib
 import re
 import shlex
 import uuid
@@ -30,6 +31,7 @@ class Flow:
     probes: list = field(default_factory=list)
     state: str | None = None
     run: str = ""
+    digest: str = ""
 
 
 def expand(line, values):
@@ -47,7 +49,7 @@ def load(path, values, parse):
     path = Path(path)
     run = values.get("RUN") or uuid.uuid4().hex[:8]
     values = {**values, "RUN": run}
-    flow = Flow(path.name, run=run)
+    flow = Flow(path.name, run=run, digest=hashlib.sha256(path.read_bytes()).hexdigest()[:8])
     for number, raw in enumerate(path.read_text().splitlines(), 1):
         try:
             words = shlex.split(expand(raw, values), comments=True)

@@ -46,3 +46,10 @@ def test_text_names_each_failed_check_with_its_detail(tmp_path):
                                  "detail": "The screen showed: a | b"},
                                 {"t": 2, "kind": "check", "text": "y", "ok": True}])
     assert summary.text(folder) == 'Checks: 1 pass, 1 fail.\nFail: "x" is on the screen (The screen showed: a | b)'
+
+
+def test_text_says_how_many_checks_another_tool_reported(tmp_path):
+    folder = session(tmp_path, [{"t": 1, "kind": "check", "text": "a", "ok": True, "reported": True},
+                                {"t": 2, "kind": "check", "text": "b", "ok": False, "reported": True},
+                                {"t": 3, "kind": "check", "text": "c", "ok": True}])
+    assert summary.text(folder) == "Checks: 2 pass, 1 fail (2 reported by another tool).\nFail: b (reported)"

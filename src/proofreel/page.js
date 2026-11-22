@@ -291,7 +291,7 @@ const keysLabel = text => text.split(/\s+/).map(combo => combo.split("-").map(p 
   ctrl: "Ctrl", opt: "Opt", option: "Opt", alt: "Alt", shift: "Shift", enter: "Return", bsp: "Delete", esc: "Esc",
   tab: "Tab", space: "Space", pgdn: "Page Down", pgup: "Page Up" })[p] || (p.length === 1 ? p.toUpperCase() :
   p[0].toUpperCase() + p.slice(1))).join("+")).join("  ");
-const chipText = (e, r) => e.kind === "check" ? (e.ok ? "Pass: " : "Fail: ") + (e.budget ? Verdict.budgetOf(r, e) : e.text)
+const chipText = (e, r) => e.kind === "check" ? (e.ok ? "Pass: " : "Fail: ") + (e.budget ? Verdict.budgetOf(r, e) : e.text) + (e.reported ? " (reported)" : "")
   : e.kind === "wait" && e.detail ? `${e.text}: ${Verdict.sentence(e.detail).toLowerCase()}` : e.kind === "key" ? keysLabel(e.text) : e.text;
 
 const PREFS = (() => { try { return JSON.parse(localStorage.getItem("proofreel-tracks")) || {}; } catch (err) { return {}; } })();
@@ -540,7 +540,7 @@ function stage(r, video, overlay) {
 
 function row(r, e, seek) {
   const budget = Verdict.isBudget(e), failed = e.ok === false && ["check", "wait"].includes(e.kind);
-  const text = budget ? Verdict.budgetOf(r, e) : e.text;
+  const text = (budget ? Verdict.budgetOf(r, e) : e.text) + (e.reported ? " (reported)" : "");
   const status = e.kind === "check" ? chip(...budgetChip(e)) : null;
   const detail = budget ? null : e.kind === "wait" && e.detail ? Verdict.sentence(e.detail) : e.detail;
   const body = $("div", { class: "row", tabindex: "0", role: "button", "aria-label": `Jump to ${clock(e.t)}: ${text}` },

@@ -61,8 +61,10 @@ def text(folder):
     """The summary: the count of checks, each failed check with its detail, and the steps."""
     checks = [e for e in Session(folder).events() if e["kind"] == "check" and e.get("ok") is not None]
     failed = [e for e in checks if not e.get("ok")]
-    out = [f"Checks: {len(checks) - len(failed)} pass, {len(failed)} fail."]
-    out += [f"Fail: {e['text']}" + (f" ({e['detail']})" if e.get("detail") else "") for e in failed]
+    reported = sum(bool(e.get("reported")) for e in checks)
+    out = [f"Checks: {len(checks) - len(failed)} pass, {len(failed)} fail" + (f" ({reported} reported by another tool)." if reported else ".")]
+    out += [f"Fail: {e['text']}" + (" (reported)" if e.get("reported") else "") + (f" ({e['detail']})" if e.get("detail") else "")
+            for e in failed]
     if rows := steps(folder):
         out += ["Screen text by step:", *rows]
     return "\n".join(out)

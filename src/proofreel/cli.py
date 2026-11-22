@@ -69,7 +69,7 @@ import sys
 import time
 from pathlib import Path
 
-from . import HOME, Problem, __version__, ax, conditions, emulation, flow, guest, image, metrics, plugins, probes, recording, summary
+from . import HOME, Problem, __version__, ax, conditions, emulation, flow, guest, image, metrics, plugins, probes, recording, session, summary
 from .recording import log
 from . import vm as vms
 from .screen import center, connect, find, fold, inside, matches, poll, screen_text, wait_for
@@ -122,6 +122,8 @@ def start(args):
         meta.setdefault("from state", run["state"])
     if web and not args.full_motion:
         meta.setdefault("motion", "reduced")
+    if source := session.revision():
+        meta.setdefault("commit", source)
     info = {"title": args.title or args.name, "about": args.about, "meta": meta, "app": args.app, "conditions": faked,
             "probes": probes.select(args.probe, run), **({"emulate": emulation.commands(not args.full_motion)} if web else {})}
     print(f"Recording {recording.start(args.name, server, password, info, args.fps, args.reduce, run)}")
@@ -303,7 +305,8 @@ def play(steps, execute=None):
         raise Problem(f"{steps.name} needs condition {', '.join(gaps)}, and the run VM's state {state or '(none)'} "
                       f"has {', '.join(conditions.names(have)) or 'no conditions'}. Make a state with it: proofreel "
                       f"vm build <state> --from <base> {' '.join('--condition ' + g for g in gaps)}.")
-    added = [f"--probe={p}" for p in steps.probes] + [f"--condition={c}" for c in applied]
+    added = [f"--probe={p}" for p in steps.probes] + [f"--condition={c}" for c in applied] + \
+        ([f"--meta=flow={steps.name} {steps.digest}"] if steps.digest else [])
     line = execute or command
     return flow.run(steps, lambda words: line(words + added if words[0] == "start" else words),
                     abort=lambda message: stop(error=message) if recording.unstopped() else None)
@@ -595,6 +598,8 @@ def command(argv):
         case "state" | "step" | "note": return log(a.command, a.text)
         case "event":
             fields = {k: v for k, v in (("x", a.x), ("y", a.y), ("ok", a.ok), ("detail", a.detail)) if v is not None}
+            if a.kind == "check":
+                fields["reported"] = True
             return log(a.kind, a.text, a.t, a.end, **fields)
         case "run": return run_flow(a.flow, dict(v.split("=", 1) for v in a.set))
         case "suite":

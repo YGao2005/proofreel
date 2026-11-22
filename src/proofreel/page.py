@@ -43,7 +43,7 @@ def run_data(folder, info, events, length, real, clock, camera, measured=None):
     meta = [f"{k} {v}" for k, v in (info.get("meta") or {}).items() if k and k != "conditions" and v]
     meta += [f"conditions {', '.join(map(condition, info['conditions']))}" if info.get("conditions") else ""]
     started = info.get("started")
-    keep = ("t", "dur", "kind", "text", "ok", "detail", "shot", "row", "chip", "late", "budget")
+    keep = ("t", "dur", "kind", "text", "ok", "detail", "shot", "row", "chip", "late", "budget", "reported")
     return {"version": VERSION, "id": folder.name, "title": info.get("title") or folder.name,
             "about": info.get("about", ""), "error": info.get("error", ""), "verdict": verdict(info, events),
             "meta": [m for m in meta if m], "base": "", "length": round(length, 2), "real": round(real, 2),
