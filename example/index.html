@@ -1,0 +1,1607 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Acme Notes</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>:root {
+  --bg: #f3f4f6; --surface: #ffffff; --surface-2: #f8f9fa; --surface-3: #eceef1; --hover: #f1f3f5;
+  --line: #e2e5ea; --line-strong: #cdd2da; --fg-1: #15171c; --fg-2: #4d5460; --fg-3: #666d78;
+  --accent: #0962cc; --accent-bg: #e9f1fd; --focus: #0962cc; --on-accent: #ffffff;
+  --good: #1d7a3a; --good-bg: #e3f3e8; --bad: #b4232a; --bad-bg: #fbe5e6; --warn: #8a5300; --warn-bg: #fbefd5;
+  --stage: #0b0c0e; --scrim: rgba(20, 21, 24, .80); --scrim-soft: rgba(20, 21, 24, .58); --on-scrim: #ffffff;
+  --scrim-good: rgba(36, 138, 61, .92); --scrim-bad: rgba(215, 0, 21, .92);
+  --hatch: rgba(16, 18, 22, .13); --pop-shadow: 0 8px 24px rgba(16, 18, 22, .16);
+  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif; --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  --fs-12: 12px; --fs-13: 13px; --fs-14: 14px; --fs-16: 16px; --fs-24: 24px;
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 20px; --s6: 24px; --s7: 32px;
+  --r-sm: 4px; --r-md: 6px; --r-lg: 10px;
+  --lane-label: 164px; --lane-tail: 96px; --ctl: 28px; --head-h: 40px; --time-w: 52px; --ratio: 1.6; --ease: cubic-bezier(.2, .7, .2, 1);
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0d0f12; --surface: #15181d; --surface-2: #1a1e24; --surface-3: #232830; --hover: #1e232a;
+  --line: #262b33; --line-strong: #363d48; --fg-1: #e8eaee; --fg-2: #a2a8b3; --fg-3: #8a919c;
+  --accent: #6aa8ff; --accent-bg: #16294a; --focus: #6aa8ff; --on-accent: #0b1220;
+  --good: #6fd08f; --good-bg: #16301f; --bad: #ff8a8f; --bad-bg: #3a1a1d; --warn: #f0b95a; --warn-bg: #3a2c10;
+  --stage: #000000; --hatch: rgba(255, 255, 255, .11); --pop-shadow: 0 8px 24px rgba(0, 0, 0, .5);
+  color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0d0f12; --surface: #15181d; --surface-2: #1a1e24; --surface-3: #232830; --hover: #1e232a;
+  --line: #262b33; --line-strong: #363d48; --fg-1: #e8eaee; --fg-2: #a2a8b3; --fg-3: #8a919c;
+  --accent: #6aa8ff; --accent-bg: #16294a; --focus: #6aa8ff; --on-accent: #0b1220;
+  --good: #6fd08f; --good-bg: #16301f; --bad: #ff8a8f; --bad-bg: #3a1a1d; --warn: #f0b95a; --warn-bg: #3a2c10;
+  --stage: #000000; --hatch: rgba(255, 255, 255, .11); --pop-shadow: 0 8px 24px rgba(0, 0, 0, .5);
+  color-scheme: dark }
+
+* { box-sizing: border-box; scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
+body { margin: 0; background: var(--bg); color: var(--fg-1); font: 400 var(--fs-14)/1.5 var(--sans); -webkit-font-smoothing: antialiased; }
+::selection { background: var(--accent-bg); color: var(--fg-1); }
+textarea, input { caret-color: var(--accent); }
+a { color: var(--accent); text-underline-offset: 3px; }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; text-align: inherit; cursor: pointer; }
+summary { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.wrap { max-width: 1440px; margin: 0 auto; padding-block: var(--s6) var(--s4);
+  padding-left: max(var(--s4), env(safe-area-inset-left, 0px)); padding-right: max(var(--s4), env(safe-area-inset-right, 0px)); }
+footer { margin-top: var(--s3); color: var(--fg-3); font-size: var(--fs-13); }
+[hidden] { display: none !important; }
+.icon { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.t, .time, .when { font: 400 var(--fs-12)/1.5 var(--mono); color: var(--fg-3); font-variant-numeric: tabular-nums; }
+.time { font-size: var(--fs-13); color: var(--fg-2); white-space: nowrap; }
+.t, .time, .when, td, .detail, dt, .label { font-variant-numeric: tabular-nums; }
+
+header.top { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: var(--s3) var(--s6); margin-bottom: var(--s5); }
+header.top .title { display: flex; flex-direction: column; gap: var(--s2); min-width: 0; flex: 1 1 420px; }
+header.top .name { display: flex; align-items: center; gap: var(--s3); min-width: 0; }
+header.top .side { display: flex; flex-direction: column; align-items: flex-end; gap: var(--s3); max-width: 100%; }
+h1 { font-size: var(--fs-24); font-weight: 600; line-height: 1.2; margin: 0; letter-spacing: -.01em; text-wrap: balance; }
+.lede { color: var(--fg-2); max-width: 72ch; margin: 0; }
+.cause { display: inline-flex; align-self: flex-start; align-items: baseline; gap: var(--s3); max-width: 100%; text-align: left; color: var(--bad); font: 500 var(--fs-14)/1.5 var(--sans); }
+.cause:hover span:first-child { text-decoration: underline; text-underline-offset: 3px; }
+.cause .t { color: var(--bad); font-size: var(--fs-13); }
+.meta { display: flex; flex-wrap: wrap; color: var(--fg-3); font-size: var(--fs-13); }
+.meta span + span::before { content: "\00b7"; margin-inline: var(--s2); }
+
+.chip { display: inline-flex; align-items: center; height: 20px; padding: 0 var(--s2); border-radius: var(--r-sm); font: 600 var(--fs-12)/1 var(--sans);
+  background: var(--surface-3); color: var(--fg-2); white-space: nowrap; flex: none; }
+.chip.ok { background: var(--good-bg); color: var(--good); } .chip.bad { background: var(--bad-bg); color: var(--bad); }
+.chip.info { background: var(--warn-bg); color: var(--warn); }
+
+.btn { cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: var(--s2);
+  height: var(--ctl); padding: 0 var(--s3); border-radius: var(--r-md); border: 1px solid var(--line-strong); background: var(--surface);
+  color: var(--fg-1); font: 500 var(--fs-14)/1 var(--sans); white-space: nowrap; transition: background-color 150ms var(--ease); }
+.btn:hover { background: var(--hover); }
+.btn.small { height: 24px; padding: 0 var(--s2); font-size: var(--fs-13); }
+.btn.tool { border-color: transparent; background: transparent; color: var(--fg-2); padding: 0 var(--s2); }
+.btn.tool:hover { background: var(--hover); color: var(--fg-1); }
+.btn.icon-only { width: var(--ctl); padding: 0; }
+.btn[aria-pressed="true"] { background: var(--accent-bg); color: var(--accent); border-color: var(--accent); }
+.choices { display: flex; gap: var(--s2); flex-wrap: wrap; }
+
+.seg { display: inline-flex; gap: var(--s1); padding: var(--s1); border-radius: var(--r-md); background: var(--surface-3); max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+.seg button { display: inline-flex; align-items: center; gap: var(--s2); height: 24px; padding: 0 var(--s3); border: 1px solid transparent;
+  border-radius: var(--r-sm); color: var(--fg-2); font: 500 var(--fs-13)/1 var(--sans); white-space: nowrap; transition: background-color 150ms var(--ease), color 150ms var(--ease); }
+.seg button:hover { color: var(--fg-1); }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--fg-1); border-color: var(--line-strong); }
+.seg span.bad { color: var(--bad); }
+.seg .ok[aria-pressed="true"] { background: var(--good-bg); color: var(--good); border-color: var(--good); }
+.seg .bad[aria-pressed="true"] { background: var(--bad-bg); color: var(--bad); border-color: var(--bad); }
+.seg .when { font-size: var(--fs-12); color: var(--fg-3); }
+.review { display: flex; flex-direction: column; align-items: flex-end; gap: var(--s1); }
+.review .who { color: var(--fg-3); font-size: var(--fs-12); text-align: right; }
+
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); overflow: clip; display: flex; flex-direction: column; min-width: 0; }
+.panel > .head { display: flex; align-items: center; gap: var(--s2); min-height: var(--head-h); padding: 0 var(--s3);
+  border-bottom: 1px solid var(--line); background: var(--surface); flex: none; }
+.panel > .body { min-height: 0; }
+.dock { max-width: 720px; }
+.dock:not(:has(> .section:not([hidden]))) { display: none; }
+.section + .section { border-top: 1px solid var(--line); }
+.section h2 { margin: 0; padding: var(--s3) var(--s4) 0; font: 600 var(--fs-14)/1.4 var(--sans); color: var(--fg-1); }
+.section .body { padding: var(--s2) var(--s4) var(--s3); display: flex; flex-direction: column; gap: var(--s2); }
+.ask-row { display: flex; gap: var(--s2); align-items: flex-start; }
+textarea { flex: 1; width: 100%; min-height: var(--ctl); field-sizing: content; max-height: 160px; resize: none; padding: var(--s1) var(--s2); border-radius: var(--r-md);
+  border: 1px solid var(--line-strong); background: var(--surface); color: var(--fg-1); font: 400 var(--fs-14)/1.5 var(--sans); }
+textarea:focus-visible { outline-offset: -1px; }
+.answer { white-space: pre-wrap; color: var(--fg-1); }
+.answer:empty { display: none; }
+
+.tabs { display: flex; gap: var(--s1); overflow-x: auto; scrollbar-width: none; min-width: 0; align-self: stretch; }
+.tabs.overflow { mask-image: linear-gradient(90deg, #000 calc(100% - 24px), transparent); }
+.tabs [role=tab] { display: inline-flex; align-items: center; gap: var(--s2); padding: 0 var(--s2); white-space: nowrap;
+  color: var(--fg-2); font: 500 var(--fs-14)/1 var(--sans); border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color 150ms var(--ease), border-color 150ms var(--ease); }
+.tabs [role=tab]:hover { color: var(--fg-1); }
+.tabs [role=tab][aria-selected="true"] { color: var(--fg-1); border-bottom-color: var(--accent); }
+.empty-pane { padding: var(--s4); }
+.placeholder { margin: 0; padding: var(--s6) var(--s4); border: 1px dashed var(--line-strong); border-radius: var(--r-md); color: var(--fg-3); text-align: center; }
+
+.stage .media { background: var(--stage); display: flex; justify-content: center; }
+.screen { position: relative; overflow: hidden; container-type: inline-size; background: var(--stage); width: 100%; }
+.screen video { display: block; width: 100%; height: auto; transform-origin: 0 0; cursor: pointer; }
+.screen:fullscreen { display: grid; place-items: center; }
+.screen:fullscreen > * { grid-area: 1 / 1; }
+.screen:fullscreen video { width: auto; max-width: 100vw; max-height: 100vh; }
+.timebar { display: grid; grid-template-columns: var(--lane-label) minmax(0, 1fr) var(--lane-tail); align-items: center; column-gap: var(--s3); row-gap: var(--s1);
+  padding: var(--s2) var(--s3) var(--s3); border-top: 1px solid var(--line); }
+.timebar .lead { display: flex; align-items: center; gap: var(--s1); }
+.timebar .tools { display: flex; align-items: center; justify-content: flex-end; gap: var(--s1); }
+.btn.tool .label { display: none; }
+.bar { position: relative; height: 24px; cursor: pointer; }
+.bar .track { position: absolute; left: 0; right: 0; top: 10px; height: 4px; border-radius: var(--r-sm); background: var(--surface-3); }
+.bar .done { position: absolute; left: 0; top: 10px; height: 4px; border-radius: var(--r-sm); background: var(--accent); width: var(--at); }
+.bar .done::after { content: ""; position: absolute; right: -6px; top: -4px; width: 12px; height: 12px; border-radius: 50%; background: var(--accent); border: 2px solid var(--surface); box-sizing: content-box; margin: -2px; }
+.bar i { position: absolute; top: 8px; width: 2px; height: 8px; margin-left: -1px; border-radius: 0; background: var(--fg-3); }
+.bar i.ok { background: var(--good); } .bar i.bad { background: var(--bad); width: 3px; height: 12px; top: 6px; margin-left: -2px; }
+.bar i.step { background: var(--fg-2); }
+
+.help { position: relative; }
+.help summary { list-style: none; } .help summary::-webkit-details-marker { display: none; }
+.help .pop p { margin: 0 0 var(--s2); }
+.help .pop dl { display: grid; grid-template-columns: auto 1fr; gap: var(--s1) var(--s3); margin: 0; }
+.help .pop dt { font: 400 var(--fs-12)/1.5 var(--mono); color: var(--fg-1); white-space: nowrap; } .help .pop dd { margin: 0; }
+.help .pop { position: absolute; right: 0; bottom: calc(100% + var(--s2)); z-index: 20; width: min(340px, 80vw); padding: var(--s3); border-radius: var(--r-md);
+  background: var(--surface); border: 1px solid var(--line); box-shadow: var(--pop-shadow); color: var(--fg-2); font-size: var(--fs-13); }
+
+.overlay { position: absolute; inset: 0; pointer-events: none; font-family: var(--sans); }
+.overlay .pill { position: absolute; color: var(--on-scrim); background: var(--scrim); border-radius: var(--r-md);
+  padding: .5em .75em; line-height: 1.2; white-space: nowrap; max-width: 88%; overflow: hidden; text-overflow: ellipsis; }
+.overlay .top { position: absolute; top: 1.7cqw; left: 1.7cqw; display: flex; gap: .5cqw; }
+.overlay .top .pill { position: static; font-size: max(12px, 1.1cqw); background: var(--scrim-soft); font-variant-numeric: tabular-nums; }
+.overlay .top .pill.state.ok { background: var(--scrim-good); } .overlay .top .pill.state.bad { background: var(--scrim-bad); }
+.overlay .now { top: 1.7cqw; right: 1.7cqw; font-size: max(12px, 1.3cqw); }
+.overlay .now.ok { background: var(--scrim-good); } .overlay .now.bad { background: var(--scrim-bad); }
+.overlay .bottom { position: absolute; left: var(--s3); right: var(--s3); bottom: var(--s3); display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: end; column-gap: var(--s2); }
+.overlay .bottom .pill { position: static; }
+.overlay .caption { grid-column: 2; max-width: none; font-size: max(12px, 1.55cqw); }
+.overlay .caption b { font-weight: 400; opacity: .7; margin-right: .75em; }
+.overlay .live { grid-column: 1; grid-row: 1; justify-self: start; min-width: 0; max-width: 100%; display: flex; flex-direction: column; gap: .25em; border-radius: var(--r-md);
+  font: 400 max(12px, 1.1cqw)/1.3 var(--mono); font-variant-numeric: tabular-nums; color: var(--fg-1); background: color-mix(in srgb, var(--surface) 85%, transparent);
+  border: 1px solid var(--line); }
+.overlay .live span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.overlay .live b { font: 400 1em var(--sans); color: var(--fg-2); margin-right: .5em; }
+
+.list, .list ol, .machine ol { list-style: none; margin: 0; padding: 0; }
+li .row { display: grid; grid-template-columns: var(--time-w) minmax(0, 1fr) auto; gap: var(--s3); align-items: start;
+  padding: var(--s2) var(--s4); cursor: pointer; transition: background-color 150ms var(--ease); }
+li .row:hover { background: var(--hover); }
+li.bad > .row { background: var(--bad-bg); }
+li.now > .row, li.now > details > summary { background: var(--accent-bg); }
+li.now.bad > .row { background: var(--bad-bg); }
+.text { min-width: 0; overflow-wrap: anywhere; line-height: 1.5; }
+.kind { color: var(--fg-3); font: 400 var(--fs-13) var(--mono); }
+.detail { display: block; color: var(--fg-3); font: 400 var(--fs-13)/1.4 var(--sans); margin-top: var(--s1); white-space: pre-wrap; }
+li.bad > .row .detail { color: var(--bad); }
+li.bad > .row .t, .numbers tr.bad td .m, .numbers tr.bad th { color: var(--fg-2); }
+.numbers tr.bad td .m.bad { color: var(--bad); }
+li.step .text { font-weight: 600; }
+li.more > details > summary { list-style: none; display: flex; align-items: center; gap: var(--s1); padding: var(--s1) var(--s4) var(--s1) calc(var(--s4) + var(--time-w) + var(--s3) - var(--s1));
+  color: var(--fg-3); font-size: var(--fs-13); }
+li.more > details > summary::-webkit-details-marker { display: none; }
+li.more > details > summary .icon, .tracks .fold .icon { transition: transform 150ms var(--ease); }
+li.more > details[open] > summary .icon, .tracks .fold[aria-expanded="true"] .icon { transform: rotate(90deg); }
+li.more > details > summary:hover { color: var(--fg-1); }
+li.more ol { margin: 0 0 var(--s1) calc(var(--s4) + var(--time-w) + var(--s3)); border-left: 1px solid var(--line); }
+li.more .row { padding-block: var(--s1); padding-left: var(--s2); grid-template-columns: calc(var(--time-w) - var(--s1)) minmax(0, 1fr) auto; }
+li.more .text { color: var(--fg-2); }
+
+.stats, .journeys { padding: var(--s4); display: flex; flex-direction: column; gap: var(--s3); overflow-x: auto; }
+.stats .hint, .net .hint { margin: 0; color: var(--fg-2); font-size: var(--fs-13); }
+.journeys h2 { margin: 0; display: flex; align-items: baseline; gap: var(--s3); font: 600 var(--fs-14)/1.5 var(--sans); }
+.journeys h2 .meta { font-weight: 400; }
+.numbers { width: 100%; max-width: 880px; border-collapse: collapse; table-layout: fixed; }
+.numbers th { padding: 0 var(--s2) var(--s1); text-align: right; font: 600 var(--fs-12)/1.5 var(--sans); color: var(--fg-3); border-bottom: 1px solid var(--line); }
+.numbers td { padding: var(--s2); text-align: right; font: 400 var(--fs-13)/1.5 var(--mono); font-variant-numeric: tabular-nums;
+  border-bottom: 1px solid var(--line); vertical-align: top; }
+.numbers th:first-child, .numbers td:first-child { text-align: left; }
+.numbers td:first-child { font: 400 var(--fs-14)/1.5 var(--sans); overflow-wrap: anywhere; }
+.numbers td .m { display: block; color: var(--fg-3); font: 400 var(--fs-12)/1.5 var(--mono); }
+.numbers td .m.bad { color: var(--bad); font-family: var(--sans); }
+.numbers td .m a + a { margin-left: 8px; }
+.numbers tbody tr { cursor: pointer; transition: background-color 150ms var(--ease); } .numbers tbody tr:hover { background: var(--hover); }
+.numbers tr.bad td { background: var(--bad-bg); }
+.numbers tr.bad td .m, .numbers tr.bad th { color: var(--fg-2); }
+.numbers tr.bad td .m.bad { color: var(--bad); }
+.numbers tr[aria-current="true"] td { background: var(--accent-bg); }
+.numbers a { color: var(--fg-1); font-weight: 500; text-decoration: none; }
+.numbers a:hover { text-decoration: underline; text-underline-offset: 3px; }
+col.w88 { width: 88px; } col.w96 { width: 96px; } col.w112 { width: 112px; } .stats-table col.budget { width: 296px; }
+.numbers td:last-child, .numbers th:last-child { padding-right: var(--s2); }
+.stats-table td:last-child, .stats-table th:last-child { text-align: left; }
+.journey-table td:not(:first-child), .journey-table th:not(:first-child) { text-align: left; }
+.budget { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--s2); font: 400 var(--fs-13)/20px var(--sans); }
+.budget.bad span { color: var(--bad); }
+.net { padding: var(--s2) 0; --req-cols: minmax(200px, 36%) minmax(0, 1fr) 112px; }
+.legend { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1) var(--s3); padding: var(--s2) var(--s4); color: var(--fg-2); font-size: var(--fs-12); }
+.legend i { display: inline-block; width: 8px; height: 8px; border-radius: var(--r-sm); margin-right: var(--s1); vertical-align: -1px; }
+.req { display: grid; grid-template-columns: var(--req-cols); align-items: center; column-gap: var(--s3); height: 28px; padding: 0 var(--s4); cursor: pointer; transition: background-color 200ms var(--ease); }
+.req.axis-row { cursor: default; height: 20px; } .net .axis { grid-column: auto; position: relative; background: none; }
+.req:not(.axis-row):hover { background: var(--hover); }
+.req .name { display: flex; min-width: 0; font: 400 var(--fs-13)/28px var(--mono); white-space: pre; }
+.req .dim { color: var(--fg-3); flex: none; } .req .dim.host { margin-right: 0; }
+.req .path { overflow: hidden; text-overflow: ellipsis; } .req .path.tail { flex: none; overflow: visible; } .req .path.head { min-width: 0; }
+.req .d { display: flex; justify-content: flex-end; align-items: center; gap: var(--s2); font: 400 var(--fs-13)/1 var(--mono); font-variant-numeric: tabular-nums; color: var(--fg-2); }
+.req .d .dim { font: 400 var(--fs-13)/1 var(--mono); }
+.req.bad, .req.hit { background: var(--bad-bg); }
+.req.bad .name .path { color: var(--bad); }
+.req.bad .dim { color: var(--fg-2); }
+.fall { position: relative; height: 8px; border-radius: var(--r-sm); background: var(--surface-2); }
+.fall span { position: absolute; top: 0; bottom: 0; min-width: 3px; }
+.fall .whole { background: var(--line-strong); }
+.p0 { background: var(--fg-3); } .p1 { background: var(--accent); } .p2 { background: var(--good); } .p3 { background: var(--line-strong); } .p4 { background: var(--fg-2); }
+
+.stack { display: grid; gap: var(--s3); grid-template-columns: minmax(0, 1fr); }
+.views > .head { position: sticky; top: 0; z-index: 3; }
+.views > .body { background: var(--surface); }
+
+.cols, .main { display: flex; flex-direction: column; gap: var(--s3); min-width: 0; }
+.flow > h2 { margin: 0; padding: var(--s3) var(--s4); font: 600 var(--fs-14)/1.4 var(--sans); border-bottom: 1px solid var(--line); flex: none; }
+.flow-list { counter-reset: step; padding-bottom: var(--s3); }
+.visit .steps { padding-block: var(--s1); }
+.steps, .steps ol { list-style: none; margin: 0; padding: 0; }
+.steps li.step { counter-increment: step; }
+.steps li.step .text::before { content: counter(step); display: inline-grid; place-items: center; min-width: 20px; height: 20px; margin-right: var(--s2);
+  border-radius: var(--r-sm); background: var(--surface-3); color: var(--fg-2); font: 600 var(--fs-12)/1 var(--sans); font-variant-numeric: tabular-nums; vertical-align: 1px; }
+.visit-node { cursor: pointer; position: sticky; top: 0; z-index: 2; width: 100%; display: flex; align-items: baseline; gap: var(--s2);
+  padding: var(--s3) var(--s4); border-block: 1px solid var(--line); background: var(--surface-2); transition: background-color 150ms var(--ease); }
+.visit-node:hover { background: var(--hover); }
+.visit-node .name { font: 600 var(--fs-14)/1.5 var(--sans); overflow-wrap: anywhere; color: var(--fg-1); }
+.visit-node .checks { margin-left: auto; font: 400 var(--fs-13)/1.5 var(--sans); font-variant-numeric: tabular-nums; color: var(--fg-3); }
+.visit-node .chip { align-self: center; }
+.visit-node.now { background: var(--accent-bg); }
+
+.machine { display: flex; flex-direction: column; }
+.machine .graph { overflow-x: auto; padding: var(--s4) var(--s2) var(--s2); flex: none; }
+.machine svg { display: block; max-width: 100%; height: auto; margin: 0 auto; font-family: var(--sans); }
+.machine .edge { cursor: pointer; }
+.machine .edge .hit { fill: none; stroke: transparent; stroke-width: 12px; }
+.machine .edge .line { fill: none; stroke: var(--line-strong); stroke-width: 1.5px; transition: stroke 150ms var(--ease); }
+.machine .edge.on .line { stroke: var(--accent); stroke-width: 2px; }
+.machine .head { fill: var(--line-strong); } .machine .head.on { fill: var(--accent); }
+.machine .edge .label { font: 400 var(--fs-12) var(--mono); font-variant-numeric: tabular-nums; fill: var(--fg-2); paint-order: stroke; stroke: var(--surface); stroke-width: 4px; stroke-linejoin: round; }
+.machine .edge:hover .line { stroke: var(--fg-2); } .machine .edge.on:hover .line { stroke: var(--accent); }
+.machine .node { cursor: pointer; outline-offset: 3px; }
+.machine .node rect { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1px; transition: stroke 200ms var(--ease), stroke-width 200ms var(--ease); }
+.machine .node .name { font: 600 var(--fs-14) var(--sans); fill: var(--fg-1); text-anchor: middle; }
+.machine .node.ok rect { fill: var(--good-bg); stroke: var(--good); }
+.machine .node.bad rect { fill: var(--bad-bg); stroke: var(--bad); }
+.machine .node.away rect { fill: none; stroke: var(--line); } .machine .node.away .name { fill: var(--fg-3); }
+.machine .node.start { cursor: default; } .machine .node.start rect { fill: var(--surface-3); stroke: none; } .machine .node.start .name { fill: var(--fg-2); font-size: var(--fs-12); font-weight: 500; }
+.machine .node.now rect { stroke: var(--accent); stroke-width: 2px; }
+.machine .node.picked rect { stroke: var(--fg-1); stroke-width: 2px; }
+.machine .halo { fill: var(--accent-bg); opacity: 0; pointer-events: none; transition: opacity 200ms var(--ease); }
+.machine .halo.on { opacity: 1; }
+.machine .visit { border-top: 1px solid var(--line); padding: var(--s4); display: flex; flex-direction: column; gap: var(--s3); flex: none; }
+.machine .visit h2 { margin: 0; font: 600 var(--fs-16)/1.4 var(--sans); display: flex; gap: var(--s2); align-items: center; flex-wrap: wrap; }
+.machine .visit ol { margin-inline: calc(-1 * var(--s4)); }
+.machine .visit .stopped { margin: 0; color: var(--fg-2); }
+.machine .visit .others { margin: 0; color: var(--fg-3); font-size: var(--fs-13); }
+.flow > .head { display: flex; align-items: center; min-height: var(--head-h); padding: 0 var(--s3); border-bottom: 1px solid var(--line); flex: none; }
+.flow .placeholder { margin: var(--s4); }
+
+@media (min-width: 901px) and (min-height: 620px) {
+  .cols { display: grid; grid-template-columns: minmax(0, 1fr) clamp(360px, 30vw, 460px); height: var(--cols-h, 70dvh); }
+  .main { min-height: 0; }
+  .stage { flex: 1 1 0; min-height: 0; }
+  .stage .media { flex: 1 1 0; min-height: 0; container-type: size; align-items: center; }
+  .stage .screen { width: min(100cqw, calc(100cqh * var(--ratio))); flex: none; }
+  .tracks { flex: none; }
+  .tracks .lanes { max-height: 32dvh; overflow-y: auto; }
+  .flow { min-height: 0; }
+  .flow > .body { flex: 1 1 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+}
+
+.tracks > .head { gap: var(--s3); border-bottom: 0; min-height: 40px; }
+.tracks .fold { display: inline-flex; align-items: center; gap: var(--s2); font: 600 var(--fs-14)/1 var(--sans); color: var(--fg-1); border-radius: var(--r-sm); }
+.tracks:has(.lanes:not([hidden])) > .head { border-bottom: 1px solid var(--line); }
+.tracks.bad { border-color: var(--bad); }
+.tracks.bad .fold { color: var(--bad); }
+.tracks .chips { display: flex; gap: var(--s1); min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.toggle { height: 20px; padding: 0 var(--s2); border-radius: var(--r-sm); color: var(--fg-3); font: 500 var(--fs-12)/20px var(--sans); transition: background-color 150ms var(--ease), color 150ms var(--ease); }
+.toggle:hover { color: var(--fg-1); }
+.toggle[aria-pressed="true"] { background: var(--accent-bg); color: var(--accent); }
+.lanes { display: grid; grid-template-columns: var(--lane-label) minmax(0, 1fr) var(--lane-tail); align-items: center; column-gap: var(--s3); row-gap: var(--s1); padding: var(--s2) var(--s3) var(--s3); }
+.lane-label { font-size: var(--fs-12); color: var(--fg-3); text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; justify-self: end; max-width: 100%; }
+.lane-label.bad { color: var(--bad); font-weight: 600; }
+.lane { position: relative; height: 20px; border-radius: var(--r-sm); background: var(--surface-2); }
+.lane::after { content: ""; position: absolute; top: -2px; bottom: -2px; left: var(--at); width: 1px; background: var(--accent); pointer-events: none; }
+.axis { grid-column: 2; position: sticky; bottom: 0; height: 16px; background: var(--surface); }
+.axis .tick { position: absolute; top: 0; transform: translateX(-50%); font: 400 var(--fs-12)/16px var(--mono); font-variant-numeric: tabular-nums; color: var(--fg-3); white-space: nowrap; }
+.axis .tick::before { content: ""; position: absolute; left: 50%; top: -4px; height: 4px; width: 1px; background: var(--line-strong); }
+.axis .tick.first { transform: none; } .axis .tick.last { transform: translateX(-100%); }
+.axis .tick.first::before { left: 0; } .axis .tick.last::before { left: 100%; }
+.pin-btn { display: grid; place-items: center; width: 24px; height: 24px; border-radius: var(--r-sm); color: var(--fg-3); opacity: 0; transition: opacity 150ms var(--ease); }
+.pin-btn:hover, .pin-btn:focus-visible, .pin-btn[aria-pressed="true"], .lane:hover + .pin-btn, .lane-label:hover + .lane + .pin-btn { opacity: 1; }
+@media (hover: none) { .pin-btn { opacity: 1; } }
+.pin-btn[aria-pressed="true"] { background: var(--accent-bg); color: var(--accent); }
+.lane.metric { cursor: pointer; overflow: hidden; }
+.lane.sample { height: 32px; } .lane.mark { height: 16px; }
+.lane svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.lane .env { fill: var(--accent); opacity: .2; }
+.lane .line { fill: none; stroke: var(--accent); stroke-width: 1.5px; vector-effect: non-scaling-stroke; }
+.lane .band { stroke: var(--line-strong); stroke-dasharray: 2 4; vector-effect: non-scaling-stroke; }
+.lane .limit { stroke: var(--fg-3); stroke-dasharray: 4 4; vector-effect: non-scaling-stroke; } .lane .limit.bad { stroke: var(--bad); }
+.lane.span i { position: absolute; height: 4px; border-radius: 0; background: var(--good); }
+.lane.span i.bad { background: var(--bad); top: 0; bottom: 0; height: auto; min-width: 3px; }
+.lane.mark b { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--fg-2); } .lane.mark b.bad { background: var(--bad); width: 3px; margin-left: -1px; }
+.lane .more { position: absolute; right: var(--s1); top: 0; padding: 0 var(--s1); border-radius: var(--r-sm); background: var(--surface-2); color: var(--fg-2); font: 400 var(--fs-12)/16px var(--mono); }
+.lane .nodata { position: absolute; top: 0; bottom: 0; pointer-events: none; background: repeating-linear-gradient(45deg, var(--line) 0 1px, transparent 1px 4px); }
+.lane .stretch { position: absolute; top: 0; bottom: 0; pointer-events: none; background: repeating-linear-gradient(135deg, var(--hatch) 0 1px, transparent 1px 4px); }
+
+@media (max-width: 560px) {
+  :root { --time-w: 44px; }
+  .btn.tool .label, .seg .when { display: none; }
+  li .row { padding-inline: var(--s3); gap: var(--s2); }
+  :root { --lane-label: 152px; --lane-tail: 0px; }
+  .timebar { column-gap: var(--s2); padding-inline: var(--s3); grid-template-columns: var(--lane-label) minmax(0, 1fr); }
+  .timebar .tools { grid-column: 2; grid-row: 1; justify-self: end; }
+  .timebar .bar { grid-column: 2; grid-row: 2; }
+  .lanes { grid-template-columns: var(--lane-label) minmax(0, 1fr); column-gap: var(--s2); padding-inline: var(--s3); }
+  .lanes .pin-btn { display: none; }
+  .overlay .live { display: none; }
+  .axis .tick:nth-child(even) { display: none; }
+  .net { --req-cols: minmax(0, 1fr) 96px; }
+  .req { grid-template-rows: 28px 8px; height: auto; padding-bottom: var(--s2); row-gap: 0; }
+  .req .fall { grid-column: 1 / -1; grid-row: 2; } .req .d { grid-column: 2; grid-row: 1; } .req.axis-row { display: none; }
+  header.top .side, .review { align-items: flex-start; }
+  .review .who { text-align: left; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
+}
+</style>
+<div class="wrap"><main id="app"></main><footer>Made with <a href="https://github.com/YGao2005/proofreel">proofreel</a>.</footer></div>
+<script type="application/json" id="runs">[{"version": 2, "id": "search-20261122-012728", "title": "Search notes", "about": "A user searches their notes. The matching note must show fast.", "error": "", "verdict": "works", "meta": ["flow search.flow 354be3e7", "from state web", "motion reduced", "commit a3787a6, uncommitted changes"], "base": "runs/search-20261122-012728/", "length": 4.63, "real": 4.33, "overlay": true, "camera": [[0.0, 0.4983, 0.4983, 1.003], [0.1, 0.4813, 0.4813, 1.039], [0.2, 0.4602, 0.4602, 1.087], [0.3, 0.4423, 0.4423, 1.131], [0.4, 0.4289, 0.4289, 1.166], [0.5, 0.4194, 0.4194, 1.192], [0.6, 0.4128, 0.4128, 1.211], [0.7, 0.4084, 0.4084, 1.224], [0.8, 0.4055, 0.4055, 1.233], [0.9, 0.4035, 0.4035, 1.239], [1.0, 0.4023, 0.4023, 1.243], [1.1, 0.4014, 0.4014, 1.245], [1.2, 0.4009, 0.4009, 1.247], [1.3, 0.4006, 0.4006, 1.248], [1.4, 0.4083, 0.4083, 1.224], [1.5, 0.4242, 0.4242, 1.179], [1.6, 0.4414, 0.4414, 1.133], [1.7, 0.4568, 0.4568, 1.095], [1.8, 0.4693, 0.4693, 1.065], [1.9, 0.4788, 0.4788, 1.044], [2.0, 0.4857, 0.4857, 1.029], [2.1, 0.4906, 0.4905, 1.019], [2.2, 0.4945, 0.4938, 1.013], [2.3, 0.4968, 0.496, 1.008], [2.4, 0.4981, 0.4977, 1.005], [2.5, 0.4989, 0.4987, 1.003], [2.6, 0.4994, 0.4992, 1.002], [2.7, 0.4996, 0.4996, 1.001], [2.8, 0.4998, 0.4997, 1.001], [2.9, 0.4999, 0.4999, 1.001], [3.0, 0.4999, 0.4999, 1.0], [3.1, 0.5, 0.5, 1.0], [4.6, 0.5, 0.5, 1.0]], "when": "2026-11-22 01:27", "clock": [[0.0, 0.0], [0.333, 0.333], [0.334, 0.367], [0.334, 0.4], [0.334, 0.433], [0.334, 0.467], [0.334, 0.5], [0.334, 0.533], [0.334, 0.567], [0.334, 0.6], [0.334, 0.633], [4.3, 4.6]], "states": [{"name": "Home", "t": 0.10953807830810547, "end": 0.17212390899658203, "ok": true}, {"name": "Search", "t": 0.17212390899658203, "end": 4.33, "ok": true}], "events": [{"t": 0.10953807830810547, "kind": "state", "text": "Home", "row": "key"}, {"t": 0.11492490768432617, "kind": "step", "text": "Open the notes list", "row": "key"}, {"t": 0.11917686462402344, "kind": "open", "text": "open http://127.0.0.1:8791/notes.html", "shot": "shots/2.jpg", "row": "fold", "chip": true}, {"t": 0.16493582725524902, "kind": "wait", "text": "wait for \"Your notes\"", "ok": true, "detail": "seen after 0.0 s", "shot": "shots/3.jpg", "row": "key", "chip": true}, {"t": 0.17212390899658203, "kind": "state", "text": "Search", "row": "key"}, {"t": 0.17710590362548828, "kind": "step", "text": "Search for groceries", "row": "key"}, {"t": 0.33400988578796387, "kind": "click", "text": "click \"Search notes\"", "shot": "shots/6.jpg", "row": "fold", "chip": true}, {"t": 0.5560939311981201, "dur": 0.15, "kind": "type", "text": "type \"milk\"", "shot": "shots/7.jpg", "row": "fold", "chip": true}, {"t": 0.7581367492675781, "kind": "wait", "text": "wait for \"Milk, eggs\"", "ok": true, "detail": "seen after 0.0 s", "shot": "shots/8.jpg", "row": "key", "chip": true}, {"t": 0.7638700008392334, "kind": "check", "text": "\"Groceries: Milk, eggs, and bread.\" is on the screen", "ok": true, "detail": "", "shot": "shots/9.jpg", "row": "key", "chip": true}, {"t": 0.7690198421478271, "kind": "check", "text": "\"Welcome: Your first note\" is not on the screen", "ok": true, "detail": "", "shot": "shots/10.jpg", "row": "key", "chip": true}, {"t": 1.289794683456421, "kind": "check", "text": "net/* p95 below 0.5 in the run", "ok": true, "detail": "p95 0.00245 s", "shot": "shots/11.jpg", "row": "key", "chip": true, "budget": {"glob": "net/*", "stat": "p95", "below": 0.5, "above": null}}, {"t": 2.3276848793029785, "kind": "check", "text": "net/* failed below 1 in the run", "ok": true, "detail": "failed 0", "shot": "shots/12.jpg", "row": "key", "chip": true, "budget": {"glob": "net/*", "stat": "failed", "below": 1.0, "above": null}}], "metrics": {"series": [{"m": "net/127.0.0.1", "kind": "span", "unit": "s", "better": "lower", "stats": {"count": 8, "failed": 0, "p50": 0.00125, "p95": 0.002445, "max": 0.0029}, "spans": [[0.127, 0.0016, true, "GET 127.0.0.1:8791/notes.html", {"wait": 0.0009, "receive": 0.0001}, 200], [0.128, 0.0029, true, "GET 127.0.0.1:8791/app.js", {"connect": 0.0002, "wait": 0.0004, "receive": 0.0001}, 200], [0.133, 0.0008, true, "GET 127.0.0.1:8791/api/notes", {"connect": 0.0002, "wait": 0.0002, "receive": 0.0001}, 200], [0.133, 0.0014, true, "GET 127.0.0.1:8791/api/tags", {"connect": 0.0001, "wait": 0.0004, "receive": 0.0005}, 200], [0.558, 0.0015, true, "GET 127.0.0.1:8791/api/search", {"connect": 0.0003, "wait": 0.0006, "receive": 0.0002}, 200], [0.608, 0.0011, true, "GET 127.0.0.1:8791/api/search", {"connect": 0.0003, "wait": 0.0004, "receive": 0.0001}, 200], [0.659, 0.0009, true, "GET 127.0.0.1:8791/api/search", {"connect": 0.0002, "wait": 0.0003, "receive": 0.0001}, 200], [0.702, 0.0011, true, "GET 127.0.0.1:8791/api/search", {"connect": 0.0002, "wait": 0.0005, "receive": 0.0001}, 200]], "more": 0}, {"m": "input/click", "kind": "span", "unit": "s", "label": "Click latency", "better": "lower", "stats": {"count": 1, "failed": 0, "p50": 0.013, "p95": 0.013, "max": 0.013}, "spans": [[0.334, 0.013, true, "click \"Search notes\""]], "more": 0}, {"m": "input/key", "kind": "span", "unit": "s", "label": "Key latency", "better": "lower", "stats": {"count": 1, "failed": 0, "p50": 0.01, "p95": 0.01, "max": 0.01}, "spans": [[0.556, 0.01, true, "type \"milk\""]], "more": 0}, {"m": "web/heap", "kind": "sample", "unit": "MB", "label": "JS heap", "better": "lower", "stats": {"count": 2, "failed": 0, "p50": 1.34, "p95": 1.34, "max": 1.34}, "points": [[1.138, 1.34], [2.147, 1.34]]}, {"m": "web/nodes", "kind": "sample", "unit": "", "label": "DOM nodes", "better": "lower", "stats": {"count": 2, "failed": 0, "p50": 117.0, "p95": 117.0, "max": 117.0}, "points": [[1.138, 117.0], [2.147, 117.0]]}, {"m": "web/layouts", "kind": "sample", "unit": "/s", "label": "Layouts", "better": "lower", "stats": {"count": 1, "failed": 0, "p50": 0.0, "p95": 0.0, "max": 0.0}, "points": [[2.147, 0.0]]}, {"m": "web/style-recalcs", "kind": "sample", "unit": "/s", "label": "Style recalcs", "better": "lower", "stats": {"count": 1, "failed": 0, "p50": 0.0, "p95": 0.0, "max": 0.0}, "points": [[2.147, 0.0]]}], "budgets": [{"glob": "net/*", "stat": "p95", "below": 0.5, "above": null, "ok": true, "detail": "p95 0.00245 s", "t": 0.773, "series": ["net/127.0.0.1"]}, {"glob": "net/*", "stat": "failed", "below": 1.0, "above": null, "ok": true, "detail": "failed 0", "t": 1.296, "series": ["net/127.0.0.1"]}], "probes": {"browser": {"status": "ok", "note": "{\"browser\": \"Chrome/153.0.8010.12\"}"}, "network": {"status": "ok", "note": "{\"browser\": \"Chrome/153.0.8010.12\"}"}}}, "suite": {"id": "20261122-012728", "title": "Acme Notes"}, "journey": "search"}, {"version": 2, "id": "sign-in-20261122-012733", "title": "Sign in", "about": "A returning user signs in and sees their notes.", "error": "", "verdict": "works", "meta": ["flow sign-in.flow edb25117", "from state web", "motion reduced", "commit a3787a6, uncommitted changes"], "base": "runs/sign-in-20261122-012733/", "length": 5.9, "real": 5.27, "overlay": true, "camera": [[0.0, 0.4983, 0.4994, 1.003], [0.1, 0.4813, 0.4936, 1.039], [0.2, 0.4602, 0.4865, 1.087], [0.3, 0.4423, 0.4806, 1.131], [0.4, 0.4289, 0.4762, 1.166], [0.5, 0.4194, 0.4733, 1.192], [0.6, 0.4128, 0.4714, 1.211], [0.7, 0.4084, 0.4702, 1.224], [0.8, 0.4055, 0.4695, 1.233], [0.9, 0.4035, 0.469, 1.239], [1.0, 0.4023, 0.4688, 1.243], [1.1, 0.4014, 0.4686, 1.245], [1.2, 0.4009, 0.4685, 1.247], [1.3, 0.4006, 0.4778, 1.248], [1.4, 0.4004, 0.4941, 1.249], [1.5, 0.4272, 0.5088, 1.249], [1.6, 0.4524, 0.5199, 1.25], [1.7, 0.4698, 0.5276, 1.25], [1.8, 0.4813, 0.5326, 1.25], [1.9, 0.4885, 0.5358, 1.25], [2.0, 0.493, 0.5378, 1.25], [2.1, 0.4957, 0.539, 1.25], [2.2, 0.4974, 0.5397, 1.25], [2.3, 0.4983, 0.5402, 1.25], [2.4, 0.4989, 0.5377, 1.238], [2.5, 0.4993, 0.5292, 1.195], [2.6, 0.4996, 0.5205, 1.148], [2.7, 0.4997, 0.5135, 1.107], [2.8, 0.4999, 0.5086, 1.074], [2.9, 0.4999, 0.5054, 1.051], [3.0, 0.4999, 0.5033, 1.034], [3.1, 0.5, 0.502, 1.022], [3.2, 0.5, 0.5012, 1.015], [3.3, 0.5, 0.5007, 1.009], [3.4, 0.5, 0.5004, 1.006], [3.5, 0.5, 0.5002, 1.004], [3.6, 0.5, 0.5001, 1.002], [3.8, 0.5, 0.5, 1.001], [4.0, 0.5, 0.5, 1.0], [5.8, 0.5, 0.5, 1.0]], "when": "2026-11-22 01:27", "clock": [[0.0, 0.0], [0.333, 0.333], [0.338, 0.367], [0.338, 0.4], [0.338, 0.433], [0.338, 0.467], [0.338, 0.5], [0.338, 0.533], [0.338, 0.567], [0.338, 0.6], [0.338, 0.633], [1.433, 1.733], [1.456, 1.767], [1.456, 1.8], [1.456, 1.833], [1.456, 1.867], [1.456, 1.9], [1.456, 1.933], [1.456, 1.967], [1.456, 2.0], [1.456, 2.033], [1.467, 2.067], [5.267, 5.867]], "states": [{"name": "Home", "t": 0.11966991424560547, "end": 0.17261099815368652, "ok": true}, {"name": "Sign in", "t": 0.17261099815368652, "end": 1.6893310546875, "ok": null}, {"name": "Notes", "t": 1.6893310546875, "end": 5.27, "ok": true}], "events": [{"t": 0.11966991424560547, "kind": "state", "text": "Home", "row": "key"}, {"t": 0.1249990463256836, "kind": "step", "text": "Open Acme Notes", "row": "key"}, {"t": 0.12941980361938477, "kind": "open", "text": "open http://127.0.0.1:8791/", "shot": "shots/2.jpg", "row": "fold", "chip": true}, {"t": 0.1662130355834961, "kind": "wait", "text": "wait for \"Welcome back\"", "ok": true, "detail": "seen after 0.0 s", "shot": "shots/3.jpg", "row": "key", "chip": true}, {"t": 0.17261099815368652, "kind": "state", "text": "Sign in", "row": "key"}, {"t": 0.17739105224609375, "kind": "step", "text": "Sign in", "row": "key"}, {"t": 0.3384101390838623, "kind": "click", "text": "click \"Email\"", "shot": "shots/6.jpg", "row": "fold", "chip": true}, {"t": 0.5614659786224365, "dur": 0.68, "kind": "type", "text": "type \"sam@example.com\"", "shot": "shots/7.jpg", "row": "fold", "chip": true}, {"t": 1.4562430381774902, "kind": "click", "text": "click \"Sign in\"", "shot": "shots/8.jpg", "row": "fold", "chip": true}, {"t": 1.6893310546875, "kind": "state", "text": "Notes", "row": "key"}, {"t": 1.6993398666381836, "kind": "wait", "text": "wait for \"Your notes\"", "ok": true, "detail": "seen after 0.0 s", "shot": "shots/10.jpg", "row": "key", "chip": true}, {"t": 1.7150979042053223, "kind": "check", "text": "\"Signed in as sam@example.com\" is on the screen", "ok": true, "detail": "", "shot": "shots/11.jpg", "row": "key", "chip": true}, {"t": 2.489975929260254, "kind": "check", "text": "net/* p95 below 0.5 in the run", "ok": true, "detail": "p95 0.00348 s", "shot": "shots/12.jpg", "row": "key", "chip": true, "budget": {"glob": "net/*", "stat": "p95", "below": 0.5, "above": null}}, {"t": 3.2743589878082275, "kind": "check", "text": "net/* failed below 1 in the run", "ok": true, "detail": "failed 0", "shot": "shots/13.jpg", "row": "key", "chip": true, "budget": {"glob": "net/*", "stat": "failed", "below": 1.0, "above": null}}], "metrics": {"series": [{"m": "net/127.0.0.1", "kind": "span", "unit": "s", "better": "lower", "stats": {"count": 5, "failed": 0, "p50": 0.0014, "p95": 0.00348, "max": 0.0039}, "spans": [[0.136, 0.0011, true, "GET 127.0.0.1:8791/", {"wait": 0.0004, "receive": 0.0002}, 200], [1.478, 0.0018, true, "GET 127.0.0.1:8791/notes.html", {"wait": 0.0008, "receive": 0.0002}, 200], [1.477, 0.0039, true, "GET 127.0.0.1:8791/app.js", {"wait": 0.0005, "receive": 0.0001}, 200], [1.483, 0.0011, true, "GET 127.0.0.1:8791/api/tags", {"connect": 0.0001, "wait": 0.0003, "receive": 0.0002}, 200], [1.483, 0.0014, true, "GET 127.0.0.1:8791/api/notes", {"connect": 0.0003, "wait": 0.0007, "receive": 0.0001}, 200]], "more": 0}, {"m": "input/click", "kind": "span", "unit": "s", "label": "Click latency", "better": "lower", "stats": {"count": 2, "failed": 0, "p50": 0.012, "p95": 0.0147, "max": 0.015}, "spans": [[0.339, 0.009, true, "click \"Email\""], [1.456, 0.015, true, "click \"Sign in\""]], "more": 0}, {"m": "input/key", "kind": "span", "unit": "s", "label": "Key latency", "better": "lower", "stats": {"count": 1, "failed": 0, "p50": 0.009, "p95": 0.009, "max": 0.009}, "spans": [[0.561, 0.009, true, "type :email\""]], "more": 0}, {"m": "web/heap", "kind": "sample", "unit": "MB", "label": "JS heap", "better": "lower", "stats": {"count": 3, "failed": 0, "p50": 1.58, "p95": 1.58, "max": 1.58}, "points": [[1.146, 1.08], [2.233, 1.58], [3.244, 1.58]]}, {"m": "web/nodes", "kind": "sample", "unit": "", "label": "DOM nodes", "better": "lower", "stats": {"count": 3, "failed": 0, "p50": 131.0, "p95": 131.0, "max": 131.0}, "points": [[1.146, 58.0], [2.233, 131.0], [3.244, 131.0]]}, {"m": "web/layouts", "kind": "sample", "unit": "/s", "label": "Layouts", "better": "lower", "stats": {"count": 1, "failed": 0, "p50": 0.0, "p95": 0.0, "max": 0.0}, "points": [[3.244, 0.0]]}, {"m": "web/style-recalcs", "kind": "sample", "unit": "/s", "label": "Style recalcs", "better": "lower", "stats": {"count": 1, "failed": 0, "p50": 0.0, "p95": 0.0, "max": 0.0}, "points": [[3.244, 0.0]]}], "budgets": [{"glob": "net/*", "stat": "p95", "below": 0.5, "above": null, "ok": true, "detail": "p95 0.00348 s", "t": 1.72, "series": ["net/127.0.0.1"]}, {"glob": "net/*", "stat": "failed", "below": 1.0, "above": null, "ok": true, "detail": "failed 0", "t": 2.5, "series": ["net/127.0.0.1"]}], "probes": {"browser": {"status": "ok", "note": "{\"browser\": \"Chrome/153.0.8010.12\"}"}, "network": {"status": "ok", "note": "{\"browser\": \"Chrome/153.0.8010.12\"}"}}}, "suite": {"id": "20261122-012728", "title": "Acme Notes"}, "journey": "sign-in"}, {"version": 2, "id": "write-note-20261122-012738", "title": "Write and save a note", "about": "A user writes a note and saves it. The note must show in the list.", "error": "", "verdict": "works", "meta": ["flow write-note.flow ec938b74", "from state web", "motion reduced", "commit a3787a6, uncommitted changes"], "base": "runs/write-note-20261122-012738/", "length": 8.1, "real": 7.17, "overlay": true, "camera": [[0.0, 0.4983, 0.4983, 1.003], [0.1, 0.4813, 0.4813, 1.039], [0.2, 0.4602, 0.4602, 1.087], [0.3, 0.4423, 0.4423, 1.131], [0.4, 0.4289, 0.4289, 1.166], [0.5, 0.4194, 0.4194, 1.192], [0.6, 0.4128, 0.4128, 1.211], [0.7, 0.4084, 0.4084, 1.224], [0.8, 0.4055, 0.4055, 1.233], [0.9, 0.4035, 0.4035, 1.239], [1.0, 0.4023, 0.4023, 1.243], [1.1, 0.4014, 0.4014, 1.245], [1.2, 0.4009, 0.4009, 1.247], [1.3, 0.4006, 0.4006, 1.248], [1.4, 0.4004, 0.4004, 1.249], [1.5, 0.4002, 0.4002, 1.249], [1.6, 0.4001, 0.4001, 1.25], [1.7, 0.4001, 0.4074, 1.25], [1.8, 0.4001, 0.4127, 1.25], [1.9, 0.4, 0.4161, 1.25], [2.0, 0.4, 0.4182, 1.25], [2.1, 0.4, 0.4195, 1.25], [2.2, 0.4, 0.4203, 1.25], [2.3, 0.4, 0.4208, 1.25], [2.4, 0.4, 0.4211, 1.25], [2.5, 0.4, 0.4212, 1.25], [2.6, 0.4, 0.4213, 1.25], [2.7, 0.4, 0.4214, 1.25], [3.0, 0.4, 0.4215, 1.25], [3.2, 0.4, 0.4267, 1.25], [3.3, 0.4, 0.4438, 1.25], [3.4, 0.4, 0.4612, 1.25], [3.5, 0.4222, 0.4749, 1.25], [3.6, 0.4505, 0.4846, 1.25], [3.7, 0.4694, 0.491, 1.25], [3.8, 0.4815, 0.4952, 1.25], [3.9, 0.489, 0.4978, 1.25], [4.0, 0.4936, 0.4993, 1.25], [4.1, 0.4964, 0.5003, 1.25], [4.2, 0.498, 0.5009, 1.25], [4.3, 0.499, 0.5012, 1.25], [4.4, 0.4995, 0.5012, 1.226], [4.5, 0.4998, 0.5009, 1.179], [4.6, 0.4999, 0.5006, 1.133], [4.7, 0.4999, 0.5004, 1.095], [4.8, 0.5, 0.5003, 1.066], [4.9, 0.5, 0.5002, 1.044], [5.0, 0.5, 0.5001, 1.03], [5.1, 0.5, 0.5001, 1.019], [5.2, 0.5, 0.5, 1.013], [5.3, 0.5, 0.5, 1.008], [5.4, 0.5, 0.5, 1.005], [5.5, 0.5, 0.5, 1.003], [5.6, 0.5, 0.5, 1.002], [5.7, 0.5, 0.5, 1.001], [6.0, 0.5, 0.5, 1.0], [8.0, 0.5, 0.5, 1.0]], "when": "2026-11-22 01:27", "clock": [[0.0, 0.0], [0.253, 0.267], [0.253, 0.3], [0.253, 0.333], [0.253, 0.367], [0.253, 0.4], [0.253, 0.433], [0.253, 0.467], [0.253, 0.5], [0.253, 0.533], [0.267, 0.567], [1.5, 1.8], [1.519, 1.833], [1.519, 1.867], [1.519, 1.9], [1.519, 1.933], [1.519, 1.967], [1.519, 2.0], [1.519, 2.033], [1.519, 2.067], [1.519, 2.1], [1.533, 2.133], [3.1, 3.7], [3.108, 3.733], [3.108, 3.767], [3.108, 3.8], [3.108, 3.833], [3.108, 3.867], [3.108, 3.9], [3.108, 3.933], [3.108, 3.967], [3.108, 4.0], [3.133, 4.033], [7.167, 8.067]], "states": [{"name": "Home", "t": 0.022021055221557617, "end": 0.08625221252441406, "ok": true}, {"name": "Editor", "t": 0.08625221252441406, "end": 3.3371312618255615, "ok": true}, {"name": "Saved", "t": 3.3371312618255615, "end": 7.17, "ok": true}], "events": [{"t": 0.022021055221557617, "kind": "state", "text": "Home", "row": "key"}, {"t": 0.026295185089111328, "kind": "step", "text": "Open the notes list", "row": "key"}, {"t": 0.030227184295654297, "kind": "open", "text": "open http://127.0.0.1:8791/notes.html", "shot": "shots/2.jpg", "row": "fold", "chip": true}, {"t": 0.07929110527038574, "kind": "wait", "text": "wait for \"Your notes\"", "ok": true, "detail": "seen after 0.0 s", "shot": "shots/3.jpg", "row": "key", "chip": true}, {"t": 0.08625221252441406, "kind": "state", "text": "Editor", "row": "key"}, {"t": 0.09233403205871582, "kind": "step", "text": "Write a note", "row": "key"}, {"t": 0.2533750534057617, "kind": "click", "text": "click \"Title\"", "shot": "shots/6.jpg", "row": "fold", "chip": true}, {"t": 0.46973705291748047, "dur": 0.82, "kind": "type", "text": "type \"Trip plan 5ab6e673\"", "shot": "shots/7.jpg", "row": "fold", "chip": true}, {"t": 1.5192558765411377, "kind": "click", "text": "click \"Write a note\"", "shot": "shots/8.jpg", "row": "fold", "chip": true}, {"t": 1.7358412742614746, "dur": 1.15, "kind": "type", "text": "type \"Book the train on Friday\"", "shot": "shots/9.jpg", "row": "fold", "chip": true}, {"t": 2.941911220550537, "kind": "step", "text": "Save it", "row": "key"}, {"t": 3.1082561016082764, "kind": "click", "text": "click \"Save note\"", "shot": "shots/11.jpg", "row": "fold", "chip": true}, {"t": 3.325468063354492, "kind": "wait", "text": "wait for \"Note saved\"", "ok": true, "detail": "seen after 0.0 s", "shot": "shots/12.jpg", "row": "key", "chip": true}, {"t": 3.3371312618255615, "kind": "state", "text": "Saved", "row": "key"}, {"t": 3.3429689407348633, "kind": "check", "text": "\"Trip plan 5ab6e673: Book the train on Friday\" is on the screen", "ok": true, "detail": "", "shot": "shots/14.jpg", "row": "key", "chip": true}, {"t": 4.117666959762573, "kind": "check", "text": "net/* p95 below 0.5 in the run", "ok": true, "detail": "p95 0.0023 s", "shot": "shots/15.jpg", "row": "key", "chip": true, "budget": {"glob": "net/*", "stat": "p95", "below": 0.5, "above": null}}, {"t": 5.1668641567230225, "kind": "check", "text": "net/* failed below 1 in the run", "ok": true, "detail": "failed 0", "shot": "shots/16.jpg", "row": "key", "chip": true, "budget": {"glob": "net/*", "stat": "failed", "below": 1.0, "above": null}}], "metrics": {"series": [{"m": "net/127.0.0.1", "kind": "span", "unit": "s", "better": "lower", "stats": {"count": 6, "failed": 0, "p50": 0.00105, "p95": 0.0023, "max": 0.0026}, "spans": [[0.036, 0.0011, true, "GET 127.0.0.1:8791/notes.html", {"wait": 0.0004, "receive": 0.0001}, 200], [0.039, 0.0026, true, "GET 127.0.0.1:8791/app.js", {"connect": 0.0002, "wait": 0.0003, "receive": 0.0001}, 200], [0.044, 0.0008, true, "GET 127.0.0.1:8791/api/notes", {"connect": 0.0002, "wait": 0.0003, "receive": 0.0001}, 200], [0.044, 0.0008, true, "GET 127.0.0.1:8791/api/tags", {"connect": 0.0001, "wait": 0.0003, "receive": 0.0}, 200], [3.125, 0.001, true, "GET 127.0.0.1:8791/api/notes", {"connect": 0.0002, "wait": 0.0003, "receive": 0.0001}, 200], [3.175, 0.0014, true, "POST 127.0.0.1:8791/api/notes", {"connect": 0.0004, "wait": 0.0004, "receive": 0.0001}, 201]], "more": 0}, {"m": "input/click", "kind": "span", "unit": "s", "label": "Click latency", "better": "lower", "stats": {"count": 3, "failed": 0, "p50": 0.01, "p95": 0.0127, "max": 0.013}, "spans": [[0.253, 0.013, true, "click \"Title\""], [1.52, 0.009, true, "click \"Write a note\""], [3.109, 0.01, true, "click \"Save note\""]], "more": 0}, {"m": "input/key", "kind": "span", "unit": "s", "label": "Key latency", "better": "lower", "stats": {"count": 2, "failed": 0, "p50": 0.01, "p95": 0.01, "max": 0.01}, "spans": [[0.469, 0.01, true, "type \"Trip plan 5ab6e673\""], [1.736, 0.01, true, "type \"Book the train on Friday\""]], "more": 0}, {"m": "web/heap", "kind": "sample", "unit": "MB", "label": "JS heap", "better": "lower", "stats": {"count": 5, "failed": 0, "p50": 1.36, "p95": 1.56, "max": 1.56}, "points": [[1.045, 1.22], [2.052, 1.26], [3.062, 1.36], [4.07, 1.56], [5.08, 1.56]]}, {"m": "web/nodes", "kind": "sample", "unit": "", "label": "DOM nodes", "better": "lower", "stats": {"count": 5, "failed": 0, "p50": 89.0, "p95": 109.0, "max": 109.0}, "points": [[1.045, 85.0], [2.052, 87.0], [3.062, 89.0], [4.07, 109.0], [5.08, 109.0]]}, {"m": "web/layouts", "kind": "sample", "unit": "/s", "label": "Layouts", "better": "lower", "stats": {"count": 4, "failed": 0, "p50": 7.45, "p95": 16.37, "max": 16.8}, "points": [[2.052, 13.9], [3.062, 16.8], [4.07, 1.0], [5.08, 0.0]]}, {"m": "web/style-recalcs", "kind": "sample", "unit": "/s", "label": "Style recalcs", "better": "lower", "stats": {"count": 4, "failed": 0, "p50": 10.9, "p95": 18.59, "max": 18.9}, "points": [[2.052, 18.9], [3.062, 16.8], [4.07, 5.0], [5.08, 0.0]]}], "budgets": [{"glob": "net/*", "stat": "p95", "below": 0.5, "above": null, "ok": true, "detail": "p95 0.0023 s", "t": 3.349, "series": ["net/127.0.0.1"]}, {"glob": "net/*", "stat": "failed", "below": 1.0, "above": null, "ok": true, "detail": "failed 0", "t": 4.13, "series": ["net/127.0.0.1"]}], "probes": {"browser": {"status": "ok", "note": "{\"browser\": \"Chrome/153.0.8010.12\"}"}, "network": {"status": "ok", "note": "{\"browser\": \"Chrome/153.0.8010.12\"}"}}}, "suite": {"id": "20261122-012728", "title": "Acme Notes"}, "journey": "write-note"}, {"version": 2, "id": "search-20261122-012747", "title": "Search notes, tags down", "about": "A user searches their notes. The matching note must show fast.", "error": "", "verdict": "problem", "meta": ["flow search.flow 354be3e7", "from state web", "motion reduced", "commit a3787a6, uncommitted changes"], "base": "runs/search-20261122-012747/", "length": 4.57, "real": 4.24, "overlay": true, "camera": [[0.0, 0.4983, 0.4983, 1.003], [0.1, 0.4813, 0.4813, 1.039], [0.2, 0.4602, 0.4602, 1.087], [0.3, 0.4423, 0.4423, 1.131], [0.4, 0.4289, 0.4289, 1.166], [0.5, 0.4194, 0.4194, 1.192], [0.6, 0.4128, 0.4128, 1.211], [0.7, 0.4084, 0.4084, 1.224], [0.8, 0.4055, 0.4055, 1.233], [0.9, 0.4035, 0.4035, 1.239], [1.0, 0.4023, 0.4023, 1.243], [1.1, 0.4014, 0.4014, 1.245], [1.2, 0.4009, 0.4009, 1.247], [1.3, 0.4086, 0.4086, 1.224], [1.4, 0.4244, 0.4244, 1.178], [1.5, 0.4415, 0.4415, 1.133], [1.6, 0.4569, 0.4569, 1.094], [1.7, 0.4694, 0.4694, 1.065], [1.8, 0.4788, 0.4788, 1.044], [1.9, 0.4857, 0.4857, 1.029], [2.0, 0.4907, 0.4905, 1.019], [2.1, 0.4945, 0.4938, 1.013], [2.2, 0.4968, 0.496, 1.008], [2.3, 0.4981, 0.4977, 1.005], [2.4, 0.4989, 0.4987, 1.003], [2.5, 0.4994, 0.4992, 1.002], [2.6, 0.4996, 0.4996, 1.001], [2.7, 0.4998, 0.4997, 1.001], [2.8, 0.4999, 0.4999, 1.001], [2.9, 0.4999, 0.4999, 1.0], [3.0, 0.5, 0.5, 1.0], [4.5, 0.5, 0.5, 1.0]], "when": "2026-11-22 01:27", "clock": [[0.0, 0.0], [0.233, 0.233], [0.237, 0.267], [0.237, 0.3], [0.237, 0.333], [0.237, 0.367], [0.237, 0.4], [0.237, 0.433], [0.237, 0.467], [0.237, 0.5], [0.237, 0.533], [0.267, 0.567], [4.233, 4.533]], "states": [{"name": "Home", "t": 0.014598846435546875, "end": 0.07234692573547363, "ok": true}, {"name": "Search", "t": 0.07234692573547363, "end": 4.24, "ok": false}], "events": [{"t": 0.014598846435546875, "kind": "state", "text": "Home", "row": "key"}, {"t": 0.018765687942504883, "kind": "step", "text": "Open the notes list", "row": "key"}, {"t": 0.0222320556640625, "kind": "open", "text": "open http://127.0.0.1:8791/notes.html", "shot": "shots/2.jpg", "row": "fold", "chip": true}, {"t": 0.06553196907043457, "kind": "wait", "text": "wait for \"Your notes\"", "ok": true, "detail": "seen after 0.0 s", "shot": "shots/3.jpg", "row": "key", "chip": true}, {"t": 0.07234692573547363, "kind": "state", "text": "Search", "row": "key"}, {"t": 0.07687711715698242, "kind": "step", "text": "Search for groceries", "row": "key"}, {"t": 0.23696374893188477, "kind": "click", "text": "click \"Search notes\"", "shot": "shots/6.jpg", "row": "fold", "chip": true}, {"t": 0.45845890045166016, "dur": 0.15, "kind": "type", "text": "type \"milk\"", "shot": "shots/7.jpg", "row": "fold", "chip": true}, {"t": 0.6669356822967529, "kind": "wait", "text": "wait for \"Milk, eggs\"", "ok": true, "detail": "seen after 0.0 s", "shot": "shots/8.jpg", "row": "key", "chip": true}, {"t": 0.6722369194030762, "kind": "check", "text": "\"Groceries: Milk, eggs, and bread.\" is on the screen", "ok": true, "detail": "", "shot": "shots/9.jpg", "row": "key", "chip": true}, {"t": 0.6774868965148926, "kind": "check", "text": "\"Welcome: Your first note\" is not on the screen", "ok": true, "detail": "", "shot": "shots/10.jpg", "row": "key", "chip": true}, {"t": 1.2053430080413818, "kind": "check", "text": "net/* p95 below 0.5 in the run", "ok": true, "detail": "p95 0.00279 s", "shot": "shots/11.jpg", "row": "key", "chip": true, "budget": {"glob": "net/*", "stat": "p95", "below": 0.5, "above": null}}, {"t": 2.244797945022583, "kind": "check", "text": "net/* failed below 1 in the run", "ok": false, "detail": "failed 1", "shot": "shots/12.jpg", "row": "key", "chip": true, "budget": {"glob": "net/*", "stat": "failed", "below": 1.0, "above": null}}], "metrics": {"series": [{"m": "net/127.0.0.1", "kind": "span", "unit": "s", "better": "lower", "stats": {"count": 8, "failed": 1, "p50": 0.001, "p95": 0.00279, "max": 0.003}, "spans": [[0.029, 0.0012, true, "GET 127.0.0.1:8791/notes.html", {"wait": 0.0006, "receive": 0.0001}, 200], [0.03, 0.003, true, "GET 127.0.0.1:8791/app.js", {"connect": 0.0002, "wait": 0.0006, "receive": 0.0001}, 200], [0.035, 0.0009, true, "GET 127.0.0.1:8791/api/notes", {"connect": 0.0002, "wait": 0.0002, "receive": 0.0002}, 200], [0.036, 0.0009, false, "GET 127.0.0.1:8791/api/tags", {"connect": 0.0001, "wait": 0.0003, "receive": 0.0002}, 500], [0.461, 0.0024, true, "GET 127.0.0.1:8791/api/search", {"connect": 0.0003, "wait": 0.0011, "receive": 0.0003}, 200], [0.526, 0.0011, true, "GET 127.0.0.1:8791/api/search", {"connect": 0.0003, "wait": 0.0004, "receive": 0.0001}, 200], [0.561, 0.0009, true, "GET 127.0.0.1:8791/api/search", {"connect": 0.0002, "wait": 0.0003, "receive": 0.0001}, 200], [0.627, 0.0009, true, "GET 127.0.0.1:8791/api/search", {"connect": 0.0003, "wait": 0.0003, "receive": 0.0001}, 200]], "more": 0}, {"m": "input/click", "kind": "span", "unit": "s", "label": "Click latency", "better": "lower", "stats": {"count": 1, "failed": 0, "p50": 0.013, "p95": 0.013, "max": 0.013}, "spans": [[0.237, 0.013, true, "click \"Search notes\""]], "more": 0}, {"m": "input/key", "kind": "span", "unit": "s", "label": "Key latency", "better": "lower", "stats": {"count": 1, "failed": 0, "p50": 0.012, "p95": 0.012, "max": 0.012}, "spans": [[0.458, 0.012, true, "type \"milk\""]], "more": 0}, {"m": "web/heap", "kind": "sample", "unit": "MB", "label": "JS heap", "better": "lower", "stats": {"count": 2, "failed": 0, "p50": 1.34, "p95": 1.34, "max": 1.34}, "points": [[1.038, 1.34], [2.048, 1.34]]}, {"m": "web/nodes", "kind": "sample", "unit": "", "label": "DOM nodes", "better": "lower", "stats": {"count": 2, "failed": 0, "p50": 117.0, "p95": 117.0, "max": 117.0}, "points": [[1.038, 117.0], [2.048, 117.0]]}, {"m": "web/layouts", "kind": "sample", "unit": "/s", "label": "Layouts", "better": "lower", "stats": {"count": 1, "failed": 0, "p50": 0.0, "p95": 0.0, "max": 0.0}, "points": [[2.048, 0.0]]}, {"m": "web/style-recalcs", "kind": "sample", "unit": "/s", "label": "Style recalcs", "better": "lower", "stats": {"count": 1, "failed": 0, "p50": 0.0, "p95": 0.0, "max": 0.0}, "points": [[2.048, 0.0]]}], "budgets": [{"glob": "net/*", "stat": "p95", "below": 0.5, "above": null, "ok": true, "detail": "p95 0.00279 s", "t": 0.682, "series": ["net/127.0.0.1"]}, {"glob": "net/*", "stat": "failed", "below": 1.0, "above": null, "ok": false, "detail": "failed 1", "t": 1.212, "series": ["net/127.0.0.1"]}], "probes": {"browser": {"status": "ok", "note": "{\"browser\": \"Chrome/153.0.8010.12\"}"}, "network": {"status": "ok", "note": "{\"browser\": \"Chrome/153.0.8010.12\"}"}}}, "suite": {"id": "20261122-012746", "title": "Acme Notes"}, "journey": "search"}]</script>
+<script>// The state machine of a review folder: the path of every run through its states, merged into one graph and laid
+// out from top to bottom. Pure functions: the page draws the result, and node runs the tests.
+const Machine = (() => {
+  const START = "Start";
+
+  // A node for each state name, and an edge for each pair of states that follow each other in a run. Each visit and
+  // each step along an edge remembers its run and its place in that run's path.
+  function build(runs) {
+    const nodes = new Map(), edges = new Map();
+    const node = id => nodes.get(id) || nodes.set(id, { id, visits: [] }).get(id);
+    runs.forEach((r, run) => {
+      if (!r.states || !r.states.length) return;
+      let from = node(START).id;
+      r.states.forEach((v, visit) => {
+        node(v.name).visits.push({ run, visit });
+        const key = JSON.stringify([from, v.name]);
+        if (!edges.has(key)) edges.set(key, { from, to: v.name, takes: [] });
+        edges.get(key).takes.push({ run, visit });
+        from = v.name;
+      });
+    });
+    return { nodes: [...nodes.values()], edges: [...edges.values()] };
+  }
+
+  // Layers come from the longest path from Start, with the edges that go back (loops) left out. A long edge gets a
+  // point on each layer that it crosses. Each layer is sorted by the mean place of its neighbours, down and up a few
+  // times, to cut crossings. Edges that go back run in lanes at the side nearer to where they start.
+  // size(id) gives a node's [width, height]. Returns nodes with x, y, w, h, and edges with an SVG path d and a
+  // label place [x, y, anchor, slope] (the slope is how far the curve runs sideways for each unit down at the label).
+  function layout(graph, size, gap = { x: 28, y: 56, lane: 14 }) {
+    const out = new Map(graph.nodes.map(n => [n.id, []]));
+    for (const e of graph.edges) out.get(e.from).push(e);
+    const seen = new Map(), back = new Set(), order = [];
+    const walk = id => {
+      seen.set(id, 1);
+      for (const e of out.get(id)) {
+        if (seen.get(e.to) === 1) back.add(e);
+        else if (!seen.has(e.to)) walk(e.to);
+      }
+      seen.set(id, 2);
+      order.unshift(id);
+    };
+    for (const n of graph.nodes) if (!seen.has(n.id)) walk(n.id);
+    const rank = new Map(order.map(id => [id, 0]));
+    for (const id of order) for (const e of out.get(id)) if (!back.has(e)) rank.set(e.to, Math.max(rank.get(e.to), rank.get(id) + 1));
+
+    const layers = [], items = new Map();
+    const put = item => { (layers[item.rank] = layers[item.rank] || []).push(item); return item; };
+    for (const id of order) {
+      const [w, h] = size(id);
+      items.set(id, put({ id, w, h, rank: rank.get(id), up: [], down: [] }));
+    }
+    const routes = graph.edges.map(e => {
+      const chain = [items.get(e.from)];
+      if (back.has(e)) chain.push(items.get(e.to));
+      else {
+        for (let r = rank.get(e.from) + 1; r < rank.get(e.to); r++) chain.push(put({ w: 8, h: 0, rank: r, up: [], down: [], dummy: true }));
+        chain.push(items.get(e.to));
+        for (let i = 1; i < chain.length; i++) { chain[i - 1].down.push(chain[i]); chain[i].up.push(chain[i - 1]); }
+      }
+      return { edge: e, back: back.has(e), chain };
+    });
+
+    layers.forEach(l => l.forEach((it, i) => { it.order = i; }));
+    const mean = list => list.length ? list.reduce((s, it) => s + it.order, 0) / list.length : null;
+    for (let pass = 0; pass < 4; pass++) {
+      const down = pass % 2 === 0;
+      for (const layer of down ? layers.slice(1) : layers.slice(0, -1).reverse()) {
+        const key = new Map(layer.map(it => [it, mean(down ? it.up : it.down) ?? it.order]));
+        layer.sort((a, b) => key.get(a) - key.get(b) || a.order - b.order);
+        layer.forEach((it, i) => { it.order = i; });
+      }
+    }
+
+    const span = l => l.reduce((s, it) => s + it.w, 0) + gap.x * (l.length - 1);
+    const inner = Math.max(...layers.map(span));
+    let top = 0;
+    const rows = layers.map(l => {
+      const h = Math.max(...l.map(it => it.h)), row = { top, h };
+      let x = (inner - span(l)) / 2;
+      for (const it of l) { it.x = x; it.y = top + (h - it.h) / 2; x += it.w + gap.x; }
+      top += h + gap.y;
+      return row;
+    });
+    const loops = routes.filter(r => r.back && r.edge.from !== r.edge.to);
+    const side = r => r.chain[0].x + r.chain[0].w / 2 < inner / 2 ? "left" : "right";
+    const lanes = { left: loops.filter(r => side(r) === "left"), right: loops.filter(r => side(r) === "right") };
+    const margin = gap.lane * (lanes.left.length + 1);
+    for (const it of items.values()) it.x += margin;
+    for (const l of layers) for (const it of l) if (it.dummy) it.x += margin;
+
+    const curve = (a, b) => ` C${a[0]},${(a[1] + b[1]) / 2} ${b[0]},${(a[1] + b[1]) / 2} ${b[0]},${b[1]}`;
+    const edges = routes.map(r => {
+      const [a, b] = [r.chain[0], r.chain[r.chain.length - 1]];
+      let d, label = null;
+      if (r.back && a === b) {
+        const [x, y] = [a.x + a.w, a.y + a.h / 2];
+        d = `M${x},${y - 6} C${x + 26},${y - 20} ${x + 26},${y + 20} ${x},${y + 6}`;
+      } else if (r.back) {
+        const left = side(r) === "left", k = lanes[left ? "left" : "right"].indexOf(r) + 1;
+        const lane = left ? margin - gap.lane * k : margin + inner + gap.lane * k;
+        const [x1, y1, x2, y2] = left ? [a.x, a.y + a.h / 2, b.x, b.y + b.h / 2] : [a.x + a.w, a.y + a.h / 2, b.x + b.w, b.y + b.h / 2];
+        const s = left ? -1 : 1, bend = Math.min(8, Math.abs(y1 - y2) / 2);
+        d = `M${x1},${y1} H${lane - s * bend} Q${lane},${y1} ${lane},${y1 - bend} V${y2 + bend} Q${lane},${y2} ${lane - s * bend},${y2} H${x2}`;
+      } else {
+        const points = [[a.x + a.w / 2, a.y + a.h]];
+        for (const it of r.chain.slice(1, -1)) {
+          const row = rows[it.rank];
+          points.push([it.x + it.w / 2, row.top], [it.x + it.w / 2, row.top + row.h]);
+        }
+        points.push([b.x + b.w / 2, b.y]);
+        d = `M${points[0]}`;
+        for (let i = 1; i < points.length; i++) d += i % 2 ? curve(points[i - 1], points[i]) : ` L${points[i]}`;
+        // An edge that leans left keeps its label on the left, so the labels of a branch do not run into each other.
+        const lean = Math.sign(points[1][0] - points[0][0]);
+        const slope = 1.5 * Math.abs(points[1][0] - points[0][0]) / Math.max(1, points[1][1] - points[0][1]);
+        label = [(points[0][0] + points[1][0]) / 2, (points[0][1] + points[1][1]) / 2, lean < 0 ? "end" : "start", slope];
+      }
+      return { ...r.edge, back: r.back, d, label };
+    });
+    const nodes = order.map(id => { const { x, y, w, h } = items.get(id); return { id, x, y, w, h }; });
+    const width = margin + inner + gap.lane * (lanes.right.length + 1) + (routes.some(r => r.back && r.edge.from === r.edge.to) ? 28 : 0);
+    return { width, height: top - gap.y, nodes, edges };
+  }
+
+  // A node's verdict in one run: "bad" when a visit failed, "ok" when one passed, "unchecked" when it was visited
+  // with no checks, and null when the run did not visit it.
+  function verdict(states, id) {
+    const visits = (states || []).filter(v => v.name === id);
+    if (!visits.length) return null;
+    return visits.some(v => v.ok === false) ? "bad" : visits.some(v => v.ok) ? "ok" : "unchecked";
+  }
+
+
+  function at(run, t) {
+    return (run.states || []).find(v => v.t <= t && (v.end == null || t < v.end)) || null;
+  }
+  function sections(run) {
+    const events = (run.events || []).filter(e => e.kind !== "state"), states = run.states || [];
+    const part = (visit, from, to, back) => {
+      const mine = events.filter(e => e.t >= from && e.t < to), checks = mine.filter(e => e.kind === "check" && !e.budget);
+      return { visit, name: visit ? visit.name : null, t: from, ok: visit ? visit.ok : null, back, events: mine,
+        passed: checks.filter(e => e.ok).length, total: checks.length };
+    };
+    if (!states.length) return [part(null, -Infinity, Infinity, null)];
+    const seen = new Set(), out = [];
+    if (events.some(e => e.t < states[0].t)) out.push(part(null, -Infinity, states[0].t, null));
+    states.forEach((v, i) => {
+      out.push(part(v, v.t, i === states.length - 1 || v.end == null ? Infinity : v.end, seen.has(v.name) ? v.name : null));
+      seen.add(v.name);
+    });
+    return out;
+  }
+  function now(list, t) {
+    let i = 0;
+    list.forEach((s, k) => { if (s.t <= t) i = k; });
+    let j = -1;
+    list[i].events.forEach((e, k) => { if (e.t <= t + 0.05) j = k; });
+    return { section: i, event: j };
+  }
+
+  return { START, build, layout, verdict, at, sections, now };
+})();
+if (typeof module === "object") module.exports = Machine;
+// Metric tracks on the video's time axis: the time map, bins to draw, rows for spans, and the value at a time.
+// Pure functions: the page draws with them, and node runs the tests.
+const Tracks = (() => {
+  // The run's clock: [real, video] points joined by straight lines. along() maps one column to the other. A value
+  // that two points share (a hold at a click: real time stops) maps to the first of them, the start of the hold.
+  // Points are rounded to 1 ms, so a value within half of that of a point is at the point.
+  function along(knots, x, y, value) {
+    if (knots.length < 2) return value;
+    let i = 1;
+    while (i < knots.length - 1 && knots[i][x] < value - 5e-4) i++;
+    const [a, b] = [knots[i - 1], knots[i]];
+    return b[x] > a[x] ? a[y] + (b[y] - a[y]) * (value - a[x]) / (b[x] - a[x]) : a[y];
+  }
+
+  // video(real), real(video), speed(video), and the stretches that play at least min times faster than real time:
+  // [{from, to, speed}] in video seconds, the speed being the fastest part of the stretch.
+  function timemap(knots) {
+    const rate = i => knots[i][1] > knots[i - 1][1] ? (knots[i][0] - knots[i - 1][0]) / (knots[i][1] - knots[i - 1][1]) : 1;
+    const speed = video => {
+      let i = 1;
+      while (i < knots.length - 1 && knots[i][1] <= video) i++;
+      return knots.length > 1 ? rate(i) : 1;
+    };
+    const stretches = (min = 1.5) => {
+      const out = [];
+      for (let i = 1; i < knots.length; i++) {
+        const s = rate(i), last = out[out.length - 1];
+        if (s < min) continue;
+        if (last && last.to === knots[i - 1][1]) { last.to = knots[i][1]; last.speed = Math.max(last.speed, s); }
+        else out.push({ from: knots[i - 1][1], to: knots[i][1], speed: s });
+      }
+      return out;
+    };
+    return { video: real => along(knots, 0, 1, real), real: video => along(knots, 1, 0, video), speed, stretches };
+  }
+
+  // Points [t, v] or [t, v, lo, hi] in width columns, x(t) giving a column: each column that has points gets
+  // {lo, hi, v} (the lowest, the highest, the mean), so a spike stays when many points share one column.
+  function bin(points, x, width) {
+    const out = new Array(width).fill(null), n = new Array(width).fill(0);
+    for (const [t, v, lo = v, hi = v] of points) {
+      const i = Math.floor(x(t));
+      if (i < 0 || i >= width) continue;
+      const c = out[i];
+      out[i] = c ? { lo: Math.min(c.lo, lo), hi: Math.max(c.hi, hi), v: c.v + v } : { lo, hi, v };
+      n[i]++;
+    }
+    return out.map((c, i) => c && { ...c, v: c.v / n[i] });
+  }
+
+  // Spans [{from, to}] (sorted by from) in at most rows rows, with gap between two spans in a row. Returns the row of
+  // each span (-1 when it does not fit) and how many did not fit.
+  function pack(spans, rows, gap = 1) {
+    const ends = [];
+    let more = 0;
+    const row = spans.map(s => {
+      let r = ends.findIndex(end => end + gap <= s.from);
+      if (r < 0 && ends.length < rows) r = ends.push(-Infinity) - 1;
+      if (r < 0) { more++; return -1; }
+      ends[r] = Math.max(s.to, s.from + gap);
+      return r;
+    });
+    return { row, more };
+  }
+
+  // A series' value at real time t: the last sample, the length of the last span that ended, or the number of
+  // marks so far. null when nothing came yet.
+  function valueAt(series, t) {
+    if (series.kind === "sample") {
+      let last = null;
+      for (const p of series.points || []) { if (p[0] > t) break; last = p[1]; }
+      return last;
+    }
+    if (series.kind === "span") {
+      let last = null, end = -Infinity;
+      for (const [from, d] of series.spans || []) if (from + d <= t && from + d >= end) { end = from + d; last = d; }
+      return last;
+    }
+    return (series.marks || []).filter(m => m[0] <= t).length;
+  }
+
+  // Requests (spans that have phases) on one real-time axis, in start order: each row's place and length, and each
+  // phase as [name, from, width], all as fractions of the axis. The phases are laid end to end from the start.
+  function waterfall(series) {
+    const rows = [];
+    for (const s of series) for (const [t, d, ok, label, phases, status] of s.spans || [])
+      if (phases) rows.push({ m: s.m, t, d, ok, label: label || s.m, phases, status });
+    rows.sort((a, b) => a.t - b.t);
+    if (!rows.length) return { rows, names: [], from: 0, to: 0 };
+    const from = rows[0].t, to = Math.max(...rows.map(r => r.t + r.d)), span = to - from || 1;
+    for (const r of rows) {
+      let at = r.t;
+      r.left = (r.t - from) / span;
+      r.width = r.d / span;
+      r.parts = Object.entries(r.phases).map(([name, v]) => { const part = [name, (at - from) / span, v / span]; at += v; return part; });
+    }
+    return { rows, names: [...new Set(rows.flatMap(r => Object.keys(r.phases)))], from, to };
+  }
+
+  // One formatter for every number on the page: under 1 s "9 ms", under 60 s "2.4 s", then "1 m 12 s"; memory in MB or GB;
+  // CPU in %.
+  function duration(v) {
+    if (v < 1) return `${Math.round(v * 1000)} ms`;
+    if (v < 59.95) return `${v.toFixed(1)} s`;
+    const total = Math.round(v);
+    return `${Math.floor(total / 60)} m ${total % 60} s`;
+  }
+  function format(v, unit) {
+    if (v === null || v === undefined) return "–";
+    if (unit === "s") return duration(v);
+    if (unit === "MB" && Math.abs(v) >= 1024) return `${+(v / 1024).toPrecision(3)} GB`;
+    const n = Math.abs(v) >= 100 ? Math.round(v) : +v.toPrecision(3);
+    return unit === "%" ? `${n}%` : unit ? `${n} ${unit}` : String(n);
+  }
+
+  // Tick times in [from, to] on a nice step (1, 2, 5 times a power of ten), the smallest step that gives at most max ticks.
+  const STEPS = [1, 2, 5].flatMap(b => [-2, -1, 0, 1, 2, 3, 4].map(e => b * 10 ** e)).sort((x, y) => x - y);
+  function ticks(from, to, max = 10) {
+    if (!(to > from)) return [];
+    const count = s => Math.floor(to / s + 1e-9) - Math.ceil(from / s - 1e-9) + 1;
+    const step = STEPS.find(s => count(s) <= max) || STEPS[STEPS.length - 1];
+    const out = [];
+    for (let k = Math.ceil(from / step - 1e-9); k * step <= to + 1e-9; k++) out.push(+(k * step).toFixed(6));
+    return out;
+  }
+
+  function axisLabel(t) {
+    if (t === 0) return "0 s";
+    if (t >= 60 && t % 60 === 0) return `${t / 60} m`;
+    return Number.isInteger(t) && t < 60 ? `${t} s` : duration(t);
+  }
+
+  const GROUPS = { mem: "Memory", cpu: "CPU", host: "Host", net: "Network", web: "Browser", input: "Input" };
+  const groupName = g => GROUPS[g] || g[0].toUpperCase() + g.slice(1);
+
+  // A request label such as "GET host:8791/api/tags" as its method, host, and path.
+  function request(label) {
+    const [, method, url] = /^(\S+) (\S+)$/.exec(label || "") || [];
+    if (!method) return { method: "", host: "", path: label || "" };
+    const at = url.indexOf("/");
+    return at < 0 ? { method, host: url, path: "" } : { method, host: url.slice(0, at), path: url.slice(at) };
+  }
+
+  return { along, timemap, bin, pack, valueAt, waterfall, duration, format, ticks, axisLabel, groupName, request };
+})();
+if (typeof module === "object") module.exports = Tracks;
+// What a run says about itself, in the words the page uses: Pass, Fail, Not checked. A check is a screen check or a
+// budget (a check on a metric; its event has a budget). Pure functions: the page shows the result, and node runs the tests.
+const Verdict = (() => {
+  const T = typeof Tracks === "undefined" ? require("./tracks.js") : Tracks;
+  const RUN = { works: "Pass", problem: "Fail", shown: "No checks" };
+  const VISIT = { ok: "Pass", bad: "Fail", unchecked: "Not checked" };
+  const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+  const sentence = text => text ? text[0].toUpperCase() + text.slice(1) : text;
+  const isBudget = e => e.kind === "check" && !!e.budget;
+  const matches = (glob, m) => new RegExp("^" + glob.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\?/g, ".") + "$").test(m);
+  const seriesOf = run => (run.metrics && run.metrics.series) || [];
+  const NOUN = { net: "requests", input: "inputs" };
+  const STAT = { mean: "Average", min: "Lowest", max: "Highest", last: "Last" };
+  const lowerFirst = text => /^[A-Z]{2}/.test(text) ? text : text[0].toLowerCase() + text.slice(1);
+
+  // The budget as a person says it: "p95 request time: 4 ms (limit 500 ms)", "Failed requests: 1 (limit 0)".
+  // detail is what the check measured, such as "p95 0.0172 s".
+  function budgetText(budget, run, detail) {
+    const mine = seriesOf(run).filter(s => matches(budget.glob, s.m));
+    const group = budget.glob.split("/")[0], counting = budget.stat === "failed" || budget.stat === "count";
+    const noun = NOUN[group] || "measurements";
+    const what = mine.length === 1 && mine[0].label ? mine[0].label : group === "net" ? "request time" : budget.glob;
+    const name = budget.stat === "failed" ? `Failed ${noun}` : budget.stat === "count" ? `Number of ${noun}`
+      : /^p\d+$/.test(budget.stat) ? `${budget.stat} ${lowerFirst(what)}` : `${STAT[budget.stat]} ${lowerFirst(what)}`;
+    const unit = counting ? "" : (mine[0] && mine[0].unit) || "";
+    const found = /^\S+ (-?\d+(?:\.\d+)?(?:e[+-]?\d+)?)/.exec(detail || "");
+    const limit = budget.below !== null && budget.below !== undefined
+      ? `limit ${counting ? Math.ceil(budget.below) - 1 : T.format(budget.below, unit)}`
+      : `minimum ${counting ? budget.above : T.format(budget.above, unit)}`;
+    return found ? `${name}: ${T.format(+found[1], unit)} (${limit})` : `${name} (${limit})`;
+  }
+
+  const budgetOf = (run, e) => budgetText(e.budget, run, e.detail);
+
+  // Screen checks passed of total and budgets failed of total, for a run or for part of it.
+  const tally = events => {
+    const checks = events.filter(e => e.kind === "check" && !e.budget), budgets = events.filter(isBudget);
+    return { checks: { passed: checks.filter(e => e.ok).length, total: checks.length },
+      budgets: { failed: budgets.filter(e => e.ok === false).length, total: budgets.length } };
+  };
+
+  // The tally in words: "3/3 checks", "1 budget failed" (or "2 budgets passed").
+  function words(count) {
+    const out = [];
+    if (count.checks.total) out.push(`${count.checks.passed}/${count.checks.total} checks`);
+    if (count.budgets.failed) out.push(`${plural(count.budgets.failed, "budget")} failed`);
+    else if (count.budgets.total) out.push(`${plural(count.budgets.total, "budget")} passed`);
+    return out;
+  }
+
+  // The tally of a run and its verdict in page words.
+  const summary = run => ({ ...tally(run.events), verdict: { works: "pass", problem: "fail", shown: "none" }[run.verdict] });
+
+  const request = label => {
+    const { method, path } = T.request(label);
+    return method ? `${method} ${path || "/"}` : label;
+  };
+
+  // The worst moment of the series a budget judged: the highest value (the lowest for a minimum).
+  function worst(series, low) {
+    let best = null;
+    const take = (t, v) => { if (best === null || (low ? v < best[1] : v > best[1])) best = [t, v]; };
+    for (const s of series) {
+      for (const p of s.points || []) take(p[0], p[3] ?? p[1]);
+      for (const p of s.spans || []) take(p[0], p[1]);
+      for (const m of s.marks || []) if (best === null) best = [m[0], 0];
+    }
+    return best && best[0];
+  }
+
+  const screen = e => {
+    const quote = /"[^"]*"/.exec(e.text);
+    if (e.kind === "wait") return `${quote ? quote[0] : e.text} did not show${/not seen in (.+)/.exec(e.detail || "") ? ` in ${/not seen in (.+)/.exec(e.detail)[1]}` : ""}`;
+    if (quote && / is not on the screen$/.test(e.text)) return `${quote[0]} still shows`;
+    if (quote && / is on the screen$/.test(e.text)) return `${quote[0]} did not show`;
+    return e.detail ? `${e.text}: ${e.detail}` : e.text;
+  };
+
+  // The first failure in time: { text, t (real seconds), target } where target is the tab the failure lives in
+  // ("network", "stats") or null. A failed budget on requests names the first failed request; another budget gives its
+  // worst value against the limit; a failed wait or screen check says what did not show; a run that stopped says why.
+  function cause(run) {
+    const found = [];
+    for (const e of run.events) {
+      if (e.ok !== false || !["check", "wait"].includes(e.kind)) continue;
+      if (!e.budget) { found.push({ text: screen(e), t: e.t, target: null }); continue; }
+      const mine = seriesOf(run).filter(s => matches(e.budget.glob, s.m));
+      const bad = e.budget.stat === "failed" ? mine.flatMap(s => (s.spans || []).filter(p => p[2] === false)).sort((a, b) => a[0] - b[0])[0] : null;
+      if (bad) found.push({ text: bad[5] ? `${request(bad[3])} returned ${bad[5]}` : `${request(bad[3])} failed`, t: bad[0], target: "network" });
+      else found.push({ text: budgetOf(run, e), t: worst(mine, e.budget.below === null || e.budget.below === undefined) ?? e.t, target: "stats" });
+    }
+    if (run.error) found.push({ text: run.error, t: run.real, target: null });
+    return found.sort((a, b) => a.t - b.t)[0] || null;
+  }
+
+  return { RUN, VISIT, plural, sentence, isBudget, matches, budgetText, budgetOf, tally, words, summary, cause };
+})();
+if (typeof module === "object") module.exports = Verdict;
+const RUNS = JSON.parse(document.getElementById("runs").textContent);
+const $ = (tag, attrs = {}, ...kids) => {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") el.className = v; else if (k === "text") el.textContent = v;
+    else if (k.startsWith("on")) el.addEventListener(k.slice(2), v); else el.setAttribute(k, v);
+  }
+  for (const kid of kids) if (kid) el.append(kid);
+  return el;
+};
+const clock = s => `${Math.floor(s / 60)}:${(s % 60).toFixed(1).padStart(4, "0")}`;
+const VERDICTS = { works: [Verdict.RUN.works, "ok"], problem: [Verdict.RUN.problem, "bad"], shown: [Verdict.RUN.shown, "info"] };
+const toVideo = (r, real) => Tracks.along(r.clock, 0, 1, real);
+const toReal = (r, video) => Tracks.along(r.clock, 1, 0, video);
+const fastest = r => Math.round(Math.max(1, ...Tracks.timemap(r.clock).stretches(1).map(s => s.speed)));
+const caps = {};
+let run = RUNS.length - 1;
+let zoom = true, view = null;
+try { zoom = localStorage.getItem("proofreel-zoom") !== "0"; } catch (err) {}
+const SUITE = RUNS.some(x => x.suite);
+const suiteOf = x => x.suite ? x.suite.id : "";
+if (SUITE && !location.hash) view = "journeys";
+const MACHINE = RUNS.some(x => x.states && x.states.length);
+const VISITS = { ok: [Verdict.VISIT.ok, "ok"], bad: [Verdict.VISIT.bad, "bad"], unchecked: [Verdict.VISIT.unchecked, "info"] };
+const visitVerdict = v => v.ok === false ? "bad" : v.ok ? "ok" : "unchecked";
+let startAt = null, tracksOpen = false, pickState = null;
+const fromHash = () => {
+  const m = /^#run-(\d+)(?:&t=(\d+(?:\.\d+)?))?$/.exec(location.hash);
+  if (m && +m[1] >= 1 && +m[1] <= RUNS.length) { run = +m[1] - 1; startAt = m[2] === undefined ? null : +m[2]; }
+};
+fromHash();
+
+function chip(label, css) { return $("span", { class: `chip ${css}`, text: label }); }
+const ICONS = {
+  play: "M7 5v14l11-7z", pause: "M7 5h4v14H7zM13 5h4v14h-4z", full: "M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5",
+  zoom: "M11 4a7 7 0 1 0 0 14a7 7 0 1 0 0-14zM20 20l-4-4M8 11h6M11 8v6",
+  help: "M12 21a9 9 0 1 0 0-18a9 9 0 1 0 0 18zM9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6M12 17h.01",
+  pin: "M9 4h6M10 4v5l-3 4h10l-3-4V4M12 13v7", chevron: "M9 6l6 6-6 6",
+};
+const icon = name => {
+  const s = document.createElementNS("http://www.w3.org/2000/svg", "svg"), p = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  s.setAttribute("viewBox", "0 0 24 24"); s.setAttribute("aria-hidden", "true"); s.setAttribute("class", "icon " + name);
+  p.setAttribute("d", ICONS[name]); s.append(p);
+  return s;
+};
+const VIEWS = [["journeys", "Journeys"], ["stats", "Stats"], ["network", "Network"]];
+const titleOf = x => x.title;
+const placeholder = text => $("div", { class: "empty-pane" }, $("p", { class: "placeholder", text }));
+
+// A suite page switches between the journeys of the suite run on show; any other page, between the runs of one journey.
+function runSwitch() {
+  const shown = RUNS.map((x, i) => [x, i]).filter(([x]) => !SUITE || suiteOf(x) === suiteOf(RUNS[run]));
+  if (shown.length < 2) return null;
+  const nav = $("nav", { class: "seg runs", "aria-label": SUITE ? "Journeys" : "Runs" });
+  for (const [x, i] of shown) {
+    nav.append($("button", { type: "button", "aria-pressed": String(i === run),
+      title: `${x.title}: ${VERDICTS[x.verdict][0]}, ${x.when}`, onclick: () => { location.hash = `run-${i + 1}`; } },
+      $("span", { class: x.verdict === "problem" ? "bad" : "", text: x.title }), SUITE ? null : $("span", { class: "when", text: x.when.slice(5) })));
+  }
+  return nav;
+}
+
+// Each suite run in the folder, newest first: its pass count, then a row for each journey, in one table layout so the
+// columns line up from one suite run to the next.
+function journeysView() {
+  if (!SUITE) return null;
+  const box = $("div", { class: "journeys" });
+  for (const id of [...new Set(RUNS.map(suiteOf))].reverse()) {
+    const rows = RUNS.map((x, i) => [x, i]).filter(([x]) => suiteOf(x) === id), by = new Map();
+    for (const row of rows) by.set(row[0].journey || row[0].id, [...(by.get(row[0].journey || row[0].id) || []), row]);
+    const groups = [...by.values()].map(g => [g, g.find(([x]) => x.verdict === "problem") || g[0]]);
+    const pass = groups.filter(([g, [x]]) => x.verdict !== "problem" && !x.flaky).length;
+    const info = rows[0][0].suite || {};
+    box.append($("h2", {}, $("span", { text: info.title || "Runs" }), $("span", { class: "meta", text: `${pass}/${groups.length} pass \u00b7 ${rows[0][0].when}` })));
+    const body = $("tbody");
+    for (const [g, [x, i]] of groups) {
+      const sum = Verdict.summary(x), go = () => { location.hash = `run-${i + 1}`; }, bad = x.verdict === "problem" || x.flaky;
+      body.append($("tr", { class: bad ? "bad" : "", tabindex: "0", "aria-current": String(g.some(([, j]) => j === run)), onclick: go,
+        onkeydown: ev => { if (ev.key === "Enter") go(); } },
+        $("td", {}, $("a", { href: `#run-${i + 1}`, text: g.length > 1 ? x.journey : x.title, onclick: ev => ev.stopPropagation() }),
+          g.length > 1 ? $("span", { class: "m" }, ...g.map(([y, j]) => $("a", { href: `#run-${j + 1}`, class: y.verdict === "problem" ? "bad" : "", text: `#${y.attempt}`, onclick: ev => ev.stopPropagation() }))) : null,
+          x.error ? $("span", { class: "m bad", text: x.error }) : null),
+        $("td", {}, x.flaky ? chip(`Flaky ${x.flaky.passed}/${x.flaky.of}`, "bad") : chip(...VERDICTS[x.verdict])),
+        $("td", { text: sum.checks.total ? `${sum.checks.passed}/${sum.checks.total}` : "-" }),
+        $("td", { text: sum.budgets.failed ? `${sum.budgets.failed} failed` : "-" }),
+        $("td", { text: x.video === false ? "-" : Tracks.format(x.real, "s") })));
+    }
+    box.append($("table", { class: "numbers journey-table" },
+      $("colgroup", {}, ...["", "w112", "w88", "w112", "w96"].map(c => $("col", c ? { class: c } : {}))),
+      $("thead", {}, $("tr", {}, ...["Journey", "Result", "Checks", "Budgets", "Length"].map(h => $("th", { text: h })))), body));
+  }
+  return box;
+}
+
+const metaLine = r => [...Verdict.words(Verdict.tally(r.events)), ...(r.video !== false ? [Tracks.format(r.real, "s")] : []), ...r.meta, ...(r.flaky ? [`flaky ${r.flaky.passed}/${r.flaky.of}`] : [])];
+
+let keys = null;
+
+function render() {
+  const r = RUNS[run], app = document.getElementById("app");
+  app.replaceChildren();
+  document.title = r.title;
+  const recorded = r.video !== false;
+  const video = $("video", recorded ? { playsinline: "", muted: "", preload: "metadata", poster: r.base + "poster.jpg", src: r.base + "session.mp4" } : {});
+  const readoutPill = $("span", { class: "pill live", hidden: "" });
+  const overlay = r.overlay ? $("div", { class: "overlay", "aria-hidden": "true" },
+    $("div", { class: "top" }, $("span", { class: "pill clock" }), $("span", { class: "pill state" }), $("span", { class: "pill speed" })),
+    $("span", { class: "pill now" }), $("div", { class: "bottom" }, readoutPill, $("span", { class: "pill caption" }))) : null;
+  const screen = $("div", { class: "screen" }, video, overlay);
+  const update = () => {
+    stage(r, video, overlay);
+    const real = toReal(r, video.currentTime);
+    tracks.readout(real);
+    flow.now(real);
+    if (video.duration) stack.style.setProperty("--at", (video.currentTime / video.duration * 100) + "%");
+    time.textContent = `${clock(Math.max(0, real))} / ${clock(r.real)}`;
+    bar.setAttribute("aria-valuenow", real.toFixed(1));
+    bar.setAttribute("aria-valuetext", `${clock(Math.max(0, real))} of ${clock(r.real)}`);
+  };
+  const toggle = (label, name, on, title, flip) => {
+    const b = $("button", { type: "button", class: "btn tool", "aria-pressed": String(on), title }, icon(name), $("span", { class: "label", text: label }));
+    b.addEventListener("click", () => { on = !on; b.setAttribute("aria-pressed", String(on)); flip(on); });
+    return b;
+  };
+  const zoomButton = r.camera && r.camera.length ? toggle("Zoom", "zoom", zoom, "Zoom in on each action", on => {
+    zoom = on;
+    try { localStorage.setItem("proofreel-zoom", zoom ? "1" : "0"); } catch (err) {}
+    update();
+  }) : null;
+  const fullButton = screen.requestFullscreen ? $("button", { type: "button", class: "btn tool icon-only", title: "Full screen",
+    "aria-label": "Full screen", onclick: () => screen.requestFullscreen().catch(() => {}) }, icon("full")) : null;
+  const play = $("button", { type: "button", class: "btn tool icon-only play", "aria-label": "Play", onclick: () => video.paused ? video.play().catch(() => {}) : video.pause() }, icon("play"));
+  const paint = () => { play.replaceChildren(icon(video.paused ? "play" : "pause")); play.setAttribute("aria-label", video.paused ? "Play" : "Pause"); };
+  const mark = () => {
+    if (video.paused) history.replaceState(null, "", `#run-${run + 1}&t=${Math.max(0, toReal(r, video.currentTime)).toFixed(1)}`);
+  };
+  video.addEventListener("play", paint); video.addEventListener("pause", paint);
+  video.addEventListener("pause", mark); video.addEventListener("seeked", mark);
+  video.addEventListener("click", () => play.click());
+  const tick = () => { update(); if (!video.paused) requestAnimationFrame(tick); };
+  video.addEventListener("play", () => requestAnimationFrame(tick));
+  for (const name of ["seeked", "loadedmetadata", "timeupdate"]) video.addEventListener(name, update);
+  const time = $("span", { class: "time" });
+  const bar = $("div", { class: "bar", role: "slider", "aria-label": "Seek", tabindex: "0", "aria-valuemin": "0", "aria-valuemax": r.real.toFixed(1), "aria-valuenow": "0" }, $("div", { class: "track" }), $("div", { class: "done" }));
+  for (const e of r.events.filter(e => ["step", "check", "wait"].includes(e.kind))) {
+    const css = e.kind === "step" ? "step" : (e.ok ? "ok" : "bad");
+    bar.append($("i", { class: css, "data-t": toVideo(r, e.t), title: `${clock(e.t)} ${e.text}` }));
+  }
+  const seek = t => { video.currentTime = Math.max(0, t); video.play().catch(() => {}); };
+  const jump = real => { video.currentTime = Math.max(0, toVideo(r, real)); };
+  bar.addEventListener("click", ev => {
+    const box = bar.getBoundingClientRect();
+    if (video.duration) seek((ev.clientX - box.left) / box.width * video.duration);
+  });
+  bar.addEventListener("keydown", ev => {
+    const step = { ArrowLeft: -1, ArrowRight: 1, PageDown: -5, PageUp: 5 }[ev.key];
+    if (step && video.duration) { ev.preventDefault(); video.currentTime = Math.min(video.duration, Math.max(0, video.currentTime + step)); }
+  });
+  const shortcuts = [["Space", "Play or pause"], ["Left, Right", "Back or forward 1 s (Shift: 5 s)"], ["J K", "Previous or next step"],
+    ["N", "Next failure"], ["Esc", "Close a tab or unpin a state"]];
+  const help = $("details", { class: "help" }, $("summary", { class: "btn tool icon-only", "aria-label": "About this video", title: "About this video" }, icon("help")),
+    $("div", { class: "pop" },
+      $("p", { text: `Recorded from the screen as the agent drove it. Blue rings are clicks. The video is sped up to about 30 s; a badge shows the speed (up to ${fastest(r)}x with no change on the screen). The clock is real time.` }),
+      $("dl", {}, ...shortcuts.flatMap(([k, what]) => [$("dt", { text: k }), $("dd", { text: what })]))));
+  const tracks = metricTracks(r, readoutPill, seek);
+  const flow = flowPanel(r, seek);
+  const timebar = $("div", { class: "timebar" }, $("div", { class: "lead" }, play, time), bar, $("div", { class: "tools" }, zoomButton, fullButton, help));
+  const place = () => {
+    if (!video.duration) return;
+    bar.querySelectorAll("i").forEach(m => m.style.left = (m.dataset.t / video.duration * 100) + "%");
+    if (video.videoWidth) document.documentElement.style.setProperty("--ratio", video.videoWidth / video.videoHeight);
+  };
+  video.addEventListener("loadedmetadata", place);
+  if (startAt !== null) {
+    const from = startAt;
+    startAt = null;
+    video.addEventListener("loadedmetadata", () => { video.currentTime = toVideo(r, from); }, { once: true });
+  }
+  const stagePanel = $("section", { class: "panel stage", "aria-label": "Recording" },
+    ...(recorded ? [$("div", { class: "media" }, screen), timebar] : [placeholder(r.error ? `No video: ${r.error}` : "This run made no video.")]));
+
+  const panes = { journeys: journeysView(), stats: statsView(r, seek), network: networkView(r, seek) };
+  const views = VIEWS.filter(([name]) => panes[name]);
+  if (!panes[view]) view = null;
+  const tabs = $("div", { class: "tabs", role: "tablist", "aria-label": "Details" });
+  const body = $("div", { class: "body" }, ...Object.values(panes).filter(Boolean));
+  const show = () => {
+    for (const [name, pane] of Object.entries(panes)) if (pane) pane.hidden = name !== view;
+    body.hidden = !view;
+    tabs.querySelectorAll("[role=tab]").forEach(b => {
+      b.setAttribute("aria-selected", String(b.dataset.view === view));
+      b.tabIndex = b.dataset.view === (view || views[0][0]) ? 0 : -1;
+    });
+  };
+  for (const [name, label] of views) {
+    panes[name].setAttribute("role", "tabpanel"); panes[name].id = `pane-${name}`; panes[name].setAttribute("aria-labelledby", `tab-${name}`);
+    tabs.append($("button", { type: "button", role: "tab", id: `tab-${name}`, "data-view": name, "aria-controls": `pane-${name}`,
+      onclick: () => { view = view === name ? null : name; show(); } }, label));
+  }
+  tabs.addEventListener("keydown", ev => {
+    const list = [...tabs.querySelectorAll("[role=tab]")], at = list.indexOf(document.activeElement);
+    const to = { ArrowRight: (at + 1) % list.length, ArrowLeft: (at - 1 + list.length) % list.length, Home: 0, End: list.length - 1 }[ev.key];
+    if (at < 0 || to === undefined) return;
+    ev.preventDefault();
+    list[to].tabIndex = 0;
+    list[at].tabIndex = -1;
+    list[to].focus();
+  });
+  show();
+  const fade = () => tabs.classList.toggle("overflow", tabs.scrollWidth > tabs.clientWidth + 1);
+  if (window.ResizeObserver) new ResizeObserver(fade).observe(tabs);
+  const open = (name, t) => {
+    view = name;
+    show();
+    const row = body.querySelector(`#pane-${name} [data-t="${t}"]`);
+    if (!row) return;
+    row.scrollIntoView({ block: "center" });
+    row.classList.add("hit");
+    setTimeout(() => row.classList.remove("hit"), 1200);
+  };
+  const viewsPanel = $("section", { class: "panel views" }, $("div", { class: "head" }, tabs), body);
+  const dock = $("aside", { class: "panel dock", "aria-label": "Ask" }, askPanel(r, video));
+  const cols = $("div", { class: "cols" }, $("div", { class: "main" }, stagePanel, tracks.panel), flow.element);
+  const stack = $("div", { class: "stack", style: "--at:0%" }, cols, viewsPanel, dock);
+  app.append(header(r, seek, open), stack);
+  const fit = () => app.style.setProperty("--cols-h", Math.max(440, Math.floor(innerHeight - cols.getBoundingClientRect().top - scrollY - 16)) + "px");
+  window.onresize = fit;
+  if (window.ResizeObserver) new ResizeObserver(fit).observe(app.lastChild);
+  fit();
+  update();
+  place();
+  watchReview(r);
+  const failures = [...new Set([...r.events.filter(e => e.ok === false && ["check", "wait"].includes(e.kind)).map(e => e.t), ...(Verdict.cause(r) ? [Verdict.cause(r).t] : [])])].sort((a, b) => a - b);
+  const stepTimes = r.events.filter(e => e.kind === "step").map(e => e.t);
+  keys = { video, play, jump,
+    now: () => toReal(r, video.currentTime),
+    steps: stepTimes, failures,
+    escape: () => {
+      if (help.open) { help.open = false; return true; }
+      if (view) { view = null; show(); return true; }
+      return flow.unpin();
+    } };
+}
+
+function header(r, seek, open) {
+  const cause = r.verdict === "problem" ? Verdict.cause(r) : null;
+  const jump = cause && $("button", { type: "button", class: "cause", onclick: () => {
+    seek(toVideo(r, cause.t) - 0.2);
+    if (cause.target === "network") open("network", cause.t);
+  } }, $("span", { text: cause.text }), $("span", { class: "t", text: clock(cause.t) }));
+  return $("header", { class: "top" },
+    $("div", { class: "title" },
+      $("div", { class: "name" }, chip(...VERDICTS[r.verdict]), $("h1", { text: r.title })),
+      r.about ? $("p", { class: "lede", text: r.about }) : null,
+      jump,
+      $("div", { class: "meta" }, ...metaLine(r).map(m => $("span", { text: m })))),
+    $("div", { class: "side" }, reviewControl(r), runSwitch()));
+}
+
+window.addEventListener("keydown", ev => {
+  if (!keys || ev.defaultPrevented || ev.metaKey || ev.ctrlKey || ev.altKey) return;
+  const target = ev.target;
+  if (target.closest && target.closest("input, textarea, select, [contenteditable]")) return;
+  const real = keys.now();
+  const near = (list, after) => list.find(t => after ? t > real + 0.05 : t < real - 0.05);
+  const key = ev.key;
+  if (key === "Escape") { if (keys.escape()) ev.preventDefault(); return; }
+  if (key === " ") {
+    if (target.closest && target.closest("button, summary, a, [role=button], [role=tab], [role=slider]")) return;
+    ev.preventDefault();
+    keys.play.click();
+  } else if (key === "ArrowLeft" || key === "ArrowRight") {
+    ev.preventDefault();
+    const step = (ev.shiftKey ? 5 : 1) * (key === "ArrowLeft" ? -1 : 1);
+    keys.video.currentTime = Math.min(keys.video.duration || Infinity, Math.max(0, keys.video.currentTime + step));
+  } else if (key === "j" || key === "J") { const t = near(keys.steps.slice().reverse(), false); if (t !== undefined) keys.jump(t); }
+  else if (key === "k" || key === "K") { const t = near(keys.steps, true); if (t !== undefined) keys.jump(t); }
+  else if (key === "n" || key === "N") { const t = near(keys.failures, true) ?? keys.failures[0]; if (t !== undefined) keys.jump(t); }
+});
+
+const calm = window.matchMedia("(prefers-reduced-motion: reduce)");
+const ease = x => { x = Math.min(Math.max(x, 0), 1); return x * x * (3 - 2 * x); };
+function cameraAt(camera, video) {
+  let i = 1;
+  while (i < camera.length - 1 && camera[i][0] <= video) i++;
+  const [a, b] = [camera[i - 1], camera[i] || camera[i - 1]];
+  const k = b[0] > a[0] ? Math.min(Math.max((video - a[0]) / (b[0] - a[0]), 0), 1) : 0;
+  return [1, 2, 3].map(j => a[j] + (b[j] - a[j]) * k);
+}
+const keysLabel = text => text.split(/\s+/).map(combo => combo.split("-").map(p => ({ cmd: "Cmd", command: "Cmd",
+  ctrl: "Ctrl", opt: "Opt", option: "Opt", alt: "Alt", shift: "Shift", enter: "Return", bsp: "Delete", esc: "Esc",
+  tab: "Tab", space: "Space", pgdn: "Page Down", pgup: "Page Up" })[p] || (p.length === 1 ? p.toUpperCase() :
+  p[0].toUpperCase() + p.slice(1))).join("+")).join("  ");
+const chipText = (e, r) => e.kind === "check" ? (e.ok ? "Pass: " : "Fail: ") + (e.budget ? Verdict.budgetOf(r, e) : e.text) + (e.reported ? " (reported)" : "")
+  : e.kind === "wait" && e.detail ? `${e.text}: ${Verdict.sentence(e.detail).toLowerCase()}` : e.kind === "key" ? keysLabel(e.text) : e.text;
+
+const PREFS = (() => { try { return JSON.parse(localStorage.getItem("proofreel-tracks")) || {}; } catch (err) { return {}; } })();
+const savePrefs = () => { try { localStorage.setItem("proofreel-tracks", JSON.stringify(PREFS)); } catch (err) {} };
+const groupOf = s => s.m.split("/")[0];
+const nameOf = s => s.label || s.m;
+const metricsOf = r => (r.metrics && r.metrics.series) || [];
+const budgetsOf = (r, s) => ((r.metrics && r.metrics.budgets) || []).filter(b => b.series.includes(s.m));
+const rankOf = (r, s) => budgetsOf(r, s).some(b => b.ok === false) ? 0 : groupOf(s) === "input" ? 1 : budgetsOf(r, s).length ? 2 : 3;
+const W = 600;
+const SVG = (tag, attrs = {}) => {
+  const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+  return el;
+};
+const limitOf = b => b.below !== null && b.below !== undefined ? b.below : b.above;
+
+// One row on the video's time axis for each series, the way its record looks: samples as a line in their lo-hi
+// envelope, spans in rows (+N when more do not fit), marks as ticks. Sped-up stretches are hatched and labelled.
+// A chip per group hides its rows; a pin per series puts it in the readout on the video. The panel is one row until the
+// viewer opens it, and stays open across runs; the readout on the video shows only while it is open.
+function metricTracks(r, live, seek) {
+  const drawn = metricsOf(r).filter(s => s.points || s.spans || s.marks);
+  const series = [...drawn.filter(s => rankOf(r, s) === 0), ...drawn.filter(s => rankOf(r, s) !== 0)];
+  const map = Tracks.timemap(r.clock), length = r.length || map.video(r.real) || 1;
+  const x = t => map.video(t) / length * W, pct = v => `${v / W * 100}%`;
+  const pins = () => PREFS.pins || [...new Set(series.map(groupOf))].map(g => series.find(s => groupOf(s) === g).m).slice(0, 3);
+  let open = tracksOpen, at = 0;
+  const readout = real => {
+    at = real;
+    const shown = series.filter(s => pins().includes(s.m));
+    live.hidden = !shown.length || !open;
+    live.replaceChildren(...shown.map(s => $("span", {}, $("b", { text: nameOf(s) }), Tracks.format(Tracks.valueAt(s, real), s.unit))));
+  };
+  if (!series.length) return { readout, panel: null };
+  const stretches = map.stretches();
+  const hatch = lane => stretches.forEach(st => lane.append($("span", { class: "stretch", style: `left:${st.from / length * 100}%;width:${(st.to - st.from) / length * 100}%`,
+    title: `Plays at up to ${Math.round(st.speed)}x` })));
+  const failed = ((r.metrics && r.metrics.budgets) || []).some(b => b.ok === false);
+  const lanes = $("div", { class: "lanes" });
+  const hidden = new Set(PREFS.hidden || crowded(r, series)), rows = [];
+  const chips = $("div", { class: "chips metric" });
+  for (const g of new Set(series.map(groupOf))) {
+    const b = $("button", { type: "button", class: "toggle", "aria-pressed": String(!hidden.has(g)), title: `Show the ${Tracks.groupName(g)} rows`, text: Tracks.groupName(g) });
+    b.addEventListener("click", () => {
+      hidden.has(g) ? hidden.delete(g) : hidden.add(g);
+      b.setAttribute("aria-pressed", String(!hidden.has(g)));
+      PREFS.hidden = [...hidden];
+      savePrefs();
+      show();
+    });
+    chips.append(b);
+  }
+  for (const s of series) {
+    const lane = $("div", { class: `lane metric ${s.kind}`, title: `${s.m}: ${statLine(s)}` });
+    lane.addEventListener("click", ev => {
+      const box = lane.getBoundingClientRect();
+      seek((ev.clientX - box.left) / box.width * length);
+    });
+    drawLane(r, s, lane, x, pct, seek, map);
+    hatch(lane);
+    const pin = $("button", { type: "button", class: "pin-btn", "aria-pressed": String(pins().includes(s.m)),
+      title: `Show ${nameOf(s)} on the video`, "aria-label": `Pin ${nameOf(s)}` }, icon("pin"));
+    pin.addEventListener("click", () => {
+      const now = pins();
+      PREFS.pins = now.includes(s.m) ? now.filter(m => m !== s.m) : [...now, s.m];
+      savePrefs();
+      lanes.querySelectorAll(".pin-btn").forEach((b, i) => b.setAttribute("aria-pressed", String(PREFS.pins.includes(series[i].m))));
+    });
+    const label = $("span", { class: `lane-label${rankOf(r, s) === 0 ? " bad" : ""}`, text: nameOf(s), title: s.m });
+    rows.push([groupOf(s), label, lane, pin]);
+    lanes.append(label, lane, pin);
+  }
+  const axis = $("div", { class: "axis", "aria-hidden": "true" });
+  for (const t of Tracks.ticks(0, r.real)) {
+    const left = map.video(t) / length * 100;
+    axis.append($("span", { class: `tick${left > 92 ? " last" : ""}${left < 1 ? " first" : ""}`, style: `left:${left}%`, text: Tracks.axisLabel(t) }));
+  }
+  lanes.append(axis);
+  const show = () => {
+    rows.forEach(([g, ...els]) => els.forEach(el => { el.hidden = hidden.has(g); }));
+    axis.hidden = rows.every(([g]) => hidden.has(g));
+  };
+  show();
+  const fold = $("button", { type: "button", class: "fold", "aria-expanded": String(open), title: "Show the metric rows" },
+    icon("chevron"), $("span", { text: "Tracks" }));
+  const panel = $("section", { class: `panel tracks${failed ? " bad" : ""}`, "aria-label": "Tracks" },
+    $("div", { class: "head" }, fold, chips, failed ? chip("Budget failed", "bad") : null), lanes);
+  const paint = () => {
+    fold.setAttribute("aria-expanded", String(open));
+    lanes.hidden = !open;
+    chips.hidden = !open;
+    readout(at);
+  };
+  fold.addEventListener("click", () => { tracksOpen = open = !open; paint(); });
+  paint();
+  return { readout, panel };
+}
+
+// WHY: many series would push the video off a short window, so past ROWS rows a group starts hidden. Groups with a
+// failed budget, then input latency, then a budget, keep their rows first.
+const ROWS = 8;
+function crowded(r, series) {
+  const best = g => Math.min(...series.filter(s => groupOf(s) === g).map(s => rankOf(r, s)));
+  const groups = [...new Set(series.map(groupOf))].map((g, i) => [best(g), i, g]).sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  let rows = 0;
+  return groups.map(([, , g]) => g).filter(g => {
+    const n = series.filter(s => groupOf(s) === g).length;
+    if (rows && rows + n > ROWS) return true;
+    rows += n;
+    return false;
+  });
+}
+
+function drawLane(r, s, lane, x, pct, seek, map) {
+  if (s.kind === "sample") {
+    const cols = Tracks.bin(s.points, x, W), on = cols.map((c, i) => c && [i + 0.5, c]).filter(Boolean);
+    const limits = budgetsOf(r, s).filter(b => !["count", "failed"].includes(b.stat));
+    const top = s.max || Math.max(1e-9, ...on.map(([, c]) => c.hi), ...limits.map(limitOf), ...(s.bands || [])) * 1.1;
+    const y = v => 30 - Math.min(Math.max(v / top, 0), 1) * 28;
+    const svg = SVG("svg", { viewBox: `0 0 ${W} 30`, preserveAspectRatio: "none" });
+    if (on.length) {
+      svg.append(SVG("path", { class: "env", d: "M" + on.map(([i, c]) => `${i},${y(c.hi)}`).join(" L") + " L" + on.slice().reverse().map(([i, c]) => `${i},${y(c.lo)}`).join(" L") + "Z" }));
+      svg.append(SVG("path", { class: "line", d: "M" + on.map(([i, c]) => `${i},${y(c.v)}`).join(" L") }));
+    }
+    for (const v of s.bands || []) svg.append(SVG("line", { class: "band", x1: 0, x2: W, y1: y(v), y2: y(v) }));
+    for (const b of limits) svg.append(SVG("line", { class: `limit ${b.ok === false ? "bad" : ""}`, x1: 0, x2: W, y1: y(limitOf(b)), y2: y(limitOf(b)) }));
+    lane.append(svg);
+    const first = x(s.points[0][0]) / W, last = x(s.points[s.points.length - 1][0]) / W;
+    if (first > 0.005) lane.append($("span", { class: "nodata", title: "No data", style: `left:0;width:${first * 100}%` }));
+    if (last < 0.995) lane.append($("span", { class: "nodata", title: "No data", style: `left:${last * 100}%;right:0` }));
+  } else if (s.kind === "span") {
+    const items = s.spans.map(([t, d, ok, label]) => ({ from: x(t), to: x(t + d), t, d, ok, label })).sort((a, b) => a.from - b.from);
+    const { row, more } = Tracks.pack(items, 3);
+    items.forEach((it, i) => {
+      if (row[i] < 0) return;
+      const bad = it.ok === false;
+      const el = $("i", { class: bad ? "bad" : "", title: `${it.label || s.m}: ${Tracks.format(it.d, "s")}`,
+        style: `left:${pct(it.from)};width:${pct(Math.max(it.to - it.from, 1))}${bad ? "" : `;top:${4 + row[i] * 8}px`}` });
+      el.addEventListener("click", ev => { ev.stopPropagation(); seek(map.video(it.t) - 0.2); });
+      lane.append(el);
+    });
+    lane.style.height = `${Math.max(16, 8 + 8 * Math.max(1, Math.max(...row) + 1))}px`;
+    if (more + (s.more || 0)) lane.append($("span", { class: "more", text: `+${more + (s.more || 0)}` }));
+  } else {
+    for (const [t, ok, label] of s.marks) lane.append($("b", { class: ok === false ? "bad" : "", style: `left:${pct(x(t))}`, title: label || s.m }));
+    if (s.more) lane.append($("span", { class: "more", text: `+${s.more}` }));
+  }
+}
+
+const statLine = s => s.stats.p50 === undefined ? `${s.stats.count} marks` :
+  `p50 ${Tracks.format(s.stats.p50, s.unit)}, p95 ${Tracks.format(s.stats.p95, s.unit)}, max ${Tracks.format(s.stats.max, s.unit)}`;
+
+// The numbers of the run: one table, a row for each series (failing budgets first) with p50, p95, max, and each budget as
+// a sentence with its result. A row jumps the video to the series' worst moment.
+const budgetChip = b => b.ok === false ? [VISITS.bad[0], "bad"] : b.ok ? [VISITS.ok[0], "ok"] : [VISITS.unchecked[0], "info"];
+function statsView(r, seek) {
+  const series = metricsOf(r), budgets = (r.metrics && r.metrics.budgets) || [];
+  if (!series.length && !budgets.length) return placeholder("No metrics in this run. Probes measure while a session records; proofreel probes lists them.");
+  const box = $("div", { class: "stats" });
+  const worst = s => s.points ? s.points.reduce((a, p) => (p[3] ?? p[1]) > (a[3] ?? a[1]) ? p : a)[0]
+    : s.spans ? s.spans.reduce((a, p) => p[1] > a[1] ? p : a)[0] : s.marks && s.marks.length ? s.marks[0][0] : null;
+  const go = s => { const t = worst(s); if (t !== null) seek(toVideo(r, t) - 0.3); };
+  const sentence = b => $("div", { class: `budget${b.ok === false ? " bad" : ""}` }, $("span", { text: Verdict.budgetText(b, r, b.detail) }), chip(...budgetChip(b)));
+  const body = $("tbody");
+  for (const b of budgets.filter(b => !b.series.length)) body.append($("tr", { class: "bad" },
+    $("td", {}, document.createTextNode(b.glob), $("span", { class: "m", text: b.detail || "no data" })),
+    $("td", { colspan: "3", text: "-" }), $("td", {}, sentence(b))));
+  for (const s of series.slice().sort((a, b) => rankOf(r, a) - rankOf(r, b))) {
+    const mine = budgetsOf(r, s), none = s.stats.p50 === undefined;
+    body.append($("tr", { class: mine.some(b => b.ok === false) ? "bad" : "", tabindex: "0", onclick: () => go(s),
+      onkeydown: ev => { if (ev.key === "Enter") go(s); } },
+      $("td", {}, document.createTextNode(nameOf(s)), s.label ? $("span", { class: "m", text: s.m }) : null,
+        s.stats.failed && groupOf(s) === "input" ? $("span", { class: "m bad", text: `${Verdict.plural(s.stats.failed, "input")} got no change on the screen` }) : null),
+      ...(none ? [$("td", { colspan: "3", text: Verdict.plural(s.stats.count, "mark") })] : ["p50", "p95", "max"].map(k => $("td", { text: Tracks.format(s.stats[k], s.unit) }))),
+      $("td", {}, ...mine.map(sentence))));
+  }
+  box.append($("table", { class: "numbers stats-table" },
+    $("colgroup", {}, ...["", "w96", "w96", "w96", "budget"].map(c => $("col", c ? { class: c } : {}))),
+    $("thead", {}, $("tr", {}, ...["Series", "p50", "p95", "max", "Budget"].map(h => $("th", { text: h })))), body));
+  const quiet = Object.entries((r.metrics && r.metrics.probes) || {}).filter(([, p]) => p.status && p.status !== "ok");
+  for (const [name, p] of quiet) box.append($("p", { class: "hint", text: `Probe ${name} ${p.status}${p.note ? ": " + p.note : ""}` }));
+  return box;
+}
+
+// Each request (a span with phases) as a row of a waterfall, in start order: the request, its bars on one time axis, its
+// status and time. A row jumps the video to its start.
+function networkView(r, seek) {
+  const fall = Tracks.waterfall(metricsOf(r));
+  if (!fall.rows.length) return placeholder("No requests in this run. A web run records them; in a VM, start with --probe network.");
+  const span = fall.to - fall.from || 1;
+  const axis = $("div", { class: "req axis-row", "aria-hidden": "true" }, $("span"), $("div", { class: "axis" },
+    ...Tracks.ticks(fall.from, fall.to).map(t => $("span", { class: "tick", style: `left:${(t - fall.from) / span * 100}%`, text: Tracks.axisLabel(t) }))), $("span"));
+  const box = $("div", { class: "net" },
+    $("div", { class: "legend" }, ...fall.names.map((name, i) => $("span", {}, $("i", { class: `p${i % 5}` }), name))), axis);
+  const CAP = 500;
+  for (const q of fall.rows.slice(0, CAP)) {
+    const bad = q.ok === false, split = Tracks.request(q.label), tail = split.path.length > 16 ? 12 : 0;
+    const bar = $("div", { class: "fall" }, $("span", { class: "whole", style: `left:${q.left * 100}%;width:${q.width * 100}%` }),
+      ...q.parts.map(([name, left, width]) => $("span", { class: `p${fall.names.indexOf(name) % 5}`, title: `${name} ${Tracks.format(width * span, "s")}`,
+        style: `left:${left * 100}%;width:${width * 100}%` })));
+    box.append($("div", { class: `req${bad ? " bad" : ""}`, tabindex: "0", role: "button", title: q.label, "data-t": q.t,
+      onclick: () => seek(toVideo(r, q.t) - 0.2), onkeydown: ev => { if (ev.key === "Enter") seek(toVideo(r, q.t) - 0.2); } },
+      $("span", { class: "name" }, $("span", { class: "dim", text: `${split.method} ` }), $("span", { class: "dim host", text: split.host }),
+        $("span", { class: "path head", text: tail ? split.path.slice(0, -tail) : split.path }), tail ? $("span", { class: "path tail", text: split.path.slice(-tail) }) : null),
+      bar,
+      $("span", { class: "d" }, q.status ? (bad ? chip(String(q.status), "bad") : $("span", { class: "dim", text: String(q.status) })) : null, $("span", { text: Tracks.format(q.d, "s") }))));
+  }
+  if (fall.rows.length > CAP) box.append($("p", { class: "hint", text: `${Verdict.plural(fall.rows.length - CAP, "more request")} not listed.` }));
+  return box;
+}
+
+// The page draws on the video what the video does not: where the camera looks, the clock, the speed, the step, and
+// the last action or check. Times come from the run's clock, so they line up with every speed of the video.
+function stage(r, video, overlay) {
+  const at = video.currentTime;
+  if (r.camera && r.camera.length) {
+    const [cx, cy, z] = zoom ? cameraAt(r.camera, at) : [0.5, 0.5, 1];
+    const left = Math.min(Math.max(cx - 0.5 / z, 0), 1 - 1 / z), top = Math.min(Math.max(cy - 0.5 / z, 0), 1 - 1 / z);
+    video.style.transform = z > 1.001 ? `scale(${z}) translate(${-left * 100}%, ${-top * 100}%)` : "";
+  }
+  if (!overlay) return;
+  const real = toReal(r, at), speed = Tracks.timemap(r.clock).speed(at);
+  const [clockPill, statePill, speedPill] = ["clock", "state", "speed"].map(name => overlay.querySelector(".top ." + name));
+  clockPill.textContent = clock(Math.max(0, real));
+  const visit = Machine.at(r, real);
+  statePill.hidden = !visit;
+  if (visit) {
+    statePill.textContent = visit.name;
+    statePill.className = `pill state ${VISITS[visitVerdict(visit)][1]}`;
+  }
+  speedPill.textContent = `${speed >= 2 ? Math.round(speed) : speed.toFixed(1)}x speed`;
+  speedPill.style.opacity = Math.min(1, Math.max(0, (speed - 1.3) / 1.5));
+  const steps = r.events.filter(e => e.kind === "step" && e.t <= real);
+  const caption = overlay.querySelector(".caption");
+  caption.style.opacity = steps.length ? ease((real - steps[steps.length - 1].t) / 0.3) : 0;
+  if (steps.length) caption.replaceChildren($("b", { text: String(steps.length) }), steps[steps.length - 1].text);
+  const recent = r.events.filter(e => e.chip && real - e.t >= 0 && real - e.t < 1.8 + (e.dur || 0));
+  const now = overlay.querySelector(".now"), last = recent[recent.length - 1];
+  now.style.opacity = last ? ease((real - last.t) / 0.15) * (1 - ease((real - last.t - 1.5 - (last.dur || 0)) / 0.3)) : 0;
+  if (last) {
+    now.textContent = chipText(last, r);
+    now.className = "pill now" + (["check", "wait"].includes(last.kind) ? (last.ok ? " ok" : " bad") : "");
+  }
+}
+
+function row(r, e, seek) {
+  const budget = Verdict.isBudget(e), failed = e.ok === false && ["check", "wait"].includes(e.kind);
+  const text = (budget ? Verdict.budgetOf(r, e) : e.text) + (e.reported ? " (reported)" : "");
+  const status = e.kind === "check" ? chip(...budgetChip(e)) : null;
+  const detail = budget ? null : e.kind === "wait" && e.detail ? Verdict.sentence(e.detail) : e.detail;
+  const body = $("div", { class: "row", tabindex: "0", role: "button", "aria-label": `Jump to ${clock(e.t)}: ${text}` },
+    $("span", { class: "t", text: clock(e.t) }),
+    $("span", { class: "text" },
+      ["step", "check", "note"].includes(e.kind) || e.text.startsWith(e.kind) ? null : $("span", { class: "kind", text: e.kind + " " }),
+      document.createTextNode(text), detail ? $("span", { class: "detail", text: detail }) : null), status);
+  const li = $("li", { class: e.kind + (failed ? " bad" : "") }, body);
+  const go = () => seek(toVideo(r, e.t) - 0.4);
+  body.addEventListener("click", go);
+  body.addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); go(); } });
+  return li;
+}
+
+// The run's flow, top to bottom: a node for each state the run visited, with its time and checks, and under it the steps
+// of that visit. A run with no states is one list of steps. The node and step at the video's time are lit, and the
+// column follows them except for 4 s after the person scrolls it.
+// Every run's states as one graph. The run on show is drawn strong: its path, a verdict on each node it visited, and
+// how long each step took. The node the video is in lights up, and the page shows the details of a state under the drawing.
+function machineView(r, seek) {
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = (tag, attrs = {}, ...kids) => {
+    const el = document.createElementNS(NS, tag);
+    for (const [k, v] of Object.entries(attrs)) if (k.startsWith("on")) el.addEventListener(k.slice(2), v); else el.setAttribute(k, v);
+    for (const kid of kids) if (kid) el.append(kid);
+    return el;
+  };
+  const graph = Machine.build(RUNS), current = RUNS.indexOf(r), many = RUNS.length > 1, states = r.states || [];
+  const measure = document.createElement("canvas").getContext("2d");
+  measure.font = "600 14px 'IBM Plex Sans', system-ui, sans-serif";
+  const name = id => id.length > 32 ? id.slice(0, 31) + "…" : id;
+  const size = id => id === Machine.START ? [measure.measureText(id).width + 24, 24] : [Math.max(64, measure.measureText(name(id)).width + 28), 40];
+  const box = Machine.layout(graph, size, { x: 28, y: 64, lane: 16 });
+  const pad = 8;
+  const marker = (id, css) => svg("marker", { id, viewBox: "0 0 10 10", refX: "9", refY: "5", markerWidth: "8", markerHeight: "8", orient: "auto-start-reverse" },
+    svg("path", { d: "M0,0 L10,5 L0,10 z", class: css }));
+  const drawing = svg("svg", { role: "group", "aria-label": "State machine of the runs" },
+    svg("defs", {}, marker("arrow", "head"), marker("arrow-on", "head on")));
+  const start = (run, visit) => visit ? RUNS[run].states[visit - 1].t : 0;
+  const small = document.createElement("canvas").getContext("2d");
+  small.font = "12px 'IBM Plex Mono', ui-monospace, monospace";
+  let left = 0, right = box.width;
+  for (const e of box.edges) {
+    const mine = e.takes.filter(x => x.run === current);
+    const steps = mine.map(x => r.events.find(ev => ev.kind === "step" && ev.t >= start(current, x.visit) && ev.t < states[x.visit].t));
+    const took = mine.map(x => states[x.visit].t - start(current, x.visit));
+    const label = mine.length ? `${Tracks.format(took[0], "s")}${mine.length > 1 ? ` ×${mine.length}` : ""}` : "";
+    const runs = [...new Set(e.takes.map(x => x.run))];
+    const g = svg("g", { class: "edge" + (mine.length ? " on" : "") + (e.back ? " back" : ""),
+      onclick: () => { if (mine.length) seek(toVideo(r, start(current, mine[0].visit)) - 0.2); } },
+      svg("title", {}, `${e.from} to ${e.to}${many ? ` (${runs.map(i => RUNS[i].title).join(", ")})` : ""}${steps[0] ? ": " + steps[0].text : ""}`),
+      svg("path", { d: e.d, class: "hit" }), svg("path", { d: e.d, class: "line", "marker-end": mine.length ? "url(#arrow-on)" : "url(#arrow)" }));
+    if (label && e.label) {
+      const [x, y, anchor, slope] = e.label, width = small.measureText(label).width, gap = 8 + slope * 7, at = anchor === "end" ? x - gap : x + gap;
+      g.append(svg("text", { x: at, y: y + 4, "text-anchor": anchor, class: "label" }, label));
+      left = Math.min(left, anchor === "end" ? at - width : at);
+      right = Math.max(right, anchor === "end" ? at : at + width);
+    }
+    drawing.append(g);
+  }
+  const nodes = new Map(), halos = new Map();
+  let pinned = pickState, following = null;
+  pickState = null;
+  // A state this run never visits opens the run that does (the failing one first, else the newest) at that state.
+  const elsewhere = id => {
+    const has = RUNS.map((x, i) => [i, Machine.verdict(x.states || [], id)]).filter(([i, v]) => v && i !== current);
+    return (has.find(([, v]) => v === "bad") || has[has.length - 1] || [])[0];
+  };
+  const open = (i, id) => {
+    pickState = id;
+    location.hash = `run-${i + 1}&t=${Math.max(0, RUNS[i].states.find(v => v.name === id).t - 0.2).toFixed(1)}`;
+  };
+  const failing = states.find(v => v.ok === false);
+  const shown = () => pinned || (failing ? failing.name : following);
+  const sum = id => {
+    const visits = states.filter(v => v.name === id), checks = r.events.filter(e => e.kind === "check" && !e.budget && visits.some(v => e.t >= v.t && e.t < v.end));
+    return `${checks.filter(e => e.ok).length} of ${Verdict.plural(checks.length, "check")}`;
+  };
+  for (const n of box.nodes) {
+    const here = Machine.verdict(states, n.id), first = n.id === Machine.START;
+    const halo = svg("rect", { class: "halo", x: n.x - 4, y: n.y - 4, width: n.w + 8, height: n.h + 8, rx: 10 });
+    const g = svg("g", { class: `node ${first ? "start" : here ? VISITS[here][1] : "away"}`, tabindex: first ? "-1" : "0", role: first ? "presentation" : "button",
+      transform: `translate(${n.x},${n.y})` },
+      svg("rect", { width: n.w, height: n.h, rx: 6 }),
+      svg("text", { x: n.w / 2, y: n.h / 2 + 4.5, class: "name" }, first ? n.id : name(n.id)));
+    if (!first) g.setAttribute("aria-label", `${n.id}, ${here ? `${{ ok: "passed", bad: "failed", unchecked: "not checked" }[here]}, ${sum(n.id)}` : `opens ${RUNS[elsewhere(n.id)].title}`}`);
+    if (!first) {
+      const pick = () => {
+        if (!here) return open(elsewhere(n.id), n.id);
+        pinned = pinned === n.id ? null : n.id;
+        details();
+        const v = states.find(v => v.name === n.id);
+        if (pinned && v) seek(toVideo(r, v.t) - 0.2);
+      };
+      g.addEventListener("click", pick);
+      g.addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); pick(); } });
+    }
+    drawing.append(halo, g);
+    nodes.set(n.id, g);
+    halos.set(n.id, halo);
+  }
+  drawing.setAttribute("viewBox", `${left - pad} ${-pad} ${right - left + 2 * pad} ${box.height + 2 * pad}`);
+  drawing.setAttribute("width", right - left + 2 * pad);
+  const info = $("div", { class: "visit" });
+  let detailed = null;
+  const details = () => {
+    const id = shown();
+    detailed = id;
+    nodes.forEach((g, key) => g.classList.toggle("picked", key === pinned));
+    info.replaceChildren();
+    if (!id || !nodes.has(id)) return;
+    const here = Machine.verdict(states, id);
+    info.append($("h2", {}, $("span", { text: id }), chip(...VISITS[here])));
+    const visits = states.filter(v => v.name === id);
+    const checks = r.events.filter(e => ["wait", "check"].includes(e.kind) && visits.some(v => e.t >= v.t && e.t < v.end));
+    if (checks.length) { const ol = $("ol"); checks.forEach(e => ol.append(row(r, e, seek))); info.append(ol); }
+    if (r.error && visits.includes(states[states.length - 1])) info.append($("p", { class: "stopped" }, chip("Stopped", "bad"), document.createTextNode(" " + r.error)));
+    if (many) {
+      const others = $("div", { class: "choices" });
+      RUNS.forEach((x, i) => {
+        const v = Machine.verdict(x.states, id);
+        if (v && i !== current) others.append($("button", { type: "button", class: "btn small", onclick: () => open(i, id) },
+          $("span", { text: x.title }), chip(...VISITS[v])));
+      });
+      if (others.children.length) info.append($("p", { class: "others", text: "In other runs:" }), others);
+    }
+  };
+  details();
+  const element = $("div", { class: "machine body" }, $("div", { class: "graph" }, drawing), info);
+  const now = real => {
+    const v = Machine.at(r, real);
+    nodes.forEach((g, id) => { const on = !!v && v.name === id; g.classList.toggle("now", on); halos.get(id).classList.toggle("on", on); });
+    following = v ? v.name : states.length ? states[0].name : null;
+    if (shown() !== detailed) details();
+  };
+  const unpin = () => {
+    if (!pinned) return false;
+    pinned = null;
+    details();
+    return true;
+  };
+  return { element, now, unpin };
+}
+
+function flowView(r, seek) {
+  const list = Machine.sections(r), body = $("div", { class: "body" }), items = $("ol", { class: "list flow-list" });
+  const nodes = [], steps = [];
+  list.forEach((s, i) => {
+    const tone = VISITS[visitVerdict(s)][1], item = $("li", { class: `visit ${tone}` });
+    if (s.visit) {
+      const node = $("button", { type: "button", class: "visit-node", title: `${s.name}: ${VISITS[visitVerdict(s)][0]}`,
+        onclick: () => seek(toVideo(r, s.t) - 0.2) },
+        $("span", { class: "name", text: s.name }), $("span", { class: "t", text: clock(s.t) }),
+        $("span", { class: "checks", text: Verdict.words(Verdict.tally(s.events)).join(" \u00b7 ") }), s.total || s.ok === false ? chip(...VISITS[tone]) : null);
+      nodes.push(node);
+      item.append(node);
+    } else nodes.push(null);
+    const ol = $("ol", { class: "steps" }), mine = [];
+    let group = null, summary = null;
+    for (const e of s.events) {
+      if (e.row === "key") { const li = row(r, e, seek); ol.append(li); mine.push(li); group = null; continue; }
+      if (!group) {
+        group = $("ol"); summary = $("summary", {}, icon("chevron"), $("span"));
+        ol.append($("li", { class: "more" }, $("details", {}, summary, group)));
+      }
+      const li = row(r, e, seek);
+      group.append(li); mine.push(li);
+      summary.lastChild.textContent = Verdict.plural(group.children.length, "action");
+    }
+    item.append(ol);
+    items.append(item);
+    steps.push(mine);
+  });
+  const lit = list.length === 1 && !list[0].events.length ? $("p", { class: "placeholder", text: "No steps were recorded." }) : null;
+  body.append(lit || items);
+  let touched = -Infinity, last = "";
+  for (const name of ["wheel", "touchstart", "pointerdown", "keydown"]) body.addEventListener(name, () => { touched = Date.now(); }, { passive: true });
+  const reveal = (el, pad) => {
+    const box = body.getBoundingClientRect(), at = el.getBoundingClientRect();
+    if (at.top < box.top + pad || at.bottom > box.bottom - 8) body.scrollTo({ top: body.scrollTop + at.top - box.top - body.clientHeight / 3, behavior: calm.matches ? "auto" : "smooth" });
+  };
+  const now = real => {
+    const { section, event } = Machine.now(list, real), key = `${section}:${event}`;
+    if (key === last) return;
+    last = key;
+    const li = event < 0 ? null : steps[section][event], folded = li && li.closest("details:not([open])");
+    const mark = folded ? folded.parentElement : li;
+    items.querySelectorAll(".now").forEach(el => el.classList.remove("now"));
+    if (nodes[section]) nodes[section].classList.add("now");
+    if (mark) mark.classList.add("now");
+    if (Date.now() - touched < 4000) return;
+    const node = nodes[section];
+    if (mark) reveal(mark, node ? node.offsetHeight + 4 : 0); else if (node) reveal(node, 0);
+  };
+  return { element: body, now };
+}
+
+function flowPanel(r, seek) {
+  const steps = flowView(r, seek), diagram = MACHINE ? machineView(r, seek) : null;
+  const panes = { flow: diagram && diagram.element, steps: steps.element };
+  let mode = diagram ? "flow" : "steps";
+  const buttons = Object.keys(panes).filter(k => panes[k]).map(k => $("button", { type: "button", "aria-pressed": String(k === mode), text: k === "flow" ? "Flow" : "Steps",
+    onclick: () => { mode = k; show(); } }));
+  const show = () => {
+    for (const k in panes) if (panes[k]) panes[k].hidden = k !== mode;
+    buttons.forEach(b => b.setAttribute("aria-pressed", String(b.textContent.toLowerCase() === mode)));
+  };
+  show();
+  const head = diagram ? $("div", { class: "head" }, $("div", { class: "seg", role: "group", "aria-label": "Show" }, ...buttons)) : $("h2", { text: "Steps" });
+  return { element: $("aside", { class: "panel flow", "aria-label": "User flow" }, head, diagram && diagram.element, steps.element),
+    now: real => { steps.now(real); if (diagram) diagram.now(real); },
+    unpin: () => !!diagram && diagram.unpin() };
+}
+
+function reviewControl(r) {
+  const panel = $("div", { class: "review", id: "review", hidden: "" });
+  const choices = $("div", { class: "seg", role: "group", "aria-label": "Review" });
+  for (const [value, label, css] of [["approve", "Approve", "ok"], ["needs-work", "Needs work", "bad"]]) {
+    choices.append($("button", { type: "button", class: css, "data-v": value, "aria-pressed": "false", text: label, onclick: () => setReview(r, value) }));
+  }
+  panel.append(choices, $("div", { class: "who", role: "status", text: "No review yet." }));
+  return panel;
+}
+
+let unwatch = null;
+function watchReview(r) {
+  if (unwatch) { unwatch(); unwatch = null; }
+  const panel = document.getElementById("review");
+  if (!caps.db || !panel) return;
+  panel.hidden = false;
+  const who = panel.querySelector(".who");
+  const timer = setTimeout(() => { who.textContent = "Reviews are not loading here."; }, 10000);
+  unwatch = caps.db.doc(`reviews/${r.id}`).onSnapshot(async snap => {
+    clearTimeout(timer);
+    const data = snap.exists ? snap.data() : null, set = data && data.verdict ? data : null;
+    panel.querySelectorAll("[data-v]").forEach(b => b.setAttribute("aria-pressed", String(!!set && b.dataset.v === set.verdict)));
+    if (!set) { who.textContent = "No review yet."; return; }
+    let name = "Someone";
+    if (caps.user && set.by) { const ps = await caps.user.profiles([set.by]); name = (ps[set.by] && ps[set.by].name) || "Someone"; }
+    who.textContent = `${set.verdict === "approve" ? "Approved" : "Needs work"} by ${name}, ${new Date(set.at).toLocaleString()}`;
+  }, () => { clearTimeout(timer); who.textContent = "Reviews are not available here."; });
+}
+
+async function setReview(r, verdict) {
+  if (!caps.db) return;
+  const who = document.querySelector("#review .who");
+  const chosen = document.querySelector(`#review [data-v="${verdict}"]`).getAttribute("aria-pressed") === "true";
+  try {
+    const by = caps.user ? await caps.user.id() : null;
+    await caps.db.doc(`reviews/${r.id}`).set({ verdict: chosen ? null : verdict, run: run + 1, title: r.title, by, at: Date.now() });
+  } catch (err) { who.textContent = "Only people who can edit this page can review it."; }
+}
+
+function askPanel(r, video) {
+  const panel = $("section", { class: "section ask", id: "ask" });
+  panel.hidden = !caps.sample;
+  const box = $("textarea", { "aria-label": "Ask about this moment", rows: "1", placeholder: "Why did the check fail?" });
+  const answer = $("div", { class: "answer" });
+  let controller = null;
+  const ask = async () => {
+    const question = box.value.trim();
+    if (!question || !caps.sample) return;
+    if (controller) controller.abort();
+    controller = new AbortController();
+    answer.textContent = "Thinking...";
+    const at = video.currentTime;
+    const log = r.events.filter(e => e.kind !== "move").map(e => `${clock(e.t)} (video ${toVideo(r, e.t).toFixed(1)} s) ${e.kind}: ${e.text}${e.kind === "check" || e.kind === "wait" ? (e.ok ? " [pass]" : " [FAIL]") : ""}${e.detail ? " - " + e.detail : ""}`).join("\n");
+    const prompt = `You review a recorded test run of an app. Answer the question in plain words, in at most 5 sentences. Say what the frame shows and what the log shows; do not guess beyond them.\n\nRun: ${r.title}\nAbout: ${r.about || ""}\nResult: ${r.verdict}${r.error ? " (stopped: " + r.error + ")" : ""}\nThe attached image is the video frame at ${at.toFixed(1)} s.\n\nLog:\n${log}\n\nQuestion: ${question}`;
+    const images = [];
+    try {
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.min(1280, video.videoWidth || 1280);
+      canvas.height = Math.round(canvas.width * (video.videoHeight || 720) / (video.videoWidth || 1280));
+      canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
+      images.push(await new Promise(ok => canvas.toBlob(ok, "image/jpeg", 0.85)));
+    } catch (err) {}
+    try {
+      const out = await caps.sample(prompt, { images: images.filter(Boolean), signal: controller.signal, cache: false,
+        onText: ({ text }) => { answer.textContent = text; } });
+      answer.textContent = out.text;
+    } catch (err) {
+      if (err && err.code === "cancelled") return;
+      answer.textContent = err && err.code === "rate_limited" ? "Too many questions. Wait a moment." : "Claude could not answer here.";
+      if (err && (err.code === "not_granted" || err.code === "images_unavailable")) panel.hidden = err.code === "not_granted";
+    }
+  };
+  panel.append($("h2", { text: "Ask about this moment" }),
+    $("div", { class: "body" }, $("div", { class: "ask-row" }, box, $("button", { type: "button", class: "btn", text: "Ask", onclick: ask })), answer));
+  return panel;
+}
+
+window.addEventListener("hashchange", () => { fromHash(); render(); });
+const fonts = document.fonts ? Promise.race([Promise.all([document.fonts.load("600 14px 'IBM Plex Sans'"), document.fonts.load("12px 'IBM Plex Mono'")]), new Promise(done => setTimeout(done, 1500))]).catch(() => {}) : Promise.resolve();
+(async () => {
+  await fonts;
+  render();
+  const use = name => (window.claude && window.claude.use ? window.claude.use(name) : Promise.resolve(null)).catch(() => null);
+  const [db, user, sample] = await Promise.all([use("db"), use("user"), use("sample")]);
+  Object.assign(caps, { db, user, sample });
+  if (db || user || sample) render();
+})();
+</script>
