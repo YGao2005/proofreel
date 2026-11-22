@@ -1,10 +1,8 @@
-from linux
-probe network
-probe browser
+from web
 start sign-in --title "Sign in" --about "A returning user signs in and sees their notes."
 state Home
 step "Open Acme Notes"
-vm sh "browse ${URL:-http://10.0.2.2:8791}/"
+open ${URL:-http://127.0.0.1:8791}/
 wait-text "Welcome back" 30
 state "Sign in"
 step "Sign in"
