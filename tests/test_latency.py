@@ -3,7 +3,7 @@ import json
 import pytest
 from PIL import Image, ImageDraw
 
-from proofreel import latency, metrics
+from proofreel import latency, metrics, session
 
 FPS = 30
 
@@ -120,3 +120,25 @@ def test_an_answer_settles_before_the_next_input(tmp_path):
     latency.measure(tmp_path, events, *shown, scale=1.0)
     click = json.loads((tmp_path / "metrics" / "input.jsonl").read_text().splitlines()[0])
     assert click["settle"] < 0.2
+
+
+def test_a_click_on_a_server_that_holds_requests_is_measured_after_the_press(tmp_path):
+    """Apple Virtualization holds a frame request until the screen changes: the frame asked for at 1.7 s comes at
+    2.12 s and shows the answer to the click at 2.0 s. It is not a change before the click."""
+    paths, requested, arrived = [], [], []
+    def frame(request, arrival, answered):
+        image = Image.new("RGB", (1440, 900), "white")
+        if answered:
+            ImageDraw.Draw(image).rectangle((480, 280, 520, 320), fill=(10, 100, 255))
+        path = tmp_path / f"{len(paths):06d}.jpg"
+        image.save(path, quality=90)
+        paths.append(path), requested.append(request), arrived.append(arrival)
+    for n in range(51):
+        frame(n / 30, n / 30 + 0.02, False)
+    frame(1.7, 2.12, True)
+    for n in range(66, 120):
+        frame(n / 30, n / 30 + 0.02, True)
+    events = [{"t": 2.0, "kind": "click", "text": "click Save", "x": 500, "y": 300}]
+    assert latency.measure(tmp_path, events, paths, session.shown(requested, arrived), arrived, scale=1.0) == 1
+    line = json.loads((tmp_path / "metrics" / "input.jsonl").read_text())
+    assert line["ok"] and 0 < line["d"] <= 0.12

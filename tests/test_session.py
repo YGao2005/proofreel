@@ -56,9 +56,18 @@ def test_frames_of_version_1_have_the_request_time_as_arrival(tmp_path):
     for n in range(2):
         (tmp_path / "frames" / f"{n:06d}.jpg").touch()
     (tmp_path / "times.txt").write_text("5.0\n4.0 4.1\n")
-    paths, requests, arrivals = session.Session(tmp_path).frames()
+    paths, times, arrivals = session.Session(tmp_path).frames()
     assert [p.name for p in paths] == ["000001.jpg", "000000.jpg"]
-    assert requests == [4.0, 5.0] and arrivals == [4.1, 5.0]
+    assert times == [4.1, 5.0] and arrivals == [4.1, 5.0]
+
+
+def test_a_held_vnc_reply_shows_the_screen_just_before_it_arrived():
+    requested = [n / 10 for n in range(20)] + [2.0]
+    arrived = [r + 0.02 for r in requested[:-1]] + [2.5]
+    times = session.shown(requested, arrived)
+    assert times[:3] == pytest.approx([0.0, 0.1, 0.2])
+    assert times[-1] == pytest.approx(2.48)
+    assert session.shown([1.0], [1.0]) == [1.0]
 
 
 def test_an_unknown_key_name_is_a_problem_that_lists_the_names():

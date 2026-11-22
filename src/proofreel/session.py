@@ -5,7 +5,7 @@
                 [t, end] is when the action affected the screen: a click's press; the first and last key of type,
                 key, hold, and tap; a drag's press and release; a wait's or check's first look and its verdict.
   frames/*.jpg  the screen, in name order
-  times.txt     "<request> <arrival>": the unix times when each frame was asked for and when it came
+  times.txt     "<request> <arrival>": the unix times when each frame was asked for and when it came (see shown)
   screen.txt    "<width> <height>": the pixel space of event x and y (frames may be smaller)
 
 A `state` event names where the app should be. The waits and checks after it, up to the next state, are its checks.
@@ -44,6 +44,16 @@ def revision(cwd=None):
         return head.stdout.strip() + (", uncommitted changes" if git("status", "--porcelain", "--untracked-files=no").stdout.strip() else "")
     except (OSError, subprocess.TimeoutExpired):
         return None
+
+
+def shown(requested, arrived):
+    """When the screen looked like each frame. A VNC server can hold a request until the screen changes (Apple
+    Virtualization does), so a frame shows the screen as it was just before it arrived, not between its request and
+    its arrival. Just before is the time a reply takes when the server answers at once: the 10th percentile of the
+    round trips. A frame is never earlier than its request."""
+    trips = sorted(a - r for r, a in zip(requested, arrived))
+    transfer = trips[len(trips) // 10] if trips else 0.0
+    return [max(r, a - transfer) for r, a in zip(requested, arrived)]
 
 
 def moment(event):
@@ -113,12 +123,13 @@ class Session:
         return sorted(events, key=lambda event: event["t"])
 
     def frames(self):
-        """(paths, request times, arrival times), in time order. A version 1 folder has request times only."""
+        """(paths, shown times, arrival times), in time order. A version 1 folder has request times only."""
         paths = sorted((self.folder / "frames").glob("*.jpg"))
         rows = [line.split() for line in (self.folder / "times.txt").read_text().splitlines() if line.strip()]
-        rows = sorted((float(row[0]), float(row[-1]), path) for row, path in zip(rows, paths))
-        if not rows:
+        if not rows or not paths:
             raise Problem(f"No frames in {self.folder / 'frames'}.")
+        requested, arrived = [float(row[0]) for row in rows], [float(row[-1]) for row in rows]
+        rows = sorted(zip(shown(requested, arrived), arrived, paths))
         return [row[2] for row in rows], [row[0] for row in rows], [row[1] for row in rows]
 
     def screen_width(self):
