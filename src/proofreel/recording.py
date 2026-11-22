@@ -25,6 +25,7 @@ import time
 from pathlib import Path
 
 from . import HOME, Problem, conditions, plugins, probes, session, vm
+from .screen import is_browser
 
 SESSIONS = Path(os.environ.get("PROOFREEL_SESSIONS", HOME / "sessions"))
 POINTER = HOME / f"{vm.RUN}-session.json"
@@ -253,7 +254,7 @@ def record(folder, server, password, fps, reduce=0):
             times.flush()
             state["index"] += 1
 
-    if server.startswith("cdp://"):
+    if is_browser(server):
         from . import cdp
         emulate = json.loads((folder / "session.json").read_text()).get("emulate", [])
         sources = [lambda: cdp.screencast(server, stop, deliver, emulate)]
@@ -278,7 +279,7 @@ def record(folder, server, password, fps, reduce=0):
         thread.join()
     times.close()
     probes.finish(folder, started)
-    if not server.startswith("cdp://"):
+    if not is_browser(server):
         from vncdotool import api
         api.shutdown()
 

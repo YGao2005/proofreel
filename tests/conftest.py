@@ -1,4 +1,5 @@
 import os
+import subprocess
 
 import pytest
 
@@ -52,8 +53,14 @@ def chrome_path():
 
 
 @pytest.fixture(scope="session", autouse=True)
-def idle_browsers():
-    """A Chrome that a test leaves, or that a killed pytest leaves, ends itself after 2 minutes (idle.py)."""
+def idle_browsers(tmp_path_factory):
+    """A Chrome that a killed pytest leaves ends itself after 2 minutes (idle.py). A Chrome that a test leaves
+    running at the end of the session is a failure: each test stops what it starts. It is named, then ended."""
     with pytest.MonkeyPatch.context() as patch:
         patch.setenv("PROOFREEL_IDLE", "120")
         yield
+    flag = f"--user-data-dir={tmp_path_factory.getbasetemp()}"
+    left = subprocess.run(["pgrep", "-f", "--", flag], capture_output=True, text=True).stdout.split()
+    if left:
+        subprocess.run(["pkill", "-KILL", "-f", "--", flag], check=False)
+        pytest.fail(f"A test left {len(left)} Chrome processes running (ended now). Stop Chrome in the test's teardown.")
