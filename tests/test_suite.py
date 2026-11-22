@@ -112,6 +112,29 @@ def test_a_suite_runs_each_flow_on_a_new_clone_and_a_failure_does_not_stop_it(tm
     assert page_path == out / "index.html"
 
 
+def test_a_journey_that_differs_between_runs_is_flaky_and_not_a_pass(tmp_path, fake_vms, fake_recording):
+    folder = flows(tmp_path, steady="start steady\ncheck text good\nstop\n", odd="start odd\ncheck text MAYBE\nstop\n")
+    runs = {"steady": 0, "odd": 0}
+
+    def execute(words):
+        if words[0] == "start":
+            runs[words[1]] += 1
+            words = [words[0], f"{words[1]}-{runs[words[1]]}"]
+        if words[:2] == ["check", "text"] and words[2] == "MAYBE":
+            words = ["check", "text", "good" if runs["odd"] != 2 else "bad"]
+        return fake_recording(words)
+
+    out = tmp_path / "review"
+    _, rows = suite.run([folder], lambda path: cli.load_flow(path, {}), cli.play, execute, state="warm", out=out, repeat=3)
+    assert rows == [("FLAKY", "odd", "passed 2 of 3 runs"), ("PASS", "steady", None)]
+    found = page.load_runs(out)
+    assert [(r["title"], r["verdict"], r.get("flaky")) for r in found if r["journey"] == "odd"] == [
+        ("odd-1 #1", "works", {"passed": 2, "of": 3}), ("odd-2 #2", "problem", {"passed": 2, "of": 3}),
+        ("odd-3 #3", "works", {"passed": 2, "of": 3})]
+    assert all("flaky" not in r and r["attempts"] == 3 for r in found if r["journey"] == "steady")
+    assert fake_vms.count("up warm") == 6
+
+
 def test_a_suite_reads_every_flow_and_finds_every_state_before_a_vm_starts(tmp_path, fake_vms, fake_recording):
     folder = flows(tmp_path, a="from warm\nnote one\n", b="note two\n")
     with pytest.raises(Problem, match="b.flow names no state"):
