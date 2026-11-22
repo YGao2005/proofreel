@@ -5,6 +5,13 @@ description: "Use to test an app as a real user in a headless browser, a clean V
 
 # proofreel
 
+## Hand the proof to a separate agent
+
+If your agent can start a subagent with a fresh context (and a cheaper model), hand the proof to it. Give it the user's request, how to reach the app, and what changed in user terms. Do not give it your implementation: it writes its checks from the request, so they do not depend on how you built the change, and its work stays out of your context. Then relay its verdict and the review page path.
+
+- Claude Code: the plugin ships the agent `proofreel:proof-runner` (Sonnet). Use it as a subagent.
+- Codex: ask in the prompt for a subagent. A custom agent is a TOML file in `.codex/agents/` with `name`, `description`, `developer_instructions`, and an optional `model`. Or run `codex exec -m <model> "<request>"` as a separate session.
+
 ## Fast path: a web app
 
 Read the screen once, write the whole flow, run it with one command, and read the printed result. Do not rehearse steps one by one. For the commands, run `proofreel help` (about 1,000 characters), not `proofreel --help` (7,000); `proofreel help all` is the full list.
