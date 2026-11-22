@@ -150,7 +150,7 @@ def test_an_extra_host_is_accepted_only_when_the_person_opened_it(box):
     try:
         for host in (name, f"{name}:443", f"{name.upper()}:8790"):
             assert request(httpd, "GET", "/items", Host=host)[0] == 200
-        for host in (f"x{name}", f"{name}.evil.com", f"evil.com:{name}", f"{name}:abc", f"sub.{name}"):
+        for host in ("", f"x{name}", f"{name}.evil.com", f"evil.com:{name}", f"{name}:abc", f"sub.{name}"):
             assert request(httpd, "GET", "/items", Host=host)[0] == 403
         good = {"Host": name, "X-Inbox-Token": secret}
         assert post(httpd, item, **good, Origin="https://evil.example")[0] == 403

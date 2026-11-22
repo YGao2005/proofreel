@@ -226,7 +226,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         """Only a request that names this server as its host: a page on another name cannot reach it."""
         port = self.server.server_port
         host = (self.headers.get("Host") or "").lower()
-        return host in (f"127.0.0.1:{port}", f"localhost:{port}") or re.fullmatch(r"(.+?)(:\d+)?", host)[1] in self.server.hosts
+        return host in (f"127.0.0.1:{port}", f"localhost:{port}") or re.sub(r":\d+$", "", host) in self.server.hosts
 
     def origin_ok(self):
         port = self.server.server_port
@@ -304,14 +304,17 @@ def server(port=PORT):
 
 
 def serve(also=None):
-    """Run the inbox server. also (a list of host names) replaces the extra hosts and restarts a running server."""
+    """Run the inbox server here. also (a list of host names) replaces the extra hosts and starts it detached."""
     if also is not None:
-        set_hosts(also)
+        names = set_hosts(also)
         if stop():
             for _ in range(50):
                 if not running():
                     break
                 time.sleep(0.1)
+        ensure_server()
+        print(f"The inbox runs at http://127.0.0.1:{PORT}" + "".join(f" and https://{h}" for h in names) + ".")
+        return
     httpd = server()
     if httpd.hosts:
         print(f"Also open to: {', '.join(httpd.hosts)}", flush=True)

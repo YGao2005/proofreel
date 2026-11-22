@@ -146,7 +146,7 @@ reads decisions later, and `proofreel inbox stop` ends the server. The server li
 **From your phone.** Install Tailscale on the Mac and on the phone. On the Mac, run `tailscale serve --bg 8790`. Then run
 `proofreel inbox serve --also <mac>.<tailnet>.ts.net`, and open the `https://` link on the phone. The list of waiting
 items opens first; tap an item to read it. The Approve, Needs work, and Reject buttons stay at the bottom of the screen.
-`--also` replaces the saved host names and restarts a running server; pass `--also ""` to close them. `inbox list` shows
+`--also` saves the host names and starts the server in the background with them; pass `--also ""` to close them. `inbox list` shows
 the open names. Never put the inbox on a public tunnel with no login in front: the page carries its token, so anyone with
 the link can decide. A Cloudflare Tunnel with Cloudflare Access is the other safe option.
 
