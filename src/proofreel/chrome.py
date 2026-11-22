@@ -30,6 +30,7 @@ FOLDER = HOME / "chrome"
 SIZE = "1440x900"
 FLUSH_SECONDS = 6
 IDLE_SECONDS = 1800
+START_SECONDS = 30
 PLAYWRIGHT = Path.home() / ("Library/Caches" if platform.system() == "Darwin" else ".cache") / "ms-playwright"
 GOOGLE_CHROME = Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
 SKIP = shutil.ignore_patterns("Singleton*", "DevToolsActivePort")
@@ -111,10 +112,9 @@ def boot(size=SIZE):
                                 start_new_session=True)
     address = f"cdp://127.0.0.1:{port}"
     pidfile().write_text(f"{proc.pid} {address}")
-    beat().touch()
     subprocess.Popen([sys.executable, "-m", "proofreel.idle", str(FOLDER), str(idle), str(vm.CURRENT)],
                      stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
-    deadline = time.time() + 30
+    deadline = time.time() + START_SECONDS
     while True:
         try:
             with urllib.request.urlopen(f"http://127.0.0.1:{port}/json/version", timeout=2) as answer:
@@ -127,6 +127,7 @@ def boot(size=SIZE):
             time.sleep(0.1)
     with WebScreen(address) as screen:
         screen.fit(*map(int, size.split("x")))
+    beat().touch()
     return {"vm": MACHINE, "pid": proc.pid, "screen": address, "screen_password": "", "size": size, "beat": str(beat())}
 
 

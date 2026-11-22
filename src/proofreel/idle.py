@@ -2,7 +2,7 @@
 
 chrome.boot starts it beside Chrome, in the same session. Every proofreel command that uses the run, and the
 recorder while it records, touch the beat file. The watchdog ends the run browser when the beat is older than
-the idle time, or when Chrome has died. It leaves when the run's pid file is gone or names another Chrome (vm down,
+the idle time, or when Chrome has died. While Chrome starts there is no beat file, and it gets chrome.START_SECONDS more. It leaves when the run's pid file is gone or names another Chrome (vm down,
 or a newer run). It ends only the Chrome of its own profile folder.
 """
 
@@ -40,7 +40,8 @@ def watch(idle):
         if not chrome.pidfile().exists() or chrome.pidfile().read_text() != mine:
             return
         gone = 0 if alive(int(pid)) else gone + 1
-        quiet = time.time() - beat.stat().st_mtime if beat.exists() else 0
+        quiet = time.time() - beat.stat().st_mtime if beat.exists() else \
+            time.time() - chrome.pidfile().stat().st_mtime - chrome.START_SECONDS
         if gone > 1 or quiet > idle:
             break
     minutes = f"{idle / 60:g} min" if idle >= 60 else f"{idle:g} s"

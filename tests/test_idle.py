@@ -63,7 +63,7 @@ def test_a_killed_pytest_leaves_no_chrome(tmp_path, chrome_path):
     flag = f"--user-data-dir={tmp_path / 'home' / 'chrome' / vm.MACHINE}"
     try:
         end = time.time() + 30
-        while not running(flag) and time.time() < end:
+        while not (tmp_path / 'home' / 'pr-run.json').exists() and time.time() < end:
             time.sleep(0.2)
         assert running(flag)
         child.send_signal(signal.SIGKILL)
