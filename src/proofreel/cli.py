@@ -291,8 +291,8 @@ def published(page, files, runs, new):
     data = Path(page).parent / "artifact.json"
     data.write_text(json.dumps({"page": str(page.resolve()), "runs": runs, "files": files, "new": new,
                                 "capabilities": CAPABILITIES}, indent=2))
-    return (f"Page: {page.resolve()} ({len(files)} files). For an Artifact tool: {data.resolve()}\n"
-            f"For the review inbox: proofreel inbox add {page.parent.resolve()} --from <your session> --pr <N> --on-approve \"<what you do next>\"")
+    return (f"Page: {page.resolve()} ({len(files)} files). For an Artifact tool: {data.resolve()}. "
+            f"For the review inbox: proofreel inbox add {page.parent.resolve()}")
 
 
 def inbox_command(a):
