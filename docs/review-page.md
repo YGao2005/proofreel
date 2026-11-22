@@ -1,6 +1,15 @@
 # The review page
 
-The page is described in [the README](../README.md#the-review-page).
+One page holds every run of one journey. On a wide screen:
+
+- **Left:** the video, a scrub bar with a mark for each step and check, and a folded Tracks row.
+- **Right:** the state machine of the review folder, drawn from the runs' `state` lines (Flow), or the steps of each
+  state with their times (Steps). A click on a state or a step jumps the video to that moment. Only this column scrolls.
+- **Below:** the Journeys, Stats, and Network tabs. Tracks, Stats, and Network show what the [probes](probes.md)
+  measured.
+
+A failed check marks the page *Fail*. A line under the title names the first failure, and a click on it jumps the video
+there. Keys: Space plays, the arrows seek, J and K step, N finds the next failure.
 
 ![The review page of a passing journey: the video, the flow with the current state lit, and Tracks folded.](review-page.png)
 
@@ -9,7 +18,7 @@ The page is described in [the README](../README.md#the-review-page).
 ## Review inbox
 
 `proofreel inbox add <review folder>` puts the page in a local inbox, and `proofreel inbox wait <id>` returns the
-decision to the agent. See [the README](../README.md#review-inbox).
+decision to the agent. See [Review inbox](inbox.md).
 
 ## Review on claude.ai
 
