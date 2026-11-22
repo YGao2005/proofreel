@@ -17,6 +17,8 @@ from vncdotool.client import KEYMAP
 
 from . import Problem, swift_tool
 
+BROWSER = "cdp://"
+
 SHIFTED = dict(zip('~!@#$%^&*()_+{}|:"<>?', "`1234567890-=[]\\;',./"))
 GLIDE, GLIDE_STEPS, GLIDE_SECONDS = (40, 24), 10, 0.15
 FRAME_WAITS = (2, 4, 8)
@@ -212,9 +214,14 @@ def _tesseract(png):
             for v in lines.values()]
 
 
+def is_browser(address):
+    """True for the address of a browser screen (cdp://host:port), False for a VNC server (host::port)."""
+    return address.startswith(BROWSER)
+
+
 def connect(address, password=None, keys=None):
     """The screen at an address: a browser (cdp://host:port) or a VNC server (host::port)."""
-    if address.startswith("cdp://"):
+    if is_browser(address):
         from .cdp import WebScreen
         return WebScreen(address, password, keys)
     return Screen(address, password, keys)

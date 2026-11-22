@@ -23,7 +23,7 @@ import urllib.request
 from pathlib import Path
 
 from . import Problem, vm
-from .cdp import WebScreen, close_browser
+from .cdp import SCHEME, WebScreen, close_browser
 from .vm import HOME, MACHINE, alive, free_port
 
 FOLDER = HOME / "chrome"
@@ -110,7 +110,7 @@ def boot(size=SIZE):
     with open(log, "w") as out:
         proc = subprocess.Popen(args, stdout=out, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
                                 start_new_session=True)
-    address = f"cdp://127.0.0.1:{port}"
+    address = f"{SCHEME}127.0.0.1:{port}"
     pidfile().write_text(f"{proc.pid} {address}")
     subprocess.Popen([sys.executable, "-m", "proofreel.idle", str(FOLDER), str(idle), str(vm.CURRENT)],
                      stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)

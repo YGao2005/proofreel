@@ -15,9 +15,8 @@ from pathlib import Path
 import websocket
 
 from . import Problem
-from .screen import Keyboard
+from .screen import BROWSER as SCHEME, Keyboard
 
-SCHEME = "cdp://"
 LINES = (Path(__file__).parent / "lines.js").read_text()
 PAINTED = "Promise.race([new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))), " \
           "new Promise(r => setTimeout(r, 3000))])"
