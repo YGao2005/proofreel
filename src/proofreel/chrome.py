@@ -24,6 +24,7 @@ from .vm import HOME, MACHINE, alive, free_port
 
 FOLDER = HOME / "chrome"
 SIZE = "1440x900"
+FLUSH_SECONDS = 6
 PLAYWRIGHT = Path.home() / ("Library/Caches" if platform.system() == "Darwin" else ".cache") / "ms-playwright"
 GOOGLE_CHROME = Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
 SKIP = shutil.ignore_patterns("Singleton*", "DevToolsActivePort")
@@ -146,6 +147,8 @@ def quit_chrome():
 def save(name, run, warm):
     if warm:
         raise Problem("A browser state cannot be warm: it keeps cookies and storage, not open pages.")
+    # WHY: Chrome writes localStorage up to 5 s after a change and does not flush it when a headless browser closes.
+    time.sleep(FLUSH_SECONDS)
     quit_chrome()
     shutil.rmtree(folder(name), ignore_errors=True)
     shutil.copytree(folder(MACHINE), folder(name), symlinks=True, ignore=SKIP)

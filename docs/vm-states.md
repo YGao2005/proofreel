@@ -225,7 +225,8 @@ proofreel vm down
   is not read.
 - The recorder uses the screencast of Chrome (`Page.startScreencast`): a frame at each change of the page, and one at
   the start. The renderer draws the pointer, as it does for a VM.
-- `vm save` stops Chrome so it writes its cookies and storage, copies the profile, and starts Chrome again. A state
+- `vm save` waits 6 s (Chrome writes localStorage up to 5 s late), closes Chrome so it writes its cookies and storage,
+  copies the profile, and starts Chrome again. A state
   is cold only (`--warm` and `--warmable` are refused). `vm sh`, `put`, `get`, `check sh`, `check running`, conditions,
   and guest probes need a shell, which a browser run does not have: use `check cmd` for a command on the host.
 - `open <url>` works on every run VM: `web` navigates the tab and waits for its load event, Linux runs `browse`,
