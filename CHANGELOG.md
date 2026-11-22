@@ -1,8 +1,12 @@
 # Changelog
 
-## Unreleased
+## 1.4.0
 
-- **Review inbox:** `proofreel inbox add <review folder>` queues a review page in one local inbox (http://127.0.0.1:8790), and `proofreel inbox wait <id>` blocks until the person presses Approve, Approve + next mission, Needs work, or Reject, then prints the decision. In Claude Code a background `wait` wakes the session when it exits. `inbox check --here` reads decisions later; `inbox list`, `serve`, and `stop` manage the queue. The server listens on 127.0.0.1 only, and a decision needs a per-install token. See the README.
+One review inbox for every agent, and truer timing in macOS VM recordings.
+
+- **Review inbox:** `proofreel inbox add <review folder>` queues a review page in one local inbox (http://127.0.0.1:8790), and `proofreel inbox wait <id>` blocks until the person presses Approve, Approve + next mission, Needs work, or Reject, then prints the decision. Tested end to end with Claude Code (background wait) and Codex (foreground wait). In Claude Code a background `wait` wakes the session when it exits. `inbox check --here` reads decisions later; `inbox list`, `serve`, and `stop` manage the queue. The server listens on 127.0.0.1 only, and a decision needs a per-install token. See the README.
+- **Fix (macOS VMs):** a frame is timed by when it arrived. Apple's VNC server holds a frame request until the screen changes, so a frame timed by its request showed the screen after a click before the click: the video showed the next screen at the click, and latency read the click's own change as background motion ("no change on the screen in 2 s").
+- **Fix:** a click that changes nothing near it (a sidebar item that changes the main pane) is looked for on the whole screen before it reads "no change on the screen".
 
 ## 1.3.0
 
