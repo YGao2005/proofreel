@@ -1,10 +1,8 @@
-from linux
-probe network
-probe browser
+from web
 start search --title "${TITLE:-Search notes}" --about "A user searches their notes. The matching note must show fast."
 state Home
 step "Open the notes list"
-vm sh "browse ${URL:-http://10.0.2.2:8791}/notes.html"
+open ${URL:-http://127.0.0.1:8791}/notes.html
 wait-text "Your notes" 30
 state "Search"
 step "Search for groceries"
