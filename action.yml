@@ -1,0 +1,155 @@
+name: proofreel
+description: Replay saved proofreel flows on a pull request and publish the review video. No model, no tokens.
+branding:
+  icon: video
+  color: purple
+
+inputs:
+  flows:
+    description: Flow files or folders of .flow files, separated by spaces.
+    default: .proofreel/flows
+  start:
+    description: A shell command that starts your app. It runs in the background. Leave empty if the app is already up.
+    default: ""
+  url:
+    description: Where the app answers. The action waits for it, and flows read it as ${URL}.
+    default: ""
+  wait-for:
+    description: A URL to wait for instead of url.
+    default: ""
+  wait-timeout:
+    description: Seconds to wait for the app.
+    default: "60"
+  title:
+    description: The title of the review page. Default is the repository name.
+    default: ""
+  version:
+    description: >
+      The proofreel to install: latest, an exact version such as 1.2.2, or source (the code of this action).
+      Default is the version of the action tag (v1.2.2, or v1 for the newest 1.x), and source for a branch or a SHA.
+    default: ""
+  fail-on-problem:
+    description: Fail the job when a journey has the verdict problem. Set false to only report.
+    default: "true"
+  working-directory:
+    description: The folder to run in. Flow paths and start are relative to it.
+    default: .
+  args:
+    description: More arguments for proofreel suite, such as --set NAME=value.
+    default: ""
+
+outputs:
+  review-dir:
+    description: The folder with the review page (index.html and runs/).
+    value: ${{ steps.suite.outputs.review-dir }}
+  exit-code:
+    description: The exit code of proofreel suite. 0 all good, 1 a journey has a problem, 2 the suite could not run.
+    value: ${{ steps.suite.outputs.exit-code }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    - name: Install ffmpeg and fonts
+      shell: bash
+      run: |
+        if [ "$RUNNER_OS" = Linux ]; then
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg fonts-dejavu-core
+        elif [ "$RUNNER_OS" = macOS ]; then
+          brew install ffmpeg
+        else
+          echo "proofreel runs on Linux and macOS runners." >&2; exit 2
+        fi
+
+    - name: Install proofreel
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+        ACTION_REF: ${{ github.action_ref }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: |
+        v="$VERSION"
+        if [ -z "$v" ]; then
+          case "$ACTION_REF" in
+            v[0-9]*.[0-9]*.[0-9]*) v="${ACTION_REF#v}" ;;
+            v[0-9]*) v="major:${ACTION_REF#v}" ;;
+            *) v=source ;;
+          esac
+        fi
+        case "$v" in
+          source) spec="$ACTION_PATH" ;;
+          latest) spec=proofreel ;;
+          major:*) spec="proofreel>=${v#major:},<$(( ${v#major:} + 1 ))" ;;
+          *) spec="proofreel==$v" ;;
+        esac
+        python -m pip install --quiet "$spec"
+        proofreel --version
+
+    - name: Start the app
+      if: inputs.start != ''
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        START: ${{ inputs.start }}
+      run: |
+        nohup bash -c "$START" > "$RUNNER_TEMP/proofreel-app.log" 2>&1 &
+
+    - name: Wait for the app
+      if: inputs.url != '' || inputs.wait-for != ''
+      shell: bash
+      env:
+        TARGET: ${{ inputs.wait-for || inputs.url }}
+        TIMEOUT: ${{ inputs.wait-timeout }}
+      run: |
+        for _ in $(seq "$TIMEOUT"); do
+          curl -s -o /dev/null --max-time 2 "$TARGET" && exit 0
+          sleep 1
+        done
+        echo "The app did not answer at $TARGET in $TIMEOUT seconds." >&2
+        tail -n 30 "$RUNNER_TEMP/proofreel-app.log" 2>/dev/null >&2 || true
+        exit 1
+
+    - name: Run the flows
+      id: suite
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        FLOWS: ${{ inputs.flows }}
+        URL: ${{ inputs.url }}
+        TITLE: ${{ inputs.title || github.event.repository.name }}
+        ARGS: ${{ inputs.args }}
+        PROOFREEL_HOME: ${{ runner.temp }}/proofreel-home
+      run: |
+        out="$RUNNER_TEMP/proofreel-review"
+        case " $PROOFREEL_CHROME_FLAGS" in *--no-sandbox*) ;; *) export PROOFREEL_CHROME_FLAGS="$PROOFREEL_CHROME_FLAGS --no-sandbox" ;; esac
+        set_url=(); [ -n "$URL" ] && set_url=(--set "URL=$URL")
+        set +e
+        # shellcheck disable=SC2086
+        proofreel suite $FLOWS --out "$out" --title "$TITLE" "${set_url[@]}" $ARGS
+        code=$?
+        set -e
+        echo "review-dir=$out" >> "$GITHUB_OUTPUT"
+        echo "exit-code=$code" >> "$GITHUB_OUTPUT"
+
+    - name: Keep the review folder
+      uses: actions/upload-artifact@v4
+      with:
+        name: proofreel-review
+        path: ${{ steps.suite.outputs.review-dir }}
+        if-no-files-found: ignore
+
+    - name: Fail when a journey has a problem
+      shell: bash
+      env:
+        CODE: ${{ steps.suite.outputs.exit-code }}
+        FAIL: ${{ inputs.fail-on-problem }}
+      run: |
+        if [ "$CODE" = 1 ] && [ "$FAIL" != true ]; then
+          echo "A journey has a problem. fail-on-problem is false, so the job passes."
+        elif [ "$CODE" != 0 ]; then
+          echo "proofreel suite exited with $CODE." >&2
+          exit "$CODE"
+        fi

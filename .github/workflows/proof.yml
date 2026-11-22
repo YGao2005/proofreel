@@ -1,0 +1,17 @@
+name: proof
+on: pull_request
+
+permissions:
+  contents: read
+
+jobs:
+  acme-notes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./
+        with:
+          flows: examples/acme-notes/flows
+          start: python examples/acme-notes/server.py &
+          url: http://127.0.0.1:8791
+          title: Acme Notes
