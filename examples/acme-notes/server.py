@@ -6,6 +6,7 @@ from urllib.parse import parse_qs, urlparse
 STATIC = Path(__file__).parent / "static"
 NOTES = [{"id": 1, "title": "Welcome", "body": "Your first note in Acme Notes."},
          {"id": 2, "title": "Groceries", "body": "Milk, eggs, and bread."}]
+KEEP = 3
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -39,8 +40,10 @@ class Handler(BaseHTTPRequestHandler):
         if urlparse(self.path).path != "/api/notes":
             return self.send(404, {"error": "not found"})
         note = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
-        note = {"id": len(NOTES) + 1, "title": note.get("title", ""), "body": note.get("body", "")}
+        note = {"id": NOTES[-1]["id"] + 1, "title": note.get("title", ""), "body": note.get("body", "")}
         NOTES.append(note)
+        # WHY: a server that runs for many recordings must not push "Note saved" off the screen; keep the 2 first notes and the newest KEEP.
+        del NOTES[2:-KEEP]
         self.send(201, note)
 
     def log_message(self, *args):
