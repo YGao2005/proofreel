@@ -47,7 +47,7 @@ def boot(suspendable=False):
     url = wait(lambda: re.search(r"vnc://:(?P<pw>[^@]*)@(?P<host>[^:]+):(?P<port>\d+)", log.read_text()), 90,
                f"Tart printed no VNC address. See {log}.")
     ip = wait(lambda: tart("ip", MACHINE, "--wait", "5", check=False).stdout.strip(), 180, "The VM got no IP address.")
-    return {"vm": MACHINE, "pid": proc.pid, "ip": ip, "vnc": f"{url['host']}::{url['port']}", "vnc_password": url["pw"],
+    return {"vm": MACHINE, "pid": proc.pid, "ip": ip, "screen": f"{url['host']}::{url['port']}", "screen_password": url["pw"],
             "suspendable": bool(suspendable)}
 
 

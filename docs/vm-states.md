@@ -35,6 +35,8 @@ Each state names its backend and its guest system (`--os macos`, the default, `l
 system decides what proofreel can do in it: crash reports and the accessibility tree are macOS only, and each
 condition names the systems it works on. All of this is in `src/proofreel/guest.py`, so a new system is one class.
 
+A web app needs no VM: see [The browser runner](#the-browser-runner).
+
 A clone is copy on write (APFS), so a state costs only the disk blocks that it changes. On an M-series Mac with a
 macOS 26 guest: `up` from a cold state takes about 18 s to SSH ready, a warm `up` about 12 s with the apps as they
 were, and `save --warm` about 60 s. A warm state needs a run VM
@@ -191,3 +193,40 @@ takes about 4 minutes. It does these steps:
    the desktop starts.
 
 Both files are in the package (`src/proofreel/images`). If a step fails, the half-made state is deleted.
+
+## The browser runner
+
+A web app runs in a headless Chrome on the host: no VM, no SSH, no image to build. The built-in state `web` is an
+empty browser profile, so `vm up web` works on a new machine.
+
+```bash
+proofreel vm up web                          # about 1 s: Chrome, 1440x900, no window, no sound
+proofreel start signup --title "Sign up"
+proofreel open http://127.0.0.1:8791/notes.html
+proofreel wait-text "Your notes"
+proofreel click-text "Title"
+proofreel type "Trip plan"
+proofreel check text "Trip plan"
+proofreel stop
+proofreel vm save signed-in                  # the profile (cookies, storage) is the state
+proofreel vm up signed-in                    # a copy of it: each run starts from the same place
+proofreel vm down
+```
+
+- Chrome comes from `PROOFREEL_CHROME`, then the newest Chromium of Playwright (`playwright install chromium`), then
+  Google Chrome in `/Applications`, then `chromium` or `google-chrome` on PATH.
+- Chrome is `--headless=new --mute-audio --hide-scrollbars`, and its DevTools port listens on 127.0.0.1 only. The run
+  record's `screen` is `cdp://127.0.0.1:<port>` (a VNC run has `host::port`). `--vnc cdp://127.0.0.1:<port>` drives
+  any Chrome that you started with `--remote-debugging-port`.
+- The screen is the first tab. Coordinates are CSS pixels of the 1440x900 viewport (device scale 1).
+- Text comes from the page, not from OCR: `find`, `click-text`, `wait-text`, `check text`, and `--in` read the visible
+  text lines with their boxes, including input values and placeholders. Text that a modal covers, that is
+  `display: none`, or that is outside the viewport is not read, as on a real screen. Text in iframes and in shadow DOM
+  is not read.
+- The recorder uses the screencast of Chrome (`Page.startScreencast`): a frame at each change of the page, and one at
+  the start. The renderer draws the pointer, as it does for a VM.
+- `vm save` stops Chrome so it writes its cookies and storage, copies the profile, and starts Chrome again. A state
+  is cold only (`--warm` and `--warmable` are refused). `vm sh`, `put`, `get`, `check sh`, `check running`, conditions,
+  and guest probes need a shell, which a browser run does not have: use `check cmd` for a command on the host.
+- `open <url>` works on every run VM: `web` navigates the tab and waits for its load event, Linux runs `browse`,
+  macOS runs `open`, and Windows runs `start`.

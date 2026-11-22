@@ -20,7 +20,7 @@ import time
 from pathlib import Path
 
 from . import Problem
-from .vm import HOME, MACHINE, free_port, wait
+from .vm import HOME, MACHINE, alive, free_port, wait
 
 FOLDER = HOME / "qemu"
 DEFAULTS = {"memory": 4096, "cpu": 4, "display": "1440x900"}
@@ -119,7 +119,7 @@ def boot(machine, memory_file=None, extra=()):
         proc = subprocess.Popen(args, stdout=out, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
                                 start_new_session=True)
     record = {"vm": MACHINE, "backend": "qemu", "pid": proc.pid, "ip": "127.0.0.1", "port": port,
-              "vnc": f"127.0.0.1::{vnc}", "vnc_password": "", "qmp": str(qmp_socket()), "machine": machine}
+              "screen": f"127.0.0.1::{vnc}", "screen_password": "", "qmp": str(qmp_socket()), "machine": machine}
 
     def running():
         if not alive(proc.pid):
@@ -150,19 +150,6 @@ def qmp(run, command, **arguments):
     if "error" in reply:
         raise Problem(f"QEMU {command}: {reply['error']['desc']}")
     return reply["return"]
-
-
-def alive(pid):
-    try:
-        if os.waitpid(pid, os.WNOHANG)[0]:
-            return False
-    except ChildProcessError:
-        pass
-    try:
-        os.kill(pid, 0)
-        return True
-    except ProcessLookupError:
-        return False
 
 
 def save(name, run, warm):

@@ -39,7 +39,9 @@ newer proofreel is refused. Another tool logs with times: `proofreel event click
   the same. Apple Virtualization (Tart and UTM macOS guests) is one of these: with a menu or a file dialog open, it
   answers one full-frame request on each connection and then nothing. For these servers, a request that waits 1 s
   reconnects, because a new connection always gets a whole frame. A command that reads the screen does the same: it
-  waits 2, 4, then 8 s, and then stops with a problem that says so.
+  waits 2, 4, then 8 s, and then stops with a problem that says so. A browser screen (`cdp://`, see
+  [vm-states](vm-states.md#the-browser-runner)) has no VNC: the recorder takes the Chrome screencast, which sends a
+  frame only when the page changes, so the renderer already handles it like a still VNC screen.
 - **Time** (`motion.timeline`): the renderer finds the moments when the screen changes (a 96x64 difference) or an
   action occurs. These moments play at 1x, and the time between them plays at up to 8x. The speed ramps, so the
   video has no cuts.
