@@ -104,8 +104,10 @@ def test_a_saved_web_state_keeps_the_profile_and_drop_removes_it(runs, tmp_path)
     with screen.connect(first["screen"]) as web:
         web.open((tmp_path / "page.html").as_uri())
         web.call("Runtime.evaluate", expression="localStorage.setItem('user', 'guest')")
+    t0 = time.time()
     vm.save("signed-in")
-    print("DEBUG", sorted(str(p.relative_to(chrome.folder("signed-in"))) for p in chrome.folder("signed-in").rglob("*") if "Storage" in str(p) or "Local" in str(p)), flush=True)
+    print("DEBUG save took", time.time() - t0, flush=True)
+    print("DEBUG", (chrome.FOLDER / "pr-run.vm.log").read_text()[-1500:], flush=True)
     assert vm.state_info("signed-in")["parent"] == "web" and vm.state_info("signed-in")["os"] == "web"
     second = vm.up("signed-in")
     with screen.connect(second["screen"]) as web:
