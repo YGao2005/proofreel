@@ -59,6 +59,11 @@ the Journeys tab lists them with their result, checks passed, and length; a clic
 journey that made no video shows its error in place of the video. The suite prints PASS or FAIL for each journey,
 then the same output as `publish`, and exits 1 if a journey failed.
 
+`--repeat N` runs each flow N times, each from a new clone, to find a journey that is not steady. If the verdict or
+the result of any check differs between the runs, the journey is flaky: the suite prints `FLAKY` with the runs that
+passed, exits 1, and does not count it as a pass. The page lists each run (`#1`, `#2`, ...) in the run switcher and
+in one Journeys row, which shows `Flaky 2/3`. A click on the row plays the first run that failed.
+
 
 
 ## States: the flow as a state machine

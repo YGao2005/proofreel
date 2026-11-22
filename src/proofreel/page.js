@@ -66,16 +66,21 @@ function journeysView() {
   if (!SUITE) return null;
   const box = $("div", { class: "journeys" });
   for (const id of [...new Set(RUNS.map(suiteOf))].reverse()) {
-    const rows = RUNS.map((x, i) => [x, i]).filter(([x]) => suiteOf(x) === id), pass = rows.filter(([x]) => x.verdict !== "problem").length;
+    const rows = RUNS.map((x, i) => [x, i]).filter(([x]) => suiteOf(x) === id), by = new Map();
+    for (const row of rows) by.set(row[0].journey || row[0].id, [...(by.get(row[0].journey || row[0].id) || []), row]);
+    const groups = [...by.values()].map(g => [g, g.find(([x]) => x.verdict === "problem") || g[0]]);
+    const pass = groups.filter(([g, [x]]) => x.verdict !== "problem" && !x.flaky).length;
     const info = rows[0][0].suite || {};
-    box.append($("h2", {}, $("span", { text: info.title || "Runs" }), $("span", { class: "meta", text: `${pass}/${rows.length} pass \u00b7 ${rows[0][0].when}` })));
+    box.append($("h2", {}, $("span", { text: info.title || "Runs" }), $("span", { class: "meta", text: `${pass}/${groups.length} pass \u00b7 ${rows[0][0].when}` })));
     const body = $("tbody");
-    for (const [x, i] of rows) {
-      const sum = Verdict.summary(x), go = () => { location.hash = `run-${i + 1}`; };
-      body.append($("tr", { class: x.verdict === "problem" ? "bad" : "", tabindex: "0", "aria-current": String(i === run), onclick: go,
+    for (const [g, [x, i]] of groups) {
+      const sum = Verdict.summary(x), go = () => { location.hash = `run-${i + 1}`; }, bad = x.verdict === "problem" || x.flaky;
+      body.append($("tr", { class: bad ? "bad" : "", tabindex: "0", "aria-current": String(g.some(([, j]) => j === run)), onclick: go,
         onkeydown: ev => { if (ev.key === "Enter") go(); } },
-        $("td", {}, $("a", { href: `#run-${i + 1}`, text: x.title, onclick: ev => ev.stopPropagation() }), x.error ? $("span", { class: "m bad", text: x.error }) : null),
-        $("td", {}, chip(...VERDICTS[x.verdict])),
+        $("td", {}, $("a", { href: `#run-${i + 1}`, text: g.length > 1 ? x.journey : x.title, onclick: ev => ev.stopPropagation() }),
+          g.length > 1 ? $("span", { class: "m" }, ...g.map(([y, j]) => $("a", { href: `#run-${j + 1}`, class: y.verdict === "problem" ? "bad" : "", text: `#${y.attempt}`, onclick: ev => ev.stopPropagation() }))) : null,
+          x.error ? $("span", { class: "m bad", text: x.error }) : null),
+        $("td", {}, x.flaky ? chip(`Flaky ${x.flaky.passed}/${x.flaky.of}`, "bad") : chip(...VERDICTS[x.verdict])),
         $("td", { text: sum.checks.total ? `${sum.checks.passed}/${sum.checks.total}` : "-" }),
         $("td", { text: sum.budgets.failed ? `${sum.budgets.failed} failed` : "-" }),
         $("td", { text: x.video === false ? "-" : Tracks.format(x.real, "s") })));
@@ -87,7 +92,7 @@ function journeysView() {
   return box;
 }
 
-const metaLine = r => [...Verdict.words(Verdict.tally(r.events)), ...(r.video !== false ? [Tracks.format(r.real, "s")] : []), ...r.meta];
+const metaLine = r => [...Verdict.words(Verdict.tally(r.events)), ...(r.video !== false ? [Tracks.format(r.real, "s")] : []), ...r.meta, ...(r.flaky ? [`flaky ${r.flaky.passed}/${r.flaky.of}`] : [])];
 
 let keys = null;
 

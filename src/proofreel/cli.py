@@ -42,7 +42,7 @@
   run <flow> [--set NAME=VALUE]                         Run a flow file: one proofreel command per line. A line
                                                         `condition <name>` refuses a run VM whose state lacks it, or
                                                         applies a condition that lasts one recording.
-  suite <flows or folders...> [--state S] [--set NAME=VALUE] [--out DIR] [--title T]
+  suite <flows or folders...> [--state S] [--set NAME=VALUE] [--out DIR] [--title T] [--repeat N]
                                                         Run each flow from a new clone of its saved VM state (a flow
                                                         line `from <state>`, or --state), and publish one page.
   render <session> [--plain] [--width W]                Make the video and page of a session again. A session is
@@ -406,6 +406,7 @@ def parser():
     s.add_argument("--set", action="append", default=[])
     s.add_argument("--out", help="the review folder (default: a new suite folder in the sessions folder)")
     s.add_argument("--title")
+    s.add_argument("--repeat", type=int, default=1, help="run each flow N times; a journey that differs between runs is flaky")
     s = sub.add_parser("ci", help="helpers for CI (see docs/ci.md)")
     s.add_argument("args", nargs=argparse.REMAINDER)
     s = sub.add_parser("render")
@@ -594,9 +595,9 @@ def command(argv):
             from . import suite
             values = dict(v.split("=", 1) for v in a.set)
             result, rows = suite.run(a.flows, lambda path: load_flow(path, values), play, command, a.state, a.out,
-                                     a.title)
+                                     a.title, a.repeat)
             print(published(*result))
-            return 1 if any(mark == "FAIL" for mark, _, _ in rows) else 0
+            return 1 if any(mark in ("FAIL", "FLAKY") for mark, _, _ in rows) else 0
         case "ci":
             from . import ci
             return ci.main(a.args)

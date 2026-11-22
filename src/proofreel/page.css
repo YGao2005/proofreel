@@ -190,6 +190,7 @@ li.more .text { color: var(--fg-2); }
 .numbers td:first-child { font: 400 var(--fs-14)/1.5 var(--sans); overflow-wrap: anywhere; }
 .numbers td .m { display: block; color: var(--fg-3); font: 400 var(--fs-12)/1.5 var(--mono); }
 .numbers td .m.bad { color: var(--bad); font-family: var(--sans); }
+.numbers td .m a + a { margin-left: 8px; }
 .numbers tbody tr { cursor: pointer; transition: background-color 150ms var(--ease); } .numbers tbody tr:hover { background: var(--hover); }
 .numbers tr.bad td { background: var(--bad-bg); }
 .numbers tr.bad td .m, .numbers tr.bad th { color: var(--fg-2); }
