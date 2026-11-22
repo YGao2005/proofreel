@@ -104,7 +104,7 @@ class Clock:
             (ra, va), (rb, vb) = points[a], points[b]
             far, worst = None, 0.5 / fps
             for i in range(a + 1, b):
-                video = va + (vb - va) * (points[i][0] - ra) / (rb - ra) if rb > ra else va
+                video = va + (vb - va) * (points[i][0] - ra) / (rb - ra) if rb > ra else points[i][1]
                 if abs(video - points[i][1]) > worst:
                     far, worst = i, abs(video - points[i][1])
             if far is not None:

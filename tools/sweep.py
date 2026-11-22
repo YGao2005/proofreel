@@ -29,7 +29,7 @@ ACME = Path(__file__).resolve().parent.parent / "examples" / "acme-notes"
 FAILED_REQUESTS = "net/* failed below 1 in the run"
 
 
-def suite(flows, out, broken, port, *options):
+def suite(flows, out, broken, *options, port=8791):
     """Run a suite against a new Acme Notes server (BROKEN=1 when broken) and return the folder's runs."""
     server = subprocess.Popen([sys.executable, ACME / "server.py"], env={**os.environ, "BROKEN": "1" if broken else "", "PORT": str(port)},
                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -72,7 +72,7 @@ def main():
     for i in range(1, args.runs + 1):
         for broken, flows in ((False, ACME / "flows"), (True, ACME / "flows" / "search.flow")):
             out = args.out / f"{'down' if broken else 'ok'}-{i}"
-            for run in suite(flows, out, broken, args.port):
+            for run in suite(flows, out, broken, port=args.port):
                 total += 1
                 for e in run["events"]:
                     if e["kind"] == "wait" and (seen := re.search(r"seen after ([\d.]+) s", e.get("detail", ""))):

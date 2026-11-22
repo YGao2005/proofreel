@@ -110,6 +110,7 @@ def test_a_click_holds_the_screen_from_before_its_press_while_its_ring_plays():
     assert plan[held[0]][0] == pytest.approx(1.0, abs=1 / FPS)
     assert all(a[0] <= b[0] for a, b in zip(plan, plan[1:]))
     clock = Clock.of(plan)
+    assert len(clock.knots) <= 5
     assert clock.real(held[0] / FPS) == pytest.approx(1.0, abs=0.02)
     assert clock.real(held[-1] / FPS) == pytest.approx(1.0, abs=0.02)
     events = [{"t": 1.0, "kind": "click", "text": "click Sign in", "x": 100, "y": 100}]
