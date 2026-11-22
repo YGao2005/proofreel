@@ -134,6 +134,11 @@ Keys: Space plays, the arrows seek, J and K step, N finds the next failure.
 Publishing, review folders, and what the page adds on claude.ai are in [the review page](docs/review-page.md).
 Tracks, Stats, and Network show what the [probes](docs/probes.md) measured.
 
+## In CI
+
+A GitHub Action replays your saved flows on each pull request and comments with the verdicts, a picture, and a link
+to the review page. It uses no model and no tokens. See [proofreel in CI](docs/ci.md) for the workflow to copy.
+
 ## Example: Acme Notes
 
 [`examples/acme-notes`](examples/acme-notes) is a made-up notes app with three flows (sign in, write a note,
@@ -153,6 +158,7 @@ The tour above is made from these runs. `tools/readme_media.py review-acme` make
 | [Flows, checks, and commands](docs/flows.md) | the checks, flows, suites, states, crash reports, another tool that drives the screen, the accessibility tree, modifier keys |
 | [VM states](docs/vm-states.md) | saved states, Tart (macOS and Linux), conditions, QEMU (Windows and Linux), the `linux` browser image |
 | [Probes and budgets](docs/probes.md) | what a probe measures, `check metric`, `stats`, input latency, network requests, the probe contract |
+| [proofreel in CI](docs/ci.md) | the GitHub Action, permissions, Pages or artifact, pull requests from forks |
 | [The review page](docs/review-page.md) | what the page shows, publishing, review folders, claude.ai features |
 | [How it works](docs/how-it-works.md) | the video, the screens it can record, the session folder, capture, time, camera, drawing |
 

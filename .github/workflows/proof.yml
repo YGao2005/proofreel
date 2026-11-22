@@ -1,0 +1,30 @@
+name: proof
+on: pull_request
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./
+        with:
+          flows: examples/acme-notes/flows
+          start: python examples/acme-notes/server.py &
+          url: http://127.0.0.1:8791
+          title: Acme Notes
+
+  publish:
+    needs: run
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      # Only for this repo: its own pull requests may run its own action code. Other repos publish with
+      # YGao2005/proofreel/publish@v1 and need no checkout.
+      - uses: actions/checkout@v4
+      - uses: ./publish
