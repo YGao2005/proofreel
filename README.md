@@ -144,7 +144,7 @@ python3 examples/acme-notes/server.py &    # skip if it already runs
 proofreel suite examples/acme-notes/flows --out review-acme
 ```
 
-The tour above is made from these runs. `tools/readme_media.py review-acme` makes it again.
+The tour above is made from these runs. `tools/readme_media.py review-acme` makes it again, and `tools/example_page.py` makes the example page.
 
 ## Docs
 
