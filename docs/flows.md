@@ -43,7 +43,7 @@ proofreel run flows/sign-up.flow --set EMAIL=sam@example.com
 A line `from <state>` names the saved VM state that the flow starts from. `run` refuses a run VM from another
 saved state.
 
-## Suites: many journeys, each from a clean start
+## Suites: many journeys, each from a clean VM
 
 ```bash
 proofreel suite flows/upload/ --state warm-app --out review-upload --title "Upload"
@@ -51,7 +51,8 @@ proofreel suite flows/upload/ --state warm-app --out review-upload --title "Uplo
 
 A suite runs each flow in the folders and files that you give. For each flow, it starts a new clone of the flow's
 saved VM state (its `from` line, or `--state`), runs the flow, and deletes the clone. So each journey starts from the
-same place, and nothing from one journey reaches the next. It reads every flow and finds every state before the first
+same place, and nothing from one journey reaches the next in the VM. A server on the host is not reset: what one
+journey saves there, the next one sees. It reads every flow and finds every state before the first
 VM starts. A journey that fails does not stop the suite: its row says why. A recording that a flow leaves open is
 stopped. All journeys go to one review folder, and one page shows them all. The run switcher names each journey, and
 the Journeys tab lists them with their result, checks passed, and length; a click on a row plays that journey. A

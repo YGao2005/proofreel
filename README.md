@@ -67,7 +67,7 @@ Publishing is in [the review page](docs/review-page.md). To use an existing VNC 
 
 A flow is a text file with one command on each line, so a journey runs again the same way. Write each line without the
 word `proofreel`, and write `vm sh 'browse URL'` for the page step. [`examples/acme-notes/flows`](examples/acme-notes/flows)
-has flows to copy. A suite runs many flows, each from a clean start:
+has flows to copy. A suite runs many flows, each from a clean VM:
 
 ```bash
 proofreel run flows/sign-up.flow --set EMAIL=sam@example.com
