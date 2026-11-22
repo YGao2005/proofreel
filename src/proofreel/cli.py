@@ -69,7 +69,7 @@ import sys
 import time
 from pathlib import Path
 
-from . import HOME, Problem, __version__, ax, conditions, flow, guest, image, metrics, plugins, probes, recording
+from . import HOME, Problem, __version__, ax, conditions, flow, guest, image, metrics, plugins, probes, recording, summary
 from .recording import log
 from . import vm as vms
 from .screen import center, connect, find, fold, inside, matches, poll, screen_text, wait_for
@@ -106,6 +106,7 @@ def stop(**options):
     """Exit 1 when a budget that waited for the end of the run failed."""
     folder = Path(recording.unstopped()["dir"]) if recording.unstopped() else None
     print(recording.stop(**options))
+    print(summary.text(folder))
     run = json.loads((folder / "run.json").read_text())
     return 1 if any(e.get("late") and not e.get("ok") for e in run["events"]) else 0
 
@@ -119,7 +120,8 @@ def check(args, screen, run):
             return bool(found) == present, f'"{text}" is {"" if present else "not "}in the accessibility tree', ""
         found = wait_for(screen, text, seconds, present=present, within=scope(args.within, screen, run))
         where = f" in {args.within}" if args.within else ""
-        return bool(found) == present, f'"{text}" is {"" if present else "not "}on the screen{where}', ""
+        ok = bool(found) == present
+        return ok, f'"{text}" is {"" if present else "not "}on the screen{where}', "" if ok else shown(screen)
     if args.kind in ("sh", "running"):
         run = run or vms.Run.current()
     if args.kind in ("cmd", "sh"):
@@ -143,6 +145,11 @@ def check(args, screen, run):
     if args.kind == "metric":
         return metric(args)
     raise Problem(f"Unknown check {args.kind!r}.")
+
+
+def shown(screen):
+    """What the screen shows, as detail for a failed text check."""
+    return "The screen showed: " + summary.listed("", [line["text"] for line in screen_text(screen)], 12).strip()
 
 
 def metric(args):
@@ -528,12 +535,29 @@ def main(argv=None):
     sys.exit(code or 0)
 
 
+def watch(a, force=False):
+    """Save the text of the screen for the summary. A screen that cannot be read leaves no save and a warning: the
+    run goes on, and the summary has no line for that step."""
+    if active := recording.current():
+        try:
+            server, password, run = target(a)
+            with connect(server, password, run.guest.keys if run else None) as screen:
+                summary.save(active["dir"], screen_text(screen), force)
+        except Exception as error:
+            print(f"proofreel: could not read the screen text for the summary ({error}).", file=sys.stderr)
+
+
 def command(argv):
     """Run one command. Returns 1 for a failed check or a query that found nothing."""
     a = parse(argv)
     HOME.mkdir(parents=True, exist_ok=True)
+    if a.command in ("state", "step", "stop"):
+        watch(a)
     match a.command:
-        case "start": return start(a)
+        case "start":
+            code = start(a)
+            watch(a, force=True)
+            return code
         case "stop": return stop(plain=a.plain, width=a.width, keep_frames=a.keep_frames)
         case "state" | "step" | "note": return log(a.command, a.text)
         case "event":
