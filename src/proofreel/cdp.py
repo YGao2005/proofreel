@@ -222,6 +222,17 @@ class WebScreen(Keyboard):
         return answer["result"]["value"]
 
 
+def close_browser(address):
+    """Ask the browser to close itself, which writes its cookies and storage. A browser that is gone is no error."""
+    try:
+        with urllib.request.urlopen(f"http://{address.removeprefix(SCHEME)}/json/version", timeout=5) as answer:
+            socket = websocket.create_connection(json.load(answer)["webSocketDebuggerUrl"], timeout=5, suppress_origin=True)
+        socket.send(json.dumps({"id": 1, "method": "Browser.close"}))
+        socket.close()
+    except (OSError, ValueError, KeyError, http.client.HTTPException, websocket.WebSocketException):
+        pass
+
+
 def screencast(address, stop, deliver):
     """Give deliver(time, (width, height), write) a frame at the start, then one at each change of the page, until the
     event stop is set. A browser that stops answering is tried again."""

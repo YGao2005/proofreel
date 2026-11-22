@@ -19,7 +19,7 @@ import urllib.request
 from pathlib import Path
 
 from . import Problem
-from .cdp import WebScreen
+from .cdp import WebScreen, close_browser
 from .vm import HOME, MACHINE, alive, free_port
 
 FOLDER = HOME / "chrome"
@@ -91,7 +91,8 @@ def boot(size=SIZE):
     with open(log, "w") as out:
         proc = subprocess.Popen(args, stdout=out, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
                                 start_new_session=True)
-    pidfile().write_text(str(proc.pid))
+    address = f"cdp://127.0.0.1:{port}"
+    pidfile().write_text(f"{proc.pid} {address}")
     deadline = time.time() + 30
     while True:
         try:
@@ -103,7 +104,6 @@ def boot(size=SIZE):
                 raise Problem(f"Chrome did not start: {log.read_text().strip()[-400:] or 'no output'} (see {log}). "
                               f"Flags for Chrome, such as --no-sandbox in a container, go in PROOFREEL_CHROME_FLAGS.") from None
             time.sleep(0.1)
-    address = f"cdp://127.0.0.1:{port}"
     with WebScreen(address) as screen:
         screen.fit(*map(int, size.split("x")))
     return {"vm": MACHINE, "pid": proc.pid, "screen": address, "screen_password": "", "size": size}
@@ -121,18 +121,21 @@ def mine(pid):
 
 
 def quit_chrome():
-    """End the run's Chrome. SIGTERM to the browser alone lets it write its cookies and storage through its helpers;
-    SIGKILL goes to it only if it hangs, and then to any helper left in its group."""
+    """End the run's Chrome. It is asked to close itself first, so it writes its cookies and storage through its
+    helpers; then SIGTERM, then SIGKILL (also to any helper left in its group) for one that hangs."""
     if not pidfile().exists():
         return
-    pid = int(pidfile().read_text())
+    pid, address = pidfile().read_text().split()
+    pid = int(pid)
     if alive(pid) and mine(pid):
-        os.kill(pid, signal.SIGTERM)
-        end = time.time() + 10
-        while alive(pid) and time.time() < end:
-            time.sleep(0.05)
-        if alive(pid):
-            os.kill(pid, signal.SIGKILL)
+        for step, seconds in ((lambda: close_browser(address), 10), (lambda: os.kill(pid, signal.SIGTERM), 5),
+                              (lambda: os.kill(pid, signal.SIGKILL), 3)):
+            step()
+            end = time.time() + seconds
+            while alive(pid) and time.time() < end:
+                time.sleep(0.05)
+            if not alive(pid):
+                break
         try:
             os.killpg(pid, signal.SIGKILL)
         except ProcessLookupError:
