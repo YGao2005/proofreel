@@ -5,8 +5,8 @@
 
 Each run starts in a fresh copy of examples/acme-notes with only the skill installed, and has its own PROOFREEL_HOME
 and its own server port. A baseline run (the agent only says OK) gives what the agent costs just to start; the table
-shows the proof run minus that baseline. --context N puts about N tokens of neutral text in the AGENTS.md and
-CLAUDE.md of the app, so the agent starts with a context of a real session. --proofreel is what pip installs into
+shows the proof run minus that baseline. --context N puts about N tokens of neutral text at the top of the prompt
+(Codex cuts an AGENTS.md at 32 KiB), so the agent starts with a context of a real session. --proofreel is what pip installs into
 the tool's own venv: a path (default: this checkout) or a name such as proofreel==1.2.2, to compare versions.
 The agents run one after another with no permission prompts, and they cost money: Claude's cost is the USD it reports, Codex reports
 none. The work folder is kept (raw logs, review pages, results.json); its path is printed. --baseline takes the
@@ -55,23 +55,20 @@ def filler(tokens):
     return "# Project notes\n\n" + "\n".join(lines) + "\n"
 
 
-def prepare(folder, venv, context):
+def prepare(folder, venv):
     """A fresh copy of Acme Notes in folder/app with the skill for Claude and for Codex. Returns the app folder."""
     app = folder / "app"
     shutil.copytree(ACME, app, ignore=shutil.ignore_patterns("__pycache__"))
     for skills in (".claude/skills", ".agents/skills"):
         subprocess.run([venv / "bin" / "proofreel", "skill", "install", "--to", app / skills],
                        check=True, capture_output=True)
-    if context:
-        for name in ("AGENTS.md", "CLAUDE.md"):
-            (app / name).write_text(filler(context))
     return app
 
 
 def command(agent, prompt, app):
     if agent == "claude":
         return ["claude", "-p", prompt, "--output-format", "json", "--permission-mode", "bypassPermissions"]
-    return ["codex", "exec", "--json", "-s", "danger-full-access", "-C", str(app), prompt]
+    return ["codex", "exec", "--json", "-s", "danger-full-access", "--skip-git-repo-check", "-C", str(app), prompt]
 
 
 def tally(agent, out):
@@ -104,7 +101,7 @@ def review(home, text):
 def measure(agent, kind, prompt, folder, venv, context):
     """Run the agent once in a fresh app. Returns its numbers, with the verdict and the review page."""
     folder.mkdir(parents=True)
-    app = prepare(folder, venv, context)
+    app = prepare(folder, venv)
     home = folder / "home"
     env = {**os.environ, "PATH": f"{venv / 'bin'}{os.pathsep}{os.environ['PATH']}", "PROOFREEL_HOME": str(home)}
     port = free_port()
@@ -113,10 +110,13 @@ def measure(agent, kind, prompt, folder, venv, context):
     try:
         time.sleep(1)
         started = time.time()
-        done = subprocess.run(command(agent, prompt.format(url=f"http://127.0.0.1:{port}"), app), cwd=app, env=env,
-                              capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=900)
+        text = (filler(context) if context else "") + prompt.format(url=f"http://127.0.0.1:{port}")
+        done = subprocess.run(command(agent, text, app), cwd=app, env=env, capture_output=True, text=True,
+                              stdin=subprocess.DEVNULL, timeout=900)
         (folder / "out.json").write_text(done.stdout)
         (folder / "err.txt").write_text(done.stderr)
+        if done.returncode and not done.stdout.strip():
+            sys.exit(f"{agent} stopped with exit {done.returncode}: {done.stderr.strip()[-400:]}")
         row = tally(agent, done.stdout)
         row["seconds"] = round(time.time() - started)
         row["verdict"], row["page"] = review(home, row["text"]) if kind == "proof" else ("", "")
