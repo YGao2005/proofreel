@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.2
+
+- **Fix (browser runner):** clicks and keys no longer read "no change on the screen in 2 s" when the action before them (a page load, a focus ring) changed the same pixels less than 0.6 s earlier. An input's settle time stops at the next action.
+- **Fix:** a step picture shows the screen before the next action starts. In a fast flow, it showed later actions.
+
 ## 1.2.1
 
 - The skill says to check the result where the app shows it, not the field you typed into, and to end with `proofreel vm down` so no browser or VM is left running. Both came from a real Codex run.
