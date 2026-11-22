@@ -50,10 +50,21 @@ class Run(dict):
     is new at each boot. Load it once and pass it on."""
 
     @classmethod
-    def current(cls):
+    def load(cls):
         if not CURRENT.exists():
             raise Problem("No run VM. Start one: proofreel vm up <state>.")
         return cls(json.loads(CURRENT.read_text()))
+
+    @classmethod
+    def current(cls):
+        """The run VM, for a command that uses it. A browser that its watchdog stopped is a problem. The command
+        counts as activity (the beat file), so an idle browser is not stopped under it."""
+        run = cls.load()
+        if run.get("stopped"):
+            raise Problem(run["stopped"])
+        if run.get("beat"):
+            Path(run["beat"]).touch()
+        return run
 
     @property
     def guest(self):
@@ -287,7 +298,7 @@ def down():
     if recording.unstopped():
         recording.stop(error="The run VM was stopped (vm down) during the recording.")
     if CURRENT.exists():
-        run = Run.current()
+        run = Run.load()
         run.close()
         if run.get("pid"):
             subprocess.run(["kill", str(run["pid"])], capture_output=True)

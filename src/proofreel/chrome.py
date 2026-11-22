@@ -4,6 +4,9 @@ A state is a Chrome profile folder (cookies and storage, so a signed-in state). 
 starts empty. A run starts from a throwaway copy of the state's profile. Chrome has no window and no sound, and its
 DevTools port listens on 127.0.0.1 only. The run record's `screen` is `cdp://127.0.0.1:<port>` (see cdp.py).
 PROOFREEL_CHROME_FLAGS adds flags to Chrome's command line.
+
+Chrome outlives the command that starts it, so a watchdog (idle.py) starts with it and ends it after PROOFREEL_IDLE
+seconds (default 30 min) with no proofreel command and no recording (the beat file).
 """
 
 import json
@@ -14,17 +17,19 @@ import shlex
 import shutil
 import signal
 import subprocess
+import sys
 import time
 import urllib.request
 from pathlib import Path
 
-from . import Problem
+from . import Problem, vm
 from .cdp import WebScreen, close_browser
 from .vm import HOME, MACHINE, alive, free_port
 
 FOLDER = HOME / "chrome"
 SIZE = "1440x900"
 FLUSH_SECONDS = 6
+IDLE_SECONDS = 1800
 PLAYWRIGHT = Path.home() / ("Library/Caches" if platform.system() == "Darwin" else ".cache") / "ms-playwright"
 GOOGLE_CHROME = Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
 SKIP = shutil.ignore_patterns("Singleton*", "DevToolsActivePort")
@@ -36,6 +41,17 @@ def folder(name):
 
 def pidfile():
     return FOLDER / f"{MACHINE}.pid"
+
+
+def beat():
+    return FOLDER / f"{MACHINE}.beat"
+
+
+def idle_seconds():
+    try:
+        return float(os.environ.get("PROOFREEL_IDLE", IDLE_SECONDS))
+    except ValueError:
+        raise Problem(f"PROOFREEL_IDLE={os.environ['PROOFREEL_IDLE']} is not a number of seconds.") from None
 
 
 def find_chrome():
@@ -83,6 +99,7 @@ def boot(size=SIZE):
     """Start Chrome on the run profile, and return the run record once its DevTools port answers."""
     for lock in folder(MACHINE).glob("Singleton*"):
         lock.unlink()
+    idle = idle_seconds()
     port = free_port()
     log = FOLDER / f"{MACHINE}.log"
     args = [find_chrome(), "--headless=new", "--remote-debugging-address=127.0.0.1", f"--remote-debugging-port={port}",
@@ -94,6 +111,9 @@ def boot(size=SIZE):
                                 start_new_session=True)
     address = f"cdp://127.0.0.1:{port}"
     pidfile().write_text(f"{proc.pid} {address}")
+    beat().touch()
+    subprocess.Popen([sys.executable, "-m", "proofreel.idle", str(FOLDER), str(idle), str(vm.CURRENT)],
+                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
     deadline = time.time() + 30
     while True:
         try:
@@ -107,7 +127,7 @@ def boot(size=SIZE):
             time.sleep(0.1)
     with WebScreen(address) as screen:
         screen.fit(*map(int, size.split("x")))
-    return {"vm": MACHINE, "pid": proc.pid, "screen": address, "screen_password": "", "size": size}
+    return {"vm": MACHINE, "pid": proc.pid, "screen": address, "screen_password": "", "size": size, "beat": str(beat())}
 
 
 def host_address(run):
@@ -148,6 +168,7 @@ def quit_chrome():
                 break
     end_helpers()
     pidfile().unlink()
+    beat().unlink(missing_ok=True)
 
 
 def save(name, run, warm):
