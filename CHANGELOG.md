@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 1.2.0
+
+Any agent, any runner: a web app records in a headless Chrome with no VM, and the skill works in Codex, Antigravity, Cursor, and Claude Code.
 
 - **Any agent:** the skill no longer names Claude in its main path (the Artifact steps are a note for Claude Code), `pip install` ships it, and `proofreel skill install [--to DIR]` copies it to `~/.agents/skills` for Codex, Antigravity, and Cursor.
 - **Browser runner:** a web app records in a headless, muted Chrome on the host, with no VM. `vm up web` starts it (no `vm image` or `vm base`), `vm save` keeps the profile (cookies, storage) as a state, and `vm drop` and `vm down` clean up. Flows, checks, the recording, and the page are the same as in a VM. Text comes from the page (`find`, `click-text`, `wait-text`, `check text`, `--in`), not from OCR. The run record's `vnc` and `vnc_password` are now `screen` and `screen_password`.
