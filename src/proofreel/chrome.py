@@ -3,12 +3,14 @@
 A state is a Chrome profile folder (cookies and storage, so a signed-in state). The built-in state `web` has none: it
 starts empty. A run starts from a throwaway copy of the state's profile. Chrome has no window and no sound, and its
 DevTools port listens on 127.0.0.1 only. The run record's `screen` is `cdp://127.0.0.1:<port>` (see cdp.py).
+PROOFREEL_CHROME_FLAGS adds flags to Chrome's command line.
 """
 
 import json
 import os
 import platform
 import re
+import shlex
 import shutil
 import signal
 import subprocess
@@ -83,7 +85,7 @@ def boot(size=SIZE):
     args = [find_chrome(), "--headless=new", "--remote-debugging-address=127.0.0.1", f"--remote-debugging-port={port}",
             f"--user-data-dir={folder(MACHINE)}", f"--window-size={size.replace('x', ',')}",
             "--force-device-scale-factor=1", "--mute-audio", "--hide-scrollbars", "--no-first-run",
-            "--no-default-browser-check", "about:blank"]
+            "--no-default-browser-check", *shlex.split(os.environ.get("PROOFREEL_CHROME_FLAGS", "")), "about:blank"]
     with open(log, "w") as out:
         proc = subprocess.Popen(args, stdout=out, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
                                 start_new_session=True)
@@ -96,7 +98,8 @@ def boot(size=SIZE):
             break
         except (OSError, ValueError):
             if not alive(proc.pid) or time.time() > deadline:
-                raise Problem(f"Chrome did not start. See {log}.") from None
+                raise Problem(f"Chrome did not start: {log.read_text().strip()[-400:] or 'no output'} (see {log}). "
+                              f"Flags for Chrome, such as --no-sandbox in a container, go in PROOFREEL_CHROME_FLAGS.") from None
             time.sleep(0.1)
     address = f"cdp://127.0.0.1:{port}"
     with WebScreen(address) as screen:
