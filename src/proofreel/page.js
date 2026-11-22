@@ -476,7 +476,7 @@ function statsView(r, seek) {
 // status and time. A row jumps the video to its start.
 function networkView(r, seek) {
   const fall = Tracks.waterfall(metricsOf(r));
-  if (!fall.rows.length) return placeholder("No requests in this run. The network probe records them: start with --probe network.");
+  if (!fall.rows.length) return placeholder("No requests in this run. A web run records them; in a VM, start with --probe network.");
   const span = fall.to - fall.from || 1;
   const axis = $("div", { class: "req axis-row", "aria-hidden": "true" }, $("span"), $("div", { class: "axis" },
     ...Tracks.ticks(fall.from, fall.to).map(t => $("span", { class: "tick", style: `left:${(t - fall.from) / span * 100}%`, text: Tracks.axisLabel(t) }))), $("span"));
