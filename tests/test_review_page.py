@@ -33,5 +33,6 @@ def test_tracks_start_folded_even_when_a_budget_failed_and_stay_as_set_across_ru
 def test_a_state_from_another_run_opens_that_run_at_the_state(view):
     view.click(".machine .node[aria-label^='Welcome']")
     view.wait_for_function("location.hash === '#run-1&t=2.8'")
-    assert view.inner_text(".machine .visit h2").startswith("Welcome")
+    # WHY: the run switch draws the Flow after the hash changes, not in the same task.
+    view.wait_for_function("document.querySelector('.machine .visit h2')?.innerText.startsWith('Welcome')")
     assert "picked" in view.get_attribute(".machine .node[aria-label^='Welcome']", "class")
