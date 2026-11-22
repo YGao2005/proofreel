@@ -51,10 +51,12 @@
   inbox add <page or review folder> [--title T] [--from NAME] [--pr N] [--on-approve TEXT]
                                                         Queue a review page in the local review inbox
                                                         (http://127.0.0.1:8790); prints the item id.
-  inbox wait <id> [--timeout S] | check [--here] | list | serve | stop
+  inbox wait <id> [--timeout S] | check [--here] | list | serve [--also HOST]... | stop
                                                         `wait` blocks until the person decides, then prints the
                                                         decision (exit 2 on timeout). `check` prints decisions not
-                                                        yet read (--here: this repo and branch).
+                                                        yet read (--here: this repo and branch). `serve --also HOST`
+                                                        also accepts that host name, for a private tunnel such as
+                                                        `tailscale serve`; repeat it, or pass "" to close them all.
   skill install [--to DIR]                              Copy the skill to ~/.agents/skills/proofreel (Codex, Antigravity,
                                                         and Cursor read it), or to DIR/proofreel for another agent.
   demo [dir]                                            Render a made-up session (no VNC needed).
@@ -311,8 +313,11 @@ def inbox_command(a):
             print(text)
         case "check":
             print("\n".join(inbox.check(a.here)) or "No new decisions.")
-        case "list": print("\n".join(inbox.listing()) or "The inbox is empty.")
-        case "serve": inbox.serve()
+        case "list":
+            print("\n".join(inbox.listing()) or "The inbox is empty.")
+            if extra := inbox.hosts():
+                print(f"Also open to: {', '.join(extra)}")
+        case "serve": inbox.serve(a.also)
         case "stop": print("Stopped the inbox server." if inbox.stop() else "The inbox server does not run.")
 
 
@@ -468,6 +473,7 @@ def parser():
     s.add_argument("--on-approve", default="", help="what you do after an Approve")
     s.add_argument("--timeout", type=float, help="wait: seconds to wait before exit 2")
     s.add_argument("--here", action="store_true", help="check: only this repo and branch")
+    s.add_argument("--also", action="append", metavar="HOST", help='serve: also accept this host name, like a private tunnel (repeat it; "" closes them all)')
     s = sub.add_parser("demo")
     s.add_argument("dir", nargs="?", default=str(recording.SESSIONS / "demo"))
     s.add_argument("--broken", action="store_true", help="type the name wrong, so the last check fails")

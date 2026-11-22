@@ -134,6 +134,42 @@ def test_a_decision_needs_the_token_and_the_servers_own_origin(box, running):
     assert (inbox.FOLDER / "token").stat().st_mode & 0o777 == 0o600
 
 
+def test_an_extra_host_is_accepted_only_when_the_person_opened_it(box):
+    def served():
+        httpd = inbox.server(0)
+        threading.Thread(target=httpd.serve_forever, daemon=True).start()
+        return httpd
+
+    item, secret, name = queued(box), inbox.token(), "box.example.ts.net"
+    closed = served()
+    assert request(closed, "GET", "/items", Host=name)[0] == 403
+    assert post(closed, item, **{"Host": name, "X-Inbox-Token": secret, "Origin": f"https://{name}"})[0] == 404
+    closed.shutdown()
+    assert inbox.set_hosts([name, f" {name.upper()} "]) == [name] and inbox.hosts() == [name]
+    httpd = served()
+    try:
+        for host in (name, f"{name}:443", f"{name.upper()}:8790"):
+            assert request(httpd, "GET", "/items", Host=host)[0] == 200
+        for host in (f"x{name}", f"{name}.evil.com", f"evil.com:{name}", f"{name}:abc", f"sub.{name}"):
+            assert request(httpd, "GET", "/items", Host=host)[0] == 403
+        good = {"Host": name, "X-Inbox-Token": secret}
+        assert post(httpd, item, **good, Origin="https://evil.example")[0] == 403
+        assert post(httpd, item, **good, Origin=f"https://x{name}")[0] == 403
+        assert post(httpd, item, **good, Origin=f"https://{name}.evil.com")[0] == 403
+        assert post(httpd, item, **good, Origin=f"https://{name}")[0] == 200
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+
+
+def test_extra_hosts_must_be_plain_names_and_an_empty_list_closes_them(box):
+    for bad in ("https://box.example", "box.example/x", "*.example.ts.net", "box:8790", "a b"):
+        with pytest.raises(Problem, match="plain host name"):
+            inbox.set_hosts([bad])
+    inbox.set_hosts(["box.example.ts.net"])
+    assert inbox.set_hosts([""]) == [] and inbox.hosts() == []
+
+
 def test_a_taken_port_is_a_problem(running):
     with pytest.raises(Problem, match="in use"):
         inbox.server(running.server_port)
@@ -154,7 +190,7 @@ def test_the_person_presses_needs_work_and_the_item_has_the_decision(box, runnin
     item = queued(box)
     with screen.connect(browser["screen"]) as web:
         web.open(f"http://127.0.0.1:{running.server_port}/")
-        assert screen.wait_for(web, "waiting 0 min", 10)
+        assert screen.wait_for(web, "waiting 0m", 10)
         web.click(*screen.center(screen.matches(web.lines(), "Needs work")[0]))
         assert screen.wait_for(web, "What needs work?", 5)
         web.type("Fix the title")

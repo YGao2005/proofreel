@@ -1,6 +1,6 @@
 const TOKEN = document.querySelector('meta[name="inbox-token"]').content;
 const NS = "http://www.w3.org/2000/svg";
-const ICONS = { check: "M5 12.5l4.5 4.5L19 7.5", x: "M6.5 6.5l11 11M17.5 6.5l-11 11", next: "M5 12h14M13 6l6 6-6 6", note: "M4 5h16v11H10l-4 4v-4H4zM12 8.5v4M10 10.5h4" };
+const ICONS = { check: "M5 12.5l4.5 4.5L19 7.5", x: "M6.5 6.5l11 11M17.5 6.5l-11 11", back: "M15 5l-7 7 7 7", next: "M5 12h14M13 6l6 6-6 6", note: "M4 5h16v11H10l-4 4v-4H4zM12 8.5v4M10 10.5h4" };
 const VERDICT = { works: ["Works", "ok"], problem: ["Problem", "bad"], shown: ["No checks", ""] };
 const DECIDED = { approve: ["Approved", "ok"], approve_next: ["Approved, next mission", "ok"], needs_work: ["Needs work", "bad"], reject: ["Rejected", ""] };
 const COMPOSE = {
@@ -25,12 +25,17 @@ const icon = name => {
   svg.setAttribute("viewBox", "0 0 24 24"); svg.setAttribute("class", "icon"); svg.setAttribute("aria-hidden", "true");
   path.setAttribute("d", ICONS[name]); svg.append(path); return svg;
 };
-const ago = at => { const m = Math.max(0, Math.floor((Date.now() / 1000 - at) / 60)); return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`; };
+const waited = at => {
+  const m = Math.max(0, Math.floor((Date.now() / 1000 - at) / 60)), days = Math.floor(m / 1440);
+  return days >= 2 ? `${days} days` : days ? "yesterday" : m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${m % 60}m`;
+};
 const clock = at => new Date(at * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+const stamp = at => new Date(at * 1000).toDateString() === new Date().toDateString() ? clock(at) : `${new Date(at * 1000).toLocaleDateString([], { weekday: "short" })} ${clock(at)}`;
+const who = i => [i.from, i.pr ? `#${i.pr}` : [i.repo, i.branch].filter(Boolean).join("/")].filter(Boolean).join(" · ");
 const place = i => [i.repo && i.branch ? `${i.repo}/${i.branch}` : i.repo, i.pr ? `PR #${i.pr}` : ""].filter(Boolean).join(" · ");
 const delivery = i => i.picked ? [`Picked up by ${i.from || "the agent"} at ${clock(i.picked.at)}`, "ok"] : ["Not picked up yet", "warn"];
 
-let list = [], seen = "", drawn = "", view = "waiting", selected = null, mode = null;
+let screen = "list", list = [], seen = "", drawn = "", view = "waiting", selected = null, mode = null;
 const shown = () => view === "waiting" ? list.filter(i => !i.decision) : list.filter(i => i.decision).sort((a, b) => b.decision.at - a.decision.at);
 const stateOf = i => i ? `${i.id} ${!!i.decision} ${!!i.picked}` : "";
 const current = () => shown().find(i => i.id === selected);
@@ -50,14 +55,16 @@ function renderQueue() {
     const state = i.decision ? delivery(i) : null;
     return h("button", { type: "button", class: "row", "aria-current": String(i.id === selected), onclick: () => select(i.id) },
       h("span", { class: "title", text: i.title, title: i.title }), label ? h("span", { class: `chip ${css}`, text: label }) : null,
-      h("span", { class: "sub" }, h("span", { class: "fold", text: [i.from, place(i)].filter(Boolean).join(" · ") }),
-        h("span", { class: "when mono", text: i.decision ? clock(i.decision.at) : ago(i.added) })),
+      h("span", { class: "sub" }, h("span", { class: "fold", text: who(i) }),
+        h("span", { class: "when mono", text: stamp(i.decision ? i.decision.at : i.added) })),
       state ? h("span", { class: "sub" }, h("span", { class: `chip ${state[1]}`, text: state[0] })) : null);
   }));
 }
 
+function showScreen(name) { screen = name; document.querySelector(".app").dataset.screen = name; }
+
 function select(id) {
-  selected = id; mode = null; drawer.hidden = true; openBtn.setAttribute("aria-expanded", "false");
+  selected = id; mode = null; showScreen("item"); drawer.hidden = true; openBtn.setAttribute("aria-expanded", "false");
   renderItem();
 }
 
@@ -79,11 +86,11 @@ function renderItem() {
 }
 
 function renderBar(i) {
-  barEl.replaceChildren();
+  barEl.replaceChildren(h("button", { type: "button", class: "btn tool back", "aria-label": "Back to the queue", onclick: () => showScreen("list") }, icon("back"), "Queue"));
   if (!i) { barEl.append(h("div", { class: "who" }, h("b", { text: "Review inbox" }))); return; }
-  const sep = () => h("span", { class: "sep", text: "·" });
-  barEl.append(h("div", { class: "who" }, h("span", { text: i.from || "An agent" }), i.repo ? [sep(), h("span", { class: "mono fold wide", text: place(i) })] : null,
-    !i.decision ? [sep(), h("span", { text: `waiting ${ago(i.added)}` })] : null));
+  const sep = wide => h("span", { class: `sep${wide ? " wide" : ""}`, text: "·" });
+  barEl.append(h("div", { class: "who" }, h("span", { text: i.from || "An agent" }), i.repo ? [sep(true), h("span", { class: "mono fold wide", text: place(i) })] : null,
+    !i.decision ? [sep(), h("span", { text: `waiting ${waited(i.added)}` })] : null));
   if (i.decision) return;
   const label = text => h("span", { class: "label", text });
   const press = m => { mode = mode === m ? null : m; renderBar(i); };
@@ -125,6 +132,7 @@ async function refresh() {
 }
 
 document.querySelectorAll(".seg button").forEach(b => b.addEventListener("click", () => { view = b.dataset.view; selected = (shown()[0] || {}).id; mode = null; renderItem(); }));
+showScreen("list");
 openBtn.addEventListener("click", () => { drawer.hidden = !drawer.hidden; openBtn.setAttribute("aria-expanded", String(!drawer.hidden)); });
 document.addEventListener("keydown", ev => {
   if (ev.target.closest("textarea, input") || ev.metaKey || ev.ctrlKey || ev.altKey) { if (ev.key === "Escape" && mode) { mode = null; renderBar(current()); } return; }

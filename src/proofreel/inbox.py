@@ -154,6 +154,23 @@ def listing():
             f"{i['title']}  {i['from']}" for i in items()]
 
 
+def hosts():
+    """The extra host names the person opened, one per line in the hosts file."""
+    path = FOLDER / "hosts"
+    return sorted(set(path.read_text().split())) if path.exists() else []
+
+
+def set_hosts(names):
+    """Replace the extra host names. An empty list closes them all. Problem for a name that is not a plain host."""
+    names = sorted({n.strip().lower() for n in names if n.strip()})
+    for name in names:
+        if not re.fullmatch(r"[a-z0-9]([a-z0-9.-]*[a-z0-9])?", name):
+            raise Problem(f"{name} is not a plain host name. Use the name only, like box.example.ts.net.")
+    FOLDER.mkdir(parents=True, exist_ok=True)
+    page.atomic(FOLDER / "hosts", "\n".join(names))
+    return names
+
+
 def token():
     """The secret of this install. The inbox page carries it, and a decision needs it."""
     path = FOLDER / "token"
@@ -176,7 +193,7 @@ def document(secret):
 <html lang="en">
 <meta charset="utf-8">
 <title>Review inbox</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="inbox-token" content="{secret}">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>{tokens}</style>
@@ -208,7 +225,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def local(self):
         """Only a request that names this server as its host: a page on another name cannot reach it."""
         port = self.server.server_port
-        return self.headers.get("Host") in (f"127.0.0.1:{port}", f"localhost:{port}")
+        host = (self.headers.get("Host") or "").lower()
+        return host in (f"127.0.0.1:{port}", f"localhost:{port}") or re.fullmatch(r"(.+?)(:\d+)?", host)[1] in self.server.hosts
+
+    def origin_ok(self):
+        port = self.server.server_port
+        origins = {f"http://127.0.0.1:{port}", f"http://localhost:{port}"}
+        origins |= {f"{scheme}://{h}" for h in self.server.hosts for scheme in ("http", "https")}
+        return (self.headers.get("Origin") or "").lower() in origins
 
     def do_GET(self):
         if not self.local():
@@ -253,11 +277,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             pass
 
     def do_POST(self):
-        port = self.server.server_port
         if not self.local() or self.path != "/decide":
             return self.send(404, "Not found.")
-        if self.headers.get("Origin") not in (f"http://127.0.0.1:{port}", f"http://localhost:{port}") or \
-                not hmac.compare_digest(self.headers.get("X-Inbox-Token", ""), self.server.secret):
+        if not self.origin_ok() or not hmac.compare_digest(self.headers.get("X-Inbox-Token", ""), self.server.secret):
             return self.reply(403, {"error": "Not allowed."})
         try:
             size = int(self.headers.get("Content-Length", ""))
@@ -277,12 +299,22 @@ def server(port=PORT):
         httpd = http.server.ThreadingHTTPServer(("127.0.0.1", port), Handler)
     except OSError as error:
         raise Problem(f"The inbox port {port} is in use ({error.strerror}). Is the inbox running? `proofreel inbox stop` ends it.") from None
-    httpd.secret, httpd.lock, httpd.daemon_threads = token(), threading.Lock(), True
+    httpd.secret, httpd.lock, httpd.daemon_threads, httpd.hosts = token(), threading.Lock(), True, hosts()
     return httpd
 
 
-def serve():
+def serve(also=None):
+    """Run the inbox server. also (a list of host names) replaces the extra hosts and restarts a running server."""
+    if also is not None:
+        set_hosts(also)
+        if stop():
+            for _ in range(50):
+                if not running():
+                    break
+                time.sleep(0.1)
     httpd = server()
+    if httpd.hosts:
+        print(f"Also open to: {', '.join(httpd.hosts)}", flush=True)
     (FOLDER / "server.pid").write_text(str(os.getpid()))
     signal.signal(signal.SIGTERM, lambda *_: threading.Thread(target=httpd.shutdown).start())
     try:

@@ -76,6 +76,26 @@ kbd { font: 500 11px/1 var(--mono); padding: 2px 4px; border-radius: 3px; backgr
 .empty-pane code { font: 400 var(--fs-13) var(--mono); background: var(--surface-3); padding: 1px 6px; border-radius: var(--r-sm); }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 @media (max-width: 860px) { .acts .label, kbd, .who .wide { display: none; } }
+.back { display: none; }
+@media (max-width: 699px) {
+  .app { display: block; }
+  .rail { display: none; }
+  .app[data-screen="list"] .work, .app[data-screen="item"] .drawer { display: none !important; }
+  .app[data-screen="list"] .drawer[hidden] { display: flex !important; }
+  .drawer { position: static; width: 100%; height: 100dvh; box-shadow: none; border: 0; }
+  .drawer-head { height: 56px; }
+  .row { padding: var(--s3); min-height: 56px; }
+  .work { height: 100dvh; }
+  .back { display: inline-flex; padding: 0 var(--s2) 0 0; gap: var(--s1); }
+  .bar { padding: 0 var(--s3); }
+  .acts { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; gap: var(--s2); padding: var(--s2) var(--s3) calc(var(--s2) + env(safe-area-inset-bottom));
+    background: var(--surface); border-top: 1px solid var(--line); }
+  .acts .btn { flex: 1; flex-direction: column; gap: 4px; height: 52px; padding: 0 var(--s1); font-size: var(--fs-12); }
+  .acts .label { display: inline; }
+  .drop { position: fixed; top: auto; left: var(--s3); right: var(--s3); width: auto; bottom: calc(68px + env(safe-area-inset-bottom)); }
+  .compose textarea { font-size: 16px; }
+  .main iframe { bottom: calc(68px + env(safe-area-inset-bottom)); height: auto; }
+}
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 <div class="app">
