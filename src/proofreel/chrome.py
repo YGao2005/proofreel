@@ -121,9 +121,18 @@ def mine(pid):
     return f"--user-data-dir={folder(MACHINE)}" in said
 
 
+def end_helpers():
+    """Kill what is left of the run's Chrome (its helpers can outlive it), found by the profile folder in its flags."""
+    flag = f"--user-data-dir={folder(MACHINE)}"
+    subprocess.run(["pkill", "-KILL", "-f", "--", flag], check=False)
+    end = time.time() + 3
+    while time.time() < end and not subprocess.run(["pgrep", "-f", "--", flag], capture_output=True).returncode:
+        time.sleep(0.05)
+
+
 def quit_chrome():
     """End the run's Chrome. It is asked to close itself first, so it writes its cookies and storage through its
-    helpers; then SIGTERM, then SIGKILL (also to any helper left in its group) for one that hangs."""
+    helpers; then SIGTERM, then SIGKILL for one that hangs. Last, its helpers."""
     if not pidfile().exists():
         return
     pid, address = pidfile().read_text().split()
@@ -137,10 +146,7 @@ def quit_chrome():
                 time.sleep(0.05)
             if not alive(pid):
                 break
-        try:
-            os.killpg(pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
+    end_helpers()
     pidfile().unlink()
 
 
