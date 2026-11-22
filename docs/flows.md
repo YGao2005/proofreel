@@ -66,6 +66,13 @@ in one Journeys row, which shows `Flaky 2/3`. A click on the row plays the first
 
 
 
+## Web runs: reduced motion
+
+A recording of a web run sets `prefers-reduced-motion: reduce` in the page, so an app that respects it does not animate.
+The frames, the step pictures, and the time that a wait takes then vary less from run to run. The run details say
+`motion reduced`. Chrome holds the setting only while the recorder runs, so it ends with `stop`, or with a recorder that dies.
+To keep the page's animations, write `start <name> --full-motion`.
+
 ## States: the flow as a state machine
 
 Put `state <name>` where the app should be, such as `state "Sign in"`. The waits and checks after it, up to the next
