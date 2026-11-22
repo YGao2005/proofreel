@@ -7,7 +7,7 @@ records it. A web app runs in a headless browser on your machine; a native Mac, 
 You get a short video that zooms to each action, the user flow it covered, and the checks and numbers that decide pass
 or fail, on a review page that a person can check in a minute.
 
-**[See a real review page →](https://claude.ai/artifact/PeehtyBLEMVUsxokb5FqbT)** (the Acme Notes example: three
+**[See a real review page →](https://ygao2005.github.io/proofreel/example/)** (the Acme Notes example: three
 journeys that pass and one with a failed network budget)
 
 [![A tour of the review page: the video plays, the flow lights each state, a click jumps the video, Tracks open, and a failed run shows its failed budget, request, and numbers.](https://raw.githubusercontent.com/YGao2005/proofreel/main/docs/tour.gif)](https://raw.githubusercontent.com/YGao2005/proofreel/main/docs/tour.mp4)

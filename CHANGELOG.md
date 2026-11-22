@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.1
+
+- The skill says to check the result where the app shows it, not the field you typed into, and to end with `proofreel vm down` so no browser or VM is left running. Both came from a real Codex run.
+- The example review page moves to GitHub Pages: https://ygao2005.github.io/proofreel/example/ (recorded on the browser runner).
+- The Network tab's empty-state text fits web runs.
+
 ## 1.2.0
 
 Any agent, any runner: a web app records in a headless Chrome with no VM, and the skill works in Codex, Antigravity, Cursor, and Claude Code.
