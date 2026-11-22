@@ -1,11 +1,13 @@
 // Metric tracks on the video's time axis: the time map, bins to draw, rows for spans, and the value at a time.
 // Pure functions: the page draws with them, and node runs the tests.
 const Tracks = (() => {
-  // The run's clock: [real, video] points joined by straight lines. along() maps one column to the other.
+  // The run's clock: [real, video] points joined by straight lines. along() maps one column to the other. A value
+  // that two points share (a hold at a click: real time stops) maps to the first of them, the start of the hold.
+  // Points are rounded to 1 ms, so a value within half of that of a point is at the point.
   function along(knots, x, y, value) {
     if (knots.length < 2) return value;
     let i = 1;
-    while (i < knots.length - 1 && knots[i][x] <= value) i++;
+    while (i < knots.length - 1 && knots[i][x] < value - 5e-4) i++;
     const [a, b] = [knots[i - 1], knots[i]];
     return b[x] > a[x] ? a[y] + (b[y] - a[y]) * (value - a[x]) / (b[x] - a[x]) : a[y];
   }

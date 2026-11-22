@@ -16,7 +16,7 @@ from bisect import bisect_left, bisect_right
 from PIL import Image, ImageChops, ImageStat
 
 from . import Problem, draw, latency, metrics, page
-from .motion import FPS, Camera, Clock, Pointer, ease, fit, spans
+from .motion import FPS, HOLD, Camera, Clock, Pointer, fit, spans, video_at
 from .session import ACTS, CHIP, RING, VERDICT, Session, path_line
 
 CHANGED = 1.5
@@ -49,7 +49,7 @@ class Scene:
     """Draws one video frame: the screen in its frame, the pointer, and the click rings. It also moves the camera,
     whose view the page applies as a zoom."""
 
-    def __init__(self, size, out_size, events, framed):
+    def __init__(self, size, out_size, events, framed, nows=None):
         self.events = events
         self.out = out_size
         self.ui = out_size[0] / 1440
@@ -67,6 +67,11 @@ class Scene:
         self.pointer = Pointer(canvas_events, out_size)
         self.camera = Camera(canvas_events, self.pointer, out_size)
         self.clicks = [e for e in canvas_events if e["kind"] in RING]
+        video = (lambda real: video_at(nows, real)) if nows else (lambda real: real)
+        acts = sorted(e["t"] for e in canvas_events if e["kind"] in ACTS)
+        self.ring_start = [video(e["t"]) for e in self.clicks]
+        self.ring_end = [min([start + HOLD] + [video(t) for t in acts if t > e["t"]][:1])
+                         for e, start in zip(self.clicks, self.ring_start)]
 
     def _event_to_canvas(self, e):
         e = dict(e)
@@ -84,16 +89,24 @@ class Scene:
         canvas.paste(screen, self.offset, self.mask)
         return canvas
 
-    def render(self, canvas, now):
-        """The frame at `now`: the screen, the click rings, and the pointer. Text and zoom are the page's."""
+    def rings(self, video):
+        """The click rings at video time `video`: (x, y, radius, alpha). A ring plays during the hold at its press, on
+        the screen that was clicked: it grows fast, then slows. It ends sooner if the next action starts first."""
+        out = []
+        for e, start, end in zip(self.clicks, self.ring_start, self.ring_end):
+            if start <= video < end:
+                left = 1 - (video - start) / HOLD
+                out.append((e["x"], e["y"], (6 + 30 * (1 - left ** 3)) * self.ui, left))
+        return out
+
+    def render(self, canvas, now, video=None):
+        """The frame at real time `now` and video time `video` (default: now). Text and zoom are the page's."""
+        video = now if video is None else video
         view = canvas.copy()
-        for e in self.clicks:
-            age = now - e["t"]
-            if 0 <= age < 0.55:
-                k = ease(age / 0.55)
-                sprite, half = draw.ring((6 + 30 * k) * self.ui, 1 - k, self.ui)
-                draw.paste(view, sprite, e["x"] - half, e["y"] - half)
-        pressed = any(0 <= now - e["t"] < 0.16 for e in self.clicks)
+        for x, y, radius, alpha in self.rings(video):
+            sprite, half = draw.ring(radius, alpha, self.ui)
+            draw.paste(view, sprite, x - half, y - half)
+        pressed = any(0 <= video - start < 0.16 for start in self.ring_start)
         sprite, pad = draw.pointer(round(1.25 * self.ui, 2), pressed)
         x, y = self.pointer.at(now)
         draw.paste(view, sprite, x - pad, y - pad)
@@ -107,12 +120,12 @@ def even(n):
 _worker = {}
 
 
-def _init(frames, size, out_size, events, framed):
-    _worker.update(frames=frames, size=size, scene=Scene(size, out_size, events, framed), cached=(None, None))
+def _init(frames, size, out_size, events, framed, nows):
+    _worker.update(frames=frames, size=size, scene=Scene(size, out_size, events, framed, nows), cached=(None, None))
 
 
 def _frame(job):
-    index, now = job
+    index, now, video = job
     scene = _worker["scene"]
     if _worker["cached"][0] != index:
         image = Image.open(_worker["frames"][index]).convert("RGB")
@@ -120,7 +133,7 @@ def _frame(job):
             image = image.resize(_worker["size"])
         _worker["cached"] = (index, scene.compose(image))
     canvas = _worker["cached"][1]
-    return scene.render(canvas, now).tobytes()
+    return scene.render(canvas, now, video).tobytes()
 
 
 def encoder(path, size, crf):
@@ -137,8 +150,10 @@ def video(folder, events, frames, times, start, end, framed, width, crf, target)
     screen_w = first.width / INSET if framed else first.width
     out_w = even(width or min(1920, max(1280, screen_w)))
     out_size = (out_w, even(out_w * first.height / first.width))
-    plan = fit(spans(screen_changes(frames, times, start), events), end, target)
-    scene = Scene(first.size, out_size, events, framed)
+    plan = fit(spans(screen_changes(frames, times, start), events), end, target,
+               holds=[e["t"] for e in events if e["kind"] in RING])
+    nows = [now for now, _ in plan]
+    scene = Scene(first.size, out_size, events, framed, nows)
     real = [t - start for t in times]
     camera = []
     for n, (now, _) in enumerate(plan):
@@ -148,10 +163,11 @@ def video(folder, events, frames, times, start, end, framed, width, crf, target)
                     round(out_size[0] / w, 3)]
             if not camera or view[1:] != camera[-1][1:] or n + 3 >= len(plan):
                 camera.append(view)
-    jobs = [(max(0, bisect_right(real, now) - 1), now) for now, _ in plan]
+    jobs = [(max(0, bisect_right(real, now) - 1), now, n / FPS) for n, (now, _) in enumerate(plan)]
     ffmpeg = encoder(folder / "session.mp4", out_size, crf)
     workers = max(1, min(8, (os.cpu_count() or 2) - 1))
-    with multiprocessing.get_context("spawn").Pool(workers, _init, (frames, first.size, out_size, events, framed)) as pool:
+    with multiprocessing.get_context("spawn").Pool(workers, _init, (frames, first.size, out_size, events, framed,
+                                                                   nows)) as pool:
         for frame in pool.imap(_frame, jobs, chunksize=12):
             ffmpeg.stdin.write(frame)
     ffmpeg.stdin.close()
