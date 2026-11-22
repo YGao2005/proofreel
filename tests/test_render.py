@@ -1,6 +1,8 @@
 import json
 import subprocess
 
+import pytest
+
 from PIL import Image
 
 from proofreel import render
@@ -85,3 +87,33 @@ def test_a_step_picture_never_shows_the_next_action(tmp_path):
               {"t": 0.95, "kind": "click", "text": "click b", "x": 1, "y": 1}]
     render.shots(tmp_path, events, frames, times, 100)
     assert [Image.open(tmp_path / e["shot"]).getpixel((5, 5))[0] // 8 for e in events] == [9, 9, 19]
+
+
+def test_a_click_ring_shows_at_the_press_and_ends_before_the_next_action():
+    from proofreel.render import Scene
+    events = [{"t": 1.0, "kind": "click", "text": "click Email", "x": 100, "y": 100},
+              {"t": 1.2, "end": 1.5, "kind": "type", "text": "type sam"},
+              {"t": 3.0, "kind": "click", "text": "click Sign in", "x": 100, "y": 200}]
+    scene = Scene((1440, 900), (1440, 900), events, False)
+    radius, alpha = scene.rings(1.0 + 1 / 30)[0][2:]
+    assert radius >= 10 and alpha > 0.85
+    assert scene.rings(1.19) and not scene.rings(1.2)
+    assert scene.rings(3.25) and not scene.rings(3.3)
+
+
+def test_a_click_holds_the_screen_from_before_its_press_while_its_ring_plays():
+    from proofreel.motion import FPS, HOLD, Clock, timeline
+    from proofreel.render import Scene
+    plan = timeline(([(0.0, 3.0)], [], []), 3.0, holds=[1.0])
+    held = [n for n, (now, speed) in enumerate(plan) if speed == 0]
+    assert len(held) == round(HOLD * FPS) and len({plan[n][0] for n in held}) == 1
+    assert plan[held[0]][0] == pytest.approx(1.0, abs=1 / FPS)
+    assert all(a[0] <= b[0] for a, b in zip(plan, plan[1:]))
+    clock = Clock.of(plan)
+    assert clock.real(held[0] / FPS) == pytest.approx(1.0, abs=0.02)
+    assert clock.real(held[-1] / FPS) == pytest.approx(1.0, abs=0.02)
+    events = [{"t": 1.0, "kind": "click", "text": "click Sign in", "x": 100, "y": 100}]
+    scene = Scene((1440, 900), (1440, 900), events, False, [now for now, _ in plan])
+    assert all(scene.rings(n / FPS) for n in held[1:])
+    assert clock.video(1.0) == pytest.approx(held[0] / FPS, abs=1.5 / FPS)
+    assert clock.video(1.0004) == pytest.approx(held[0] / FPS, abs=1.5 / FPS)

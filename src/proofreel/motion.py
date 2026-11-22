@@ -4,7 +4,7 @@ All times are seconds from the first frame. All positions are in frame pixels.
 """
 
 import math
-from bisect import bisect_right
+from bisect import bisect_left, bisect_right
 from dataclasses import dataclass
 
 from .session import CAMERA, POINTER, VERDICT
@@ -22,6 +22,7 @@ def ease(x):
 
 
 WAITING = 3
+HOLD = 0.3
 
 
 def spans(changes, events):
@@ -46,20 +47,26 @@ def _any(spans_, a, b):
     return any(spans_[j][1] >= a for j in range(max(0, i - 8), i))
 
 
-def fit(spans_, end, target=None, fps=FPS):
+def fit(spans_, end, target=None, fps=FPS, holds=()):
     """The plan of `timeline`, with busy time played up to 2.5x faster when that brings the video near `target` s."""
-    plan = timeline(spans_, end, fps=fps)
+    plan = timeline(spans_, end, fps=fps, holds=holds)
     if target and len(plan) / fps > target:
         base = min(2.5, len(plan) / fps / target)
-        plan = timeline(spans_, end, fps=fps, base=base)
+        plan = timeline(spans_, end, fps=fps, base=base, holds=holds)
     return plan
 
 
-def timeline(spans_, end, fps=FPS, fast=FAST, base=1.0):
-    """The real time shown in each video frame, and its speed. Speed ramps, so a jump to FAST is never a cut."""
+def timeline(spans_, end, fps=FPS, fast=FAST, base=1.0, holds=()):
+    """The real time shown in each video frame, and its speed. Speed ramps, so a jump to FAST is never a cut.
+
+    At each time in holds (a click's press), real time stops for HOLD s of video on the last frame taken before the
+    press, so the click shows on what it clicked: a page can change in the frame after a click."""
     actions, waits, shown = spans_
-    frames, now, speed = [], 0.0, 1.0
+    frames, now, speed, holds = [], 0.0, 1.0, sorted(holds)
     while now < end:
+        while holds and holds[0] <= now:
+            at = max(frames[-1][0] if frames else 0.0, holds.pop(0))
+            frames += [(at, 0.0)] * round(HOLD * fps)
         frames.append((now, speed))
         ahead = now + speed * 0.4
         if _any(actions, now, ahead):
@@ -73,6 +80,12 @@ def timeline(spans_, end, fps=FPS, fast=FAST, base=1.0):
         speed += (target - speed) * (0.5 if target < speed else 0.12)
         now += speed / fps
     return frames
+
+
+def video_at(nows, real, fps=FPS):
+    """The video time of the first frame at real time `real` or later (the start of the hold at a press).
+    nows is the real time of each video frame."""
+    return bisect_left(nows, real) / fps
 
 
 class Clock:
@@ -107,10 +120,12 @@ class Clock:
 
 
 def _along(knots, x, y, value):
-    """Interpolate along the knots from column x to column y; past either end, keep the end's slope (or 1)."""
+    """Interpolate along the knots from column x to column y; past either end, keep the end's slope (or 1). A value
+    that two knots share (a hold: real time stops) maps to the first of them, the start of the hold. Knots are
+    rounded to 1 ms, so a value within half of that of a knot is at the knot."""
     if len(knots) < 2:
         return value - (knots[0][x] - knots[0][y] if knots else 0)
-    i = min(max(bisect_right([k[x] for k in knots], value), 1), len(knots) - 1)
+    i = min(max(bisect_left([k[x] for k in knots], value - 5e-4), 1), len(knots) - 1)
     (x0, y0), (x1, y1) = (knots[i - 1][x], knots[i - 1][y]), (knots[i][x], knots[i][y])
     return y0 + (y1 - y0) * (value - x0) / (x1 - x0) if x1 > x0 else y0
 

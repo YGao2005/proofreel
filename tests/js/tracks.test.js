@@ -93,3 +93,12 @@ test("groups have human names, and a request label splits into method, host, and
   assert.deepStrictEqual(Tracks.request("GET 10.0.2.2:8791/api/tags"), { method: "GET", host: "10.0.2.2:8791", path: "/api/tags" });
   assert.deepStrictEqual(Tracks.request("click"), { method: "", host: "", path: "click" });
 });
+
+test("a hold at a click maps its real time to the start of the hold", () => {
+  const knots = [[0, 0], [1, 1], [1, 1.3], [2, 2.3]];
+  assert.equal(Tracks.along(knots, 0, 1, 1), 1);
+  assert.ok(Math.abs(Tracks.along(knots, 0, 1, 1.0004) - 1) < 1e-3);
+  assert.equal(Tracks.along(knots, 1, 0, 1.15), 1);
+  assert.ok(Math.abs(Tracks.along(knots, 0, 1, 1.5) - 1.8) < 1e-9);
+  assert.equal(Tracks.timemap(knots).speed(1.15), 0);
+});
