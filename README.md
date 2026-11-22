@@ -134,6 +134,15 @@ Keys: Space plays, the arrows seek, J and K step, N finds the next failure.
 Publishing, review folders, and what the page adds on claude.ai are in [the review page](docs/review-page.md).
 Tracks, Stats, and Network show what the [probes](docs/probes.md) measured.
 
+## Review inbox
+
+One local queue for the review pages of all your agents, and the way your decision gets back to the agent that made
+the proof. The agent runs `proofreel inbox add <review folder> --from <name> --pr N --on-approve "<next step>"`, then
+`proofreel inbox wait <id>` (in Claude Code, as a background command: when it exits, it wakes the session). You open
+http://127.0.0.1:8790, read the page, and press Approve (A), Approve + next (Shift A), Needs work (W), or Reject.
+`wait` prints your decision and exits; the inbox then shows "Picked up by <name>". `proofreel inbox check --here`
+reads decisions later, and `proofreel inbox stop` ends the server. The server listens on this machine only.
+
 ## In CI
 
 A GitHub Action replays your saved flows on each pull request and comments with the verdicts, a picture, and a link
