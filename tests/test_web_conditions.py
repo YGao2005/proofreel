@@ -123,6 +123,12 @@ def test_each_condition_runs_each_flow_once_for_each_condition_as_its_own_journe
     assert [name for _, name, _ in rows] == ["a", "a (phone)", "a (dark)"]
     assert [[w for w in words if not w.startswith("--meta=flow=")] for words in started] == [
         ["--title", "A page"], ["--title", "A page", "--condition=phone"], ["--title", "A page", "--condition=dark"]]
+    _, rows = suite.run([tmp_path / "a.flow"], lambda path: cli.load_flow(path, {}), cli.play, execute,
+                        out=tmp_path / "both", each_condition=["plain", "phone"], repeat=2)
+    assert [name for _, name, _ in rows] == ["a", "a (phone)"]
+    assert [(r["title"], r["journey"], r.get("condition"), r["attempt"]) for r in page.load_runs(tmp_path / "both")] == [
+        ("a #1", "a", None, 1), ("a #2", "a", None, 2), ("a (phone) #1", "a (phone)", "phone", 1),
+        ("a (phone) #2", "a (phone)", "phone", 2)]
     with pytest.raises(Problem, match="works on macos"):
         suite.run([tmp_path / "a.flow"], lambda path: cli.load_flow(path, {}), cli.play, execute, out=out,
                   each_condition=["no-microphone"])
