@@ -15,8 +15,7 @@ redact = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(redact)
 
 
-def seconds(value):
-    return round(max(0.0, value), 4)
+seconds = redact.seconds
 
 
 class Spans:
@@ -76,15 +75,14 @@ class Spans:
                 ready = server.timestamp_tls_setup
         else:
             ready = start
-        line = {"m": f"net/{redact.text(request.pretty_host.lower())[:100]}", "t": round(end, 4),
-                "d": seconds(end - start), "label": redact.url_label(request.method, request.pretty_url)}
         if response:
             phases["wait"] = seconds(response.timestamp_start - max(ready, request.timestamp_end or start))
             phases["receive"] = seconds(end - response.timestamp_start)
-            line.update(ok=response.status_code < 400, phases=phases,
-                        n={"status": response.status_code, "size": len(response.raw_content or b"")})
+            line = redact.request_span(request.method, request.pretty_url, end, end - start, response.status_code,
+                                       len(response.raw_content or b""), phases)
         else:
-            line.update(ok=False, phases=phases, n={"error": redact.text(flow.error.msg if flow.error else "no answer")})
+            line = redact.request_span(request.method, request.pretty_url, end, end - start, phases=phases,
+                                       error=flow.error.msg if flow.error else None)
         self.say(line)
 
 

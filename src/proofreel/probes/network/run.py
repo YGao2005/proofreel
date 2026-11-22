@@ -1,4 +1,5 @@
-"""The network probe's host side: mitmdump with the span addon, on a free port that only the run VM may use. The CA
+"""The network probe's host side. On web: the browser's DevTools Network events (the browser probe's connection, with
+requests and no vitals). On a VM: mitmdump with the span addon, on a free port that only the run VM may use. The CA
 is new for each session, in a temporary folder that is deleted when the probe stops. Nothing else is written to disk."""
 import os
 import shutil
@@ -10,6 +11,11 @@ from pathlib import Path
 
 from proofreel import redact
 from proofreel.probes import tool
+
+if os.environ["PROOFREEL_OS"] == "web":
+    from proofreel.probes.browser.run import main
+    main(vitals=False, requests=True)
+    sys.exit()
 
 # WHY: one folder for each run name, so a CA that a killed recorder left behind goes at the next start.
 confdir = Path(tempfile.gettempdir()) / f"proofreel-network-{os.environ.get('PROOFREEL_VM', 'pr-run')}"

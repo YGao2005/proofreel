@@ -25,7 +25,8 @@ from pathlib import Path
 from . import HOME, Problem, guest
 
 def guest_steps(*steps):
-    return lambda info: {guest.GUESTS[system].script(step) for system in info["os"] for step in steps}
+    return lambda info: {guest.GUESTS[system].script(step) for system in info["os"] if guest.GUESTS[system].shell
+            for step in steps}
 
 
 def probe_scripts(info):

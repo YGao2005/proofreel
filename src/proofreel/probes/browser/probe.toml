@@ -1,11 +1,11 @@
 name = "browser"
 version = "1"
-os = ["linux"]
+os = ["linux", "web"]
 where = "host"
-default = false
+default = { web = true }
 extras = "websocket-client"
 tunnel = 9222
-fidelity = "Reads the guest's Chromium through its DevTools port, which the linux image's browse turns on. Web vitals come from the page's own PerformanceObserver: INP is the slowest interaction (one in 50 skipped), CLS the largest session window, both for each page load. Chromium rounds event durations to 8 ms. Heap, nodes, layouts, and style recalcs are read once a second for each tab."
+fidelity = "Reads the guest's Chromium through its DevTools port, which the linux image's browse turns on. On web it reads the runner's own headless Chrome. Web vitals come from the page's own PerformanceObserver: INP is the slowest interaction (one in 50 skipped), CLS the largest session window, both for each page load. Chromium rounds event durations to 8 ms. Heap, nodes, layouts, and style recalcs are read once a second for each tab."
 privacy = "Sees each tab's URL and keeps only its host and path. Keeps User Timing names and the name of the script that ran a long frame. No page text, cookies, or requests."
 
 [tracks."web/lcp"]

@@ -5,7 +5,8 @@ with this Python) or in the guest (run.sh or run.ps1, over SSH). `default = true
 its systems. `privacy` says what it can see. [tracks."<series glob>"] tells the page and `stats` how to show a series:
 label, unit, better ("lower" or "higher"), max, and bands (values the page draws a guide line at). A host probe with
 `tunnel = <guest port>` gets PROOFREEL_TUNNEL, a host port on 127.0.0.1 that reaches that port on the guest's
-127.0.0.1 while it runs.
+127.0.0.1 while it runs. On `web`, the browser is on the host: it is the browser's own DevTools port.
+`default`, `extras`, and `tunnel` may be a table by system (`default = {web = true}`).
 
 The protocol: a probe prints one JSON object on each line.
   {"m": "cpu/app", "v": 42}                               a sample of the series cpu/app
@@ -13,6 +14,8 @@ The protocol: a probe prints one JSON object on each line.
   {"m": "app/launched"}                                   a mark
   "t", optional on each: when, in the probe's own steady clock. Without it, the time the line reached the host counts.
   {"ready": true}   {"unavailable": "<why>"}   {"meta": {...}}   control lines
+`start` waits up to SETTLE seconds, so a page that opens at once is measured: until each probe says ready or
+unavailable, says {"meta": {"waiting": "<for what>"}}, or prints a measure.
 The recorder keeps each measure in metrics/<probe>.jsonl with "a", the unix time it arrived, and the probe's status
 in metrics/probes.json. A line over a limit (LINE bytes, RATE lines a second, SERIES ids) is counted and dropped;
 control lines skip the rate limit.
@@ -21,6 +24,7 @@ More manifest fields:
   extras = "<command>"   a command it needs. Without it, the probe is unavailable, with the command that installs it.
   port = true            the host gives it a free port, in PROOFREEL_PORT.
   setup = true           guest start and stop scripts change the run VM for the recording (a proxy, a trusted CA).
+                         A guest with no shell (`web`) has nothing to change, so it runs no scripts.
                          start runs once the host run runs; stop must work after a start that stopped half way.
                          Each reset is written to the run record before its start, so plugins.undo() undoes it
                          after a crash: at the next start, at `vm save`, and at `stop`.
@@ -47,7 +51,20 @@ from ..vm import free_port
 LINE = 16_384
 RATE = 200
 SERIES = 64
+SETTLE = 3
 CONTROL = ("ready", "unavailable", "meta")
+
+
+def per(info, key, system):
+    """A manifest field for one system: the field itself, or its entry for the system when it is a table."""
+    value = info.get(key)
+    return value.get(system) if isinstance(value, dict) else value
+
+
+def packages(info):
+    """The pip packages or commands a probe needs, on any system."""
+    value = info.get("extras")
+    return list(value.values()) if isinstance(value, dict) else [value] if value else []
 
 
 def select(requested, run):
@@ -56,7 +73,7 @@ def select(requested, run):
     system = run["os"] if run else None
     chosen = {} if "none" in requested else {
         name: {} for name in plugins.known("probe")
-        if (info := manifest(name)).get("default") and usable(info, system, quiet=True)}
+        if per(info := manifest(name), "default", system) and usable(info, system, quiet=True)}
     for item in requested:
         if item != "none":
             name, given = plugins.spec(item)
@@ -68,11 +85,12 @@ def select(requested, run):
         usable(info, system)
         record = {"name": info["name"], "version": info["version"], "where": info["where"], "source": str(source),
                   "values": plugins.resolve(info, given), "tracks": info.get("tracks", {}),
-                  "setup": bool(info.get("setup")), "tunnel": info.get("tunnel")}
+                  "setup": bool(info.get("setup")) and (run is None or run.guest.shell),
+                  "tunnel": per(info, "tunnel", system)}
         if info.get("port"):
             record["port"] = free_port(0, run.host_address[0] if run else "127.0.0.1")
-        if info.get("extras") and not installed(info["extras"]):
-            record["unavailable"] = f"{info['extras']} is not installed. Install it: pip install {info['extras']}"
+        if (extra := per(info, "extras", system)) and not installed(extra):
+            record["unavailable"] = f"{extra} is not installed. Install it: pip install {extra}"
         records.append(record)
     return records
 
@@ -151,6 +169,7 @@ class Probe:
     def __init__(self, record, folder, info, run):
         self.name, self.status, self.note = record["name"], "starting", ""
         self.counts = {"kept": 0, "size": 0, "rate": 0, "series": 0, "bad": 0}
+        self.settled = threading.Event()
         self.out = open(Path(folder) / "metrics" / f"{self.name}.jsonl", "a")
         port, self.tunnel = run.forward(record["tunnel"]) if record.get("tunnel") and run else (None, None)
         argv, env = process(record, folder, info, run, port)
@@ -178,6 +197,7 @@ class Probe:
                 self.counts["series"] += 1
             else:
                 series.add(line["m"])
+                self.settled.set()
                 self.status = "ok" if self.status == "starting" else self.status
                 self.out.write(json.dumps({**line, "a": round(arrived, 4)}) + "\n")
                 self.out.flush()
@@ -190,6 +210,8 @@ class Probe:
             self.status, self.note = "unavailable", str(value)[:400]
         elif kind == "meta" and isinstance(value, dict):
             self.note = json.dumps(value)[:400]
+        if kind != "meta" or (isinstance(value, dict) and "waiting" in value):
+            self.settled.set()
 
     def stop(self):
         if self.process.poll() is None:
@@ -246,7 +268,23 @@ def launch(folder):
             started.append(Probe(record, folder, info, run))
         except OSError as error:
             write_status(folder, {record["name"]: {"status": "failed", "note": str(error)}})
+    threading.Thread(target=settle, args=(folder, started), daemon=True).start()
     return started
+
+
+def settle(folder, started):
+    """Write metrics/settled once every probe is settled, or after SETTLE seconds. The recorder runs it in a thread."""
+    end = time.monotonic() + SETTLE
+    for probe in started:
+        probe.settled.wait(max(0.0, end - time.monotonic()))
+    (Path(folder) / "metrics" / "settled").touch()
+
+
+def wait_settled(folder):
+    """Called by `start`: wait for the recorder's probes to settle."""
+    end = time.monotonic() + SETTLE + 2
+    while not (Path(folder) / "metrics" / "settled").exists() and time.monotonic() < end:
+        time.sleep(0.05)
 
 
 def finish(folder, started):

@@ -1,13 +1,14 @@
 name = "network"
 version = "1"
-os = ["linux"]
+os = ["linux", "web"]
 where = "host"
-default = false
-extras = "mitmproxy"
+default = { web = true }
+extras = { linux = "mitmproxy" }
+tunnel = { web = 9222 }
 port = true
 setup = true
-fidelity = "A span runs from when the proxy got the request to the last byte of the answer: the hop from the guest to the proxy is not in it (so a slow-network condition does not show here: see `web/lcp`), and connect includes the DNS lookup. On Linux, only Chromium uses the proxy. An app that pins its certificates fails through the proxy, and the span says so."
-privacy = "Keeps the host, the method, the path with ids and tokens taken out, the status, the size, and the times of each request. Never a query string, a header value, or a body. Nothing is written to disk but the CA, which is new for each session and deleted when it stops. The proxy refuses clients that are not the run VM; with QEMU, the guest connects from the host's 127.0.0.1, so a host process that finds the port can use it too."
+fidelity = "A span runs from when the proxy got the request to the last byte of the answer: the hop from the guest to the proxy is not in it (so a slow-network condition does not show here: see `web/lcp`), and connect includes the DNS lookup. On Linux, only Chromium uses the proxy. An app that pins its certificates fails through the proxy, and the span says so. On web, the requests come from the browser's own DevTools Network events, in the same fields: a span runs from when the browser began the request to the last byte, so it includes the browser's queueing; an answer from the cache has no phases; a request that the page cancels is not kept."
+privacy = "Keeps the host, the method, the path with ids and tokens taken out, the status, the size, and the times of each request. Never a query string, a header value, or a body. On linux, nothing is written to disk but the CA, which is new for each session and deleted when it stops. The proxy refuses clients that are not the run VM; with QEMU, the guest connects from the host's 127.0.0.1, so a host process that finds the port can use it too."
 
 [tracks."net/*"]
 better = "lower"

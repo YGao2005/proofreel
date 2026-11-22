@@ -472,9 +472,9 @@ def newest():
 def list_probes():
     for name, source in plugins.known("probe").items():
         info = probes.manifest(name)
-        print(f"{name}  ({info['where']}{', on by default' if info.get('default') else ''}; {', '.join(info['os'])}"
+        print(f"{name}  ({info['where']}{', on by default' + (' on ' + ', '.join(info['default']) if isinstance(info['default'], dict) else '') if info.get('default') else ''}; {', '.join(info['os'])}"
               f"{'; ' + source if source else ''})\n  sees: {info['privacy']}\n  fidelity: {info['fidelity']}"
-              + (f"\n  needs: pip install {info['extras']}" if info.get("extras") else ""))
+              + (f"\n  needs: pip install {' or '.join(probes.packages(info))}" if probes.packages(info) else ""))
 
 
 def vm(a):

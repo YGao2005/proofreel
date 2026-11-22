@@ -109,6 +109,8 @@ def start(name, server, password, info, fps=30, reduce=0, run=None):
                 recorder.kill()
                 raise Problem(f"The recorder did not start: {(folder / 'recorder.log').read_text().strip()[-400:] or 'no frame in 15 s'}")
             time.sleep(0.1)
+        if info.get("probes"):
+            probes.wait_settled(folder)
         if run:
             try:
                 probes.begin(info.get("probes") or [], run)

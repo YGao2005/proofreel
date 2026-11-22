@@ -1,5 +1,7 @@
-"""Page performance from the guest's Chromium, over its DevTools port: each tab's Performance.getMetrics once a second,
-LCP, CLS, and INP, long animation frames, and the page's own User Timing marks and measures.
+"""Page performance from a Chromium, over its DevTools port: each tab's Performance.getMetrics once a second,
+LCP, CLS, and INP, long animation frames, and the page's own User Timing marks and measures. With requests on (the
+network probe on `web` runs this with requests and no vitals), each tab's Network events make one span line for each
+request.
 
 The probe attaches to each tab and adds observe.js to each document. Its PerformanceObservers call a binding with what
 they saw and the page's clock at that moment, so each entry's t is on this probe's clock. A page URL goes into a line
@@ -12,7 +14,7 @@ import time
 import urllib.request
 from pathlib import Path
 
-from proofreel.redact import url_label
+from proofreel.redact import request_span, seconds as clamp, url_label
 
 OBSERVE = (Path(__file__).parent / "observe.js").read_text()
 BINDING = "__proofreel"
@@ -28,12 +30,67 @@ def web(url):
     return url.startswith(("http:", "https:", "file:"))
 
 
+class Requests:
+    """The requests in flight in each tab. A span line is made when a request finishes, fails, or is redirected."""
+
+    def __init__(self):
+        self.flying = {}
+
+    def feed(self, method, params, session, now):
+        key = (session, params.get("requestId"))
+        if method == "Network.requestWillBeSent":
+            lines = self.end(key, params["timestamp"], now, redirect=params.get("redirectResponse"))
+            if params["request"]["url"].startswith(("http:", "https:")):
+                self.flying[key] = {"method": params["request"]["method"], "url": params["request"]["url"],
+                                    "start": params["timestamp"], "response": None}
+            return lines
+        if key not in self.flying:
+            return []
+        if method == "Network.responseReceived":
+            self.flying[key]["response"] = params["response"]
+        elif method == "Network.loadingFinished":
+            return self.end(key, params["timestamp"], now, size=params.get("encodedDataLength", 0))
+        elif method == "Network.loadingFailed":
+            if params.get("canceled"):
+                del self.flying[key]
+                return []
+            return self.end(key, params["timestamp"], now, error=params.get("errorText", "").removeprefix("net::").removeprefix("ERR_").replace("_", " ").lower())
+        return []
+
+    def end(self, key, at, now, redirect=None, size=0, error=None):
+        request = self.flying.pop(key, None)
+        response = redirect or (request or {}).get("response")
+        if not request:
+            return []
+        phases = self.phases(response["timing"], request["start"], at) if response and response.get("timing") else {}
+        status = response["status"] if response and not error else None
+        return [request_span(request["method"], request["url"], now, at - request["start"], status, size, phases,
+                             error)]
+
+    @staticmethod
+    def phases(timing, start, at):
+        """connect, tls, wait, and receive of a response's timing. Chrome gives ms from timing["requestTime"] (s), and
+        -1 for a step that did not happen: a reused connection has no connect."""
+        phases, step = {}, lambda name: timing[name] / 1000 if timing.get(name, -1) >= 0 else None
+        first = next((t for t in (step("dnsStart"), step("connectStart")) if t is not None), None)
+        if first is not None and step("connectEnd") is not None:
+            secure = step("sslStart")
+            phases["connect"] = clamp((secure if secure is not None else step("connectEnd")) - first)
+            if secure is not None and step("sslEnd") is not None:
+                phases["tls"] = clamp(step("sslEnd") - secure)
+        if step("sendEnd") is not None and step("receiveHeadersEnd") is not None:
+            phases["wait"] = clamp(step("receiveHeadersEnd") - step("sendEnd"))
+            phases["receive"] = clamp(at - (timing["requestTime"] + step("receiveHeadersEnd")))
+        return phases
+
+
 class Browser:
     """One DevTools connection: the tabs it attached to, and the lines their messages make. Commands that a message
     calls for wait in outbox."""
 
-    def __init__(self, since):
+    def __init__(self, since, vitals=True, requests=False):
         self.since, self.outbox, self.tabs, self.named, self.sent = since, [], {}, set(), 0
+        self.vitals, self.requests = vitals, Requests() if requests else None
         self.send("Target.setDiscoverTargets", {"discover": True})
 
     def send(self, method, params=None, session=None):
@@ -44,7 +101,7 @@ class Browser:
     def tick(self):
         """Read the metrics of each tab that shows a web page."""
         for session, tab in self.tabs.items():
-            if tab["shown"] and web(tab["url"]):
+            if self.vitals and tab["shown"] and web(tab["url"]):
                 self.send("Performance.getMetrics", session=session)
 
     def feed(self, message, now):
@@ -55,9 +112,10 @@ class Browser:
         elif method == "Target.attachedToTarget":
             info, session = params["targetInfo"], params["sessionId"]
             self.tabs[session] = {"target": info["targetId"], "url": info["url"], "counts": None, "shown": False}
-            for step, args in (("Performance.enable", {}), ("Runtime.addBinding", {"name": BINDING}),
-                               ("Page.addScriptToEvaluateOnNewDocument", {"source": OBSERVE}),
-                               ("Runtime.evaluate", {"expression": OBSERVE})):
+            steps = [("Performance.enable", {}), ("Runtime.addBinding", {"name": BINDING}),
+                     ("Page.addScriptToEvaluateOnNewDocument", {"source": OBSERVE}),
+                     ("Runtime.evaluate", {"expression": OBSERVE})] if self.vitals else []
+            for step, args in steps + ([("Network.enable", {})] if self.requests else []):
                 self.send(step, args, session)
         elif method == "Target.targetInfoChanged":
             for tab in self.tabs.values():
@@ -65,6 +123,8 @@ class Browser:
                     tab["url"] = params["targetInfo"]["url"]
         elif method == "Target.detachedFromTarget":
             self.tabs.pop(params["sessionId"], None)
+        elif self.requests and (method or "").startswith("Network.") and session in self.tabs:
+            return self.requests.feed(method, params, session, now)
         elif method == "Runtime.bindingCalled" and params.get("name") == BINDING and session in self.tabs:
             # WHY: the page's own scripts can call the binding too.
             try:
@@ -125,7 +185,7 @@ def say(line):
 
 
 def version(port):
-    """(the browser's DevTools WebSocket URL through the tunnel, its version), or None while it does not listen."""
+    """(the browser's DevTools WebSocket URL on the port, its version), or None while it does not listen."""
     try:
         with urllib.request.urlopen(f"http://127.0.0.1:{port}/json/version", timeout=2) as answer:
             found = json.load(answer)
@@ -134,16 +194,16 @@ def version(port):
         return None
 
 
-def main():
+def main(vitals=True, requests=False):
+    """Read the browser's DevTools port, PROOFREEL_TUNNEL, until the probe is stopped."""
     port = os.environ.get("PROOFREEL_TUNNEL")
     if not port:
-        return say({"unavailable": "The browser probe needs a run VM: proofreel vm up <state>."})
+        return say({"unavailable": "This probe needs a run VM: proofreel vm up <state>."})
     try:
         import websocket
     except ImportError:
         return say({"unavailable": "The browser probe needs websocket-client: pip install websocket-client"})
-    say({"meta": {"waiting": "for Chromium's DevTools port 9222 in the guest; open pages with browse"}})
-    since = time.monotonic()
+    since, waited = time.monotonic(), False
     while True:
         found = version(port)
         try:
@@ -151,12 +211,15 @@ def main():
         except (OSError, websocket.WebSocketException):
             connection = None
         if not connection:
+            if not waited:
+                say({"meta": {"waiting": "for the browser's DevTools port; open pages with open or browse"}})
+                waited = True
             time.sleep(1)
             continue
         say({"meta": {"browser": found[1]}})
         say({"ready": True})
         connection.settimeout(0.25)
-        browser, due = Browser(since), 0.0
+        browser, due = Browser(since, vitals, requests), 0.0
         try:
             while True:
                 if time.monotonic() >= due:
