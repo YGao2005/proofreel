@@ -80,6 +80,8 @@ def tally(agent, out):
                     out=use.get("output_tokens", 0), cache=use.get("cache_read_input_tokens", 0),
                     turns=data.get("num_turns", 0), usd=data.get("total_cost_usd") or 0.0, text=data.get("result") or "")
     events = [json.loads(line) for line in out.splitlines() if line.startswith("{")]
+    if failed := next((e for e in events if e.get("type") in ("error", "turn.failed")), None):
+        sys.exit(f"codex failed: {failed.get('message') or failed.get('error')}")
     done = [e for e in events if e.get("type") == "item.completed"]
     use = [e["usage"] for e in events if e.get("type") == "turn.completed"]
     cache = sum(u.get("cached_input_tokens", 0) for u in use)

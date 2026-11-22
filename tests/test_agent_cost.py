@@ -2,6 +2,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 import agent_cost  # noqa: E402
 
@@ -35,3 +37,9 @@ def test_review_takes_the_page_the_agent_names(tmp_path):
     page.write_text("x")
     assert agent_cost.review(tmp_path, f"Review page: {page}") == ("works", str(page))
     assert agent_cost.review(tmp_path, "no path") == ("works", str(session / "index.html"))
+
+
+def test_tally_stops_on_a_codex_error():
+    out = json.dumps({"type": "error", "message": "You hit your usage limit."})
+    with pytest.raises(SystemExit, match="usage limit"):
+        agent_cost.tally("codex", out)
