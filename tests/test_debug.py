@@ -3,7 +3,7 @@ import time
 import pytest
 
 from proofreel import chrome, screen, vm
-from test_web import PAGE
+from test_web import PAGE, runs  # noqa
 
 
 def attempt(runs, tmp_path, strategy, name):
