@@ -80,6 +80,8 @@ def up(name, info, display=None, memory=None, cpu=None, warmable=False):
 
 def boot(size=SIZE):
     """Start Chrome on the run profile, and return the run record once its DevTools port answers."""
+    for lock in folder(MACHINE).glob("Singleton*"):
+        lock.unlink()
     port = free_port()
     log = FOLDER / f"{MACHINE}.log"
     args = [find_chrome(), "--headless=new", "--remote-debugging-address=127.0.0.1", f"--remote-debugging-port={port}",
