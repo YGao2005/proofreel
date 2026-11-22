@@ -1,7 +1,11 @@
 # proofreel
 
-Video proof that your coding agent's change works. proofreel lets Claude Code drive your app in a clean browser or VM as a user
-would, record it, and publish a review page that a person can check in a minute.
+Video proof that your coding agent's change works: the review video Devin gives you, for any coding agent.
+
+Your agent (Claude Code, Codex, or any agent that runs shell commands) uses your app as a person would, and proofreel
+records it. A web app runs in a headless browser on your machine; a native Mac, Linux, or Windows app runs in a clean VM.
+You get a short video that zooms to each action, the user flow it covered, and the checks and numbers that decide pass
+or fail, on a review page that a person can check in a minute.
 
 **[See a real review page →](https://claude.ai/artifact/PeehtyBLEMVUsxokb5FqbT)** (the Acme Notes example: three
 journeys that pass and one with a failed network budget)
