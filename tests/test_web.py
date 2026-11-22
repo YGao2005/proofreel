@@ -105,6 +105,7 @@ def test_a_saved_web_state_keeps_the_profile_and_drop_removes_it(runs, tmp_path)
         web.open((tmp_path / "page.html").as_uri())
         web.call("Runtime.evaluate", expression="localStorage.setItem('user', 'guest')")
     vm.save("signed-in")
+    print("DEBUG", sorted(str(p.relative_to(chrome.folder("signed-in"))) for p in chrome.folder("signed-in").rglob("*") if "Storage" in str(p) or "Local" in str(p)), flush=True)
     assert vm.state_info("signed-in")["parent"] == "web" and vm.state_info("signed-in")["os"] == "web"
     second = vm.up("signed-in")
     with screen.connect(second["screen"]) as web:
