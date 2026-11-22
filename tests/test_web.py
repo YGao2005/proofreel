@@ -264,4 +264,4 @@ def test_a_web_recording_holds_reduced_motion_unless_the_flow_asks_for_full_moti
 
 def test_full_motion_is_only_for_a_web_run(home):
     with pytest.raises(Problem, match="--full-motion is for a web run"):
-        cli.command(["start", "x", "--full-motion", "--vnc", "127.0.0.1::1"])
+        cli.command(["--vnc", "127.0.0.1::1", "start", "x", "--full-motion"])

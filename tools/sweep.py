@@ -8,10 +8,12 @@ server with BROKEN=1 (it must fail on the failed-requests budget, and only on it
 PYTHONPATH picks the code under test. The flows run in the `web` browser runner: no VM, and Chrome
 on this machine.
 It prints one line for each unexpected result, then the mean and the spread of how long each `wait-text` took
-(timing of the checks), and exits 1 when there is an unexpected result.
+(timing of the checks), then how much the step pictures of the same step differ between runs (0 is identical,
+255 is black against white), and exits 1 when there is an unexpected result.
 """
 
 import argparse
+import itertools
 import json
 import os
 import re
@@ -20,6 +22,8 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+
+from PIL import Image, ImageChops, ImageStat
 
 ACME = Path(__file__).resolve().parent.parent / "examples" / "acme-notes"
 FAILED_REQUESTS = "net/* failed below 1 in the run"
@@ -36,6 +40,13 @@ def suite(flows, out, broken, port, *options):
     finally:
         server.terminate()
     return json.loads((out / "runs.json").read_text())["runs"]
+
+
+def picture_spread(pictures):
+    """The mean difference of every two pictures of one step, over the pictures that came from different runs."""
+    small = [Image.open(p).convert("L").resize((360, 225)) for p in pictures]
+    pairs = [ImageStat.Stat(ImageChops.difference(a, b)).mean[0] for a, b in itertools.combinations(small, 2)]
+    return statistics.mean(pairs) if pairs else 0.0
 
 
 def unexpected(run, broken):
@@ -57,7 +68,7 @@ def main():
     ap.add_argument("--port", type=int, default=8791)
     args = ap.parse_args()
     bad = total = 0
-    waits = {}
+    waits, pictures = {}, {}
     for i in range(1, args.runs + 1):
         for broken, flows in ((False, ACME / "flows"), (True, ACME / "flows" / "search.flow")):
             out = args.out / f"{'down' if broken else 'ok'}-{i}"
@@ -66,6 +77,8 @@ def main():
                 for e in run["events"]:
                     if e["kind"] == "wait" and (seen := re.search(r"seen after ([\d.]+) s", e.get("detail", ""))):
                         waits.setdefault((run["title"], e["text"]), []).append(float(seen[1]))
+                for shot in (out / "runs" / run["id"] / "shots").glob("*.jpg"):
+                    pictures.setdefault((run["title"], shot.name), []).append(shot)
                 why = unexpected(run, broken)
                 if why:
                     bad += 1
@@ -73,6 +86,9 @@ def main():
     for (title, text), seconds in sorted(waits.items()):
         print(f"{title}: {text} mean {statistics.mean(seconds):.2f} s, spread {statistics.pstdev(seconds):.2f} s, "
               f"max {max(seconds):.2f} s (n={len(seconds)})")
+    spread = [picture_spread(p) for p in pictures.values()]
+    print(f"Step pictures: {len(spread)} steps, mean difference between runs {statistics.mean(spread):.2f}, "
+          f"largest {max(spread):.2f}.")
     print(f"{total - bad} of {total} runs as expected.")
     return 1 if bad else 0
 
