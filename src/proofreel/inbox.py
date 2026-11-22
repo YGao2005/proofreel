@@ -238,7 +238,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         kind = mimetypes.guess_type(file.name)[0] or "application/octet-stream"
         self.send_response(status)
         for header, value in {"Content-Type": kind, "Content-Length": end - start + 1, "Accept-Ranges": "bytes",
-                              "X-Content-Type-Options": "nosniff",
+                              "X-Content-Type-Options": "nosniff", "Content-Security-Policy": "sandbox allow-scripts",
                               **({"Content-Range": f"bytes {start}-{end}/{size}"} if status == 206 else {})}.items():
             self.send_header(header, value)
         self.end_headers()

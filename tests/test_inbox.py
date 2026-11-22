@@ -1,3 +1,4 @@
+import urllib.request
 import http.client
 import json
 import threading
@@ -105,6 +106,8 @@ def test_the_server_shows_the_page_the_queue_and_the_item_files(box, running):
     assert json.loads(data)[0]["url"] == f"/item/{item['id']}/index.html" and "page" not in json.loads(data)[0]
     assert request(running, "GET", f"/item/{item['id']}/index.html") == (200, (box / "proof" / "index.html").read_bytes())
     assert request(running, "GET", f"/item/{item['id']}/index.html", Range="bytes=0-4") == (206, b"<!doc")
+    with urllib.request.urlopen(f"http://127.0.0.1:{running.server_port}/item/{item['id']}/index.html") as answer:
+        assert answer.headers["Content-Security-Policy"] == "sandbox allow-scripts"
 
 
 def test_files_outside_the_item_folder_and_a_foreign_host_are_refused(box, running):
