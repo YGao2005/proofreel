@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Review inbox:** `proofreel inbox add <review folder>` queues a review page in one local inbox (http://127.0.0.1:8790), and `proofreel inbox wait <id>` blocks until the person presses Approve, Approve + next mission, Needs work, or Reject, then prints the decision. In Claude Code a background `wait` wakes the session when it exits. `inbox check --here` reads decisions later; `inbox list`, `serve`, and `stop` manage the queue. The server listens on 127.0.0.1 only, and a decision needs a per-install token. See the README.
+
 ## 1.3.0
 
 Proof in every pull request, cheaper proofs, and steadier browser runs.

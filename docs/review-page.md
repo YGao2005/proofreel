@@ -6,6 +6,11 @@ The page is described in [the README](../README.md#the-review-page).
 
 ![A failed run: Tracks open with Budget failed, and the failed check in the flow.](budget-failed.png)
 
+## Review inbox
+
+`proofreel inbox add <review folder>` puts the page in a local inbox, and `proofreel inbox wait <id>` returns the
+decision to the agent. See [the README](../README.md#review-inbox).
+
 ## Review on claude.ai
 
 `proofreel publish <session> --out <review folder>` adds a run to a review folder: one page that holds every run of

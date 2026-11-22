@@ -48,6 +48,13 @@
   render <session> [--plain] [--width W]                Make the video and page of a session again. A session is
                                                         its folder or its name in the sessions folder.
   publish <session> --out <dir>                         Add a run to a review folder: one page, every run, one URL.
+  inbox add <page or review folder> [--title T] [--from NAME] [--pr N] [--on-approve TEXT]
+                                                        Queue a review page in the local review inbox
+                                                        (http://127.0.0.1:8790); prints the item id.
+  inbox wait <id> [--timeout S] | check [--here] | list | serve | stop
+                                                        `wait` blocks until the person decides, then prints the
+                                                        decision (exit 2 on timeout). `check` prints decisions not
+                                                        yet read (--here: this repo and branch).
   skill install [--to DIR]                              Copy the skill to ~/.agents/skills/proofreel (Codex, Antigravity,
                                                         and Cursor read it), or to DIR/proofreel for another agent.
   demo [dir]                                            Render a made-up session (no VNC needed).
@@ -93,6 +100,8 @@ A flow is a file with one command on each line. Start it with `from web`. These 
 
 To explore step by step, run those lines one at a time after `start`, then `stop`. `${NAME:-default}` in a flow
 takes its value from `--set NAME=VALUE`. A native app or another system runs in a VM: `proofreel vm states`.
+
+To get a person's decision on a review page: `inbox add <folder> --from <name>`, then `inbox wait <id>`.
 """
 
 
@@ -282,7 +291,29 @@ def published(page, files, runs, new):
     data = Path(page).parent / "artifact.json"
     data.write_text(json.dumps({"page": str(page.resolve()), "runs": runs, "files": files, "new": new,
                                 "capabilities": CAPABILITIES}, indent=2))
-    return f"Page: {page.resolve()} ({len(files)} files). For an Artifact tool: {data.resolve()}"
+    return (f"Page: {page.resolve()} ({len(files)} files). For an Artifact tool: {data.resolve()}\n"
+            f"For the review inbox: proofreel inbox add {page.parent.resolve()} --from <your session> --pr <N> --on-approve \"<what you do next>\"")
+
+
+def inbox_command(a):
+    from . import inbox
+    if a.action in ("add", "wait") and not a.target:
+        raise Problem(f"inbox {a.action} needs {'a review folder or HTML page' if a.action == 'add' else 'an item id'}.")
+    match a.action:
+        case "add":
+            item = inbox.add(a.target, a.title, a.source, a.pr, a.on_approve)
+            inbox.ensure_server()
+            print(f"Added {item['id']}. The person decides at {inbox.url()}.\nNow run: proofreel inbox wait {item['id']}")
+        case "wait":
+            if (text := inbox.wait(a.target, a.timeout)) is None:
+                print(f"No decision on {a.target} yet.", file=sys.stderr)
+                return 2
+            print(text)
+        case "check":
+            print("\n".join(inbox.check(a.here)) or "No new decisions.")
+        case "list": print("\n".join(inbox.listing()) or "The inbox is empty.")
+        case "serve": inbox.serve()
+        case "stop": print("Stopped the inbox server." if inbox.stop() else "The inbox server does not run.")
 
 
 def load_flow(path, values):
@@ -428,6 +459,15 @@ def parser():
     s = sub.add_parser("publish", help="add a session to a review folder (all runs of one journey) for one artifact URL")
     s.add_argument("session")
     s.add_argument("--out", required=True, help="the review folder; keep it the same for every run of this journey")
+    s = sub.add_parser("inbox", help="the review inbox: queue a page, wait for the person's decision")
+    s.add_argument("action", nargs="?", default="list", choices=["add", "wait", "check", "list", "serve", "stop"])
+    s.add_argument("target", nargs="?", help="add: the review folder or HTML page; wait: the item id")
+    s.add_argument("--title")
+    s.add_argument("--from", dest="source", default="", help="your session or agent name")
+    s.add_argument("--pr", type=int)
+    s.add_argument("--on-approve", default="", help="what you do after an Approve")
+    s.add_argument("--timeout", type=float, help="wait: seconds to wait before exit 2")
+    s.add_argument("--here", action="store_true", help="check: only this repo and branch")
     s = sub.add_parser("demo")
     s.add_argument("dir", nargs="?", default=str(recording.SESSIONS / "demo"))
     s.add_argument("--broken", action="store_true", help="type the name wrong, so the last check fails")
@@ -621,6 +661,7 @@ def command(argv):
         case "publish":
             from .page import publish
             return print(published(*publish(recording.session_folder(a.session), a.out)))
+        case "inbox": return inbox_command(a)
         case "skill":
             folder = install_skill(a.to)
             return print(f"Wrote {folder}/SKILL.md\n"
