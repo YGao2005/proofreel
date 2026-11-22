@@ -13,7 +13,7 @@ def review(tmp_path, *runs):
     for i, (verdict, checks) in enumerate(runs):
         events = [{"t": 1.0, "kind": "check", "text": text, "ok": ok, "detail": detail} for text, ok, detail in checks]
         run = {**page.stub(f"j{i}-1", f"Journey {i}", "", suite={"id": "s", "title": "T"}), "verdict": verdict,
-               "events": events, "length": 3.5}
+               "events": events, "length": 3.5, "video": True}
         page.add(tmp_path, run)
     return tmp_path
 
@@ -156,3 +156,49 @@ def test_context_reads_the_event(tmp_path):
     event.write_text(json.dumps({"pull_request": {"number": 4, "head": {"sha": "abc", "repo": {"full_name": "me/r"}}}}))
     ctx = ci.context({"GITHUB_EVENT_PATH": str(event), "GITHUB_REPOSITORY": "o/r", "GITHUB_RUN_ID": "5"})
     assert (ctx["pr"], ctx["sha"], ctx["fork"]) == (4, "abc", True) and ctx["run"].endswith("/o/r/actions/runs/5")
+
+
+CTX = {"repo": "o/r", "pr": 3, "sha": "0123456789abcdef", "fork": False, "run": "https://github.com/o/r/actions/runs/9"}
+
+
+def mixed(tmp_path):
+    return review(tmp_path, ("works", [("a is on the screen", True, "")]), ("shown", []),
+                  ("problem", [("b | @me is on the screen", False, "not found")]))
+
+
+def test_comment_names_the_commit_and_each_verdict(tmp_path):
+    body = ci.comment(mixed(tmp_path), CTX, "https://o.github.io/r/pr/3/")
+    assert body.startswith(ci.MARKER) and "1 works, 1 problem, 1 no checks" in body
+    assert "[`0123456`](https://github.com/o/r/commit/0123456789abcdef)" in body
+    assert "| Journey 0 | works | 3.5 s |" in body and "| Journey 1 | no checks | 3.5 s |" in body
+    assert "problem: `b / @​me is on the screen` (not found)" in body
+    assert "![Journey 2](https://o.github.io/r/pr/3/runs/j2-1/poster.jpg)" in body
+    assert "passed" not in body and "PASS" not in body
+
+
+def test_comment_shows_the_first_journey_when_none_fail_and_no_picture_for_an_artifact(tmp_path):
+    out = review(tmp_path, ("works", [("a", True, "")]))
+    assert "runs/j0-1/poster.jpg" in ci.comment(out, CTX, "https://x/")
+    body = ci.comment(out, CTX, "https://github.com/o/r/actions/runs/9", "artifact", "From a fork.")
+    assert "![" not in body and "download the `proofreel-review` artifact" in body and "Note: From a fork." in body
+
+
+def test_comment_text_from_a_run_cannot_make_a_link_or_a_tag(tmp_path):
+    out = review(tmp_path, ("problem", [("<img src=x> [click](http://evil)", False, "")]))
+    body = ci.comment(out, CTX, "https://x/")
+    assert "<img" not in body and "[click]" not in body
+
+
+def test_post_changes_the_comment_with_the_marker_else_makes_one(tmp_path):
+    calls = []
+
+    def fake(found):
+        def run(*args):
+            calls.append(args)
+            return found if args[0] == "api" and "--paginate" in args else '{"id": 77}'
+        return run
+
+    assert ci.post("o/r", 3, "body", fake("41\n")) == "41"
+    assert calls[-1][:3] == ("api", "-X", "PATCH") and calls[-1][3] == "repos/o/r/issues/comments/41"
+    assert ci.post("o/r", 3, "body", fake("")) == 77
+    assert calls[-1][1] == "repos/o/r/issues/3/comments" and "-X" not in calls[-1]

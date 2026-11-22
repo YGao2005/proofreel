@@ -21,6 +21,7 @@ from . import Problem, page
 ID = re.compile(r"[A-Za-z0-9._-]+")
 DEST = re.compile(r"[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*")
 KEEP = {".mp4", ".jpg"}
+MARKER = "<!-- proofreel-comment -->"
 LABEL = {"works": "works", "problem": "problem", "shown": "no checks"}
 
 
@@ -169,6 +170,67 @@ def publish(review, mode, ctx, token, server="https://github.com", output=None):
     return mode, link, note
 
 
+def md(text, limit=140):
+    """Text from a run, safe in a Markdown table: one line, no pipes, no links, no HTML, no mentions."""
+    text = " ".join(str(text).split()).replace("|", "/").replace("`", "'").replace("@", "@\u200b")
+    text = text.replace("<", "&lt;").replace("[", "(").replace("]", ")")
+    return text if len(text) <= limit else text[:limit - 1] + "..."
+
+
+def result(row):
+    if row["verdict"] == "works":
+        return "works"
+    if row["verdict"] == "shown":
+        return "no checks"
+    why = [f"`{md(f['text'], 80)}`" + (f" ({md(f['detail'], 60)})" if f["detail"] else "") for f in row["failed"][:2]]
+    if len(row["failed"]) > 2:
+        why.append(f"and {len(row['failed']) - 2} more")
+    if row["error"]:
+        why.append(md(row["error"]))
+    return "problem: " + "; ".join(why) if why else "problem"
+
+
+def comment(review, ctx, link, mode="pages", note=""):
+    """The text of the pull request comment: the commit, one line for each journey, a picture, and the link."""
+    rows = journeys(review)
+    counts = {v: sum(r["verdict"] == v for r in rows) for v in LABEL}
+    head = ", ".join(f"{counts[v]} {LABEL[v]}" for v in LABEL if counts[v]) or "no journeys"
+    commit = f"[`{ctx['sha'][:7]}`]({os.environ.get('GITHUB_SERVER_URL', 'https://github.com')}/{ctx['repo']}/commit/{ctx['sha']})" \
+        if ctx.get("sha") else "an unknown commit"
+    lines = [MARKER, f"### proofreel: {head}", "",
+             f"Ran on {commit}. Each push replaces this comment.", "",
+             "| Journey | Result | Time |", "|---|---|---|"]
+    lines += [f"| {md(r['title'], 60)} | {result(r)} | {r['seconds']:.1f} s |" for r in rows]
+    shown = next((r for r in rows if r["verdict"] == "problem"), rows[0] if rows else None)
+    if mode == "pages" and shown and shown["poster"]:
+        lines += ["", f"[![{md(shown['title'], 60)}]({link}{shown['poster']})]({link})"]
+    lines += ["", f"[Open the full review]({link})" if mode == "pages" else
+              f"[Open the run]({link}) and download the `proofreel-review` artifact at the bottom of the page."]
+    if note:
+        lines += ["", f"Note: {md(note, 300)}"]
+    return "\n".join(lines) + "\n"
+
+
+def gh(*args, **kw):
+    done = subprocess.run(["gh", *args], capture_output=True, text=True, **kw)
+    if done.returncode:
+        raise Problem(f"gh {args[0]} failed: {done.stderr.strip()}")
+    return done.stdout
+
+
+def post(repo, pr, body, run=gh):
+    """Write the comment on the pull request: change the one with the marker, or make it. Returns its id."""
+    found = run("api", "--paginate", f"repos/{repo}/issues/{pr}/comments", "--jq",
+                f'.[] | select(.user.type == "Bot" and (.body | contains("{MARKER}"))) | .id').split()
+    with tempfile.NamedTemporaryFile("w", suffix=".md") as file:
+        file.write(body)
+        file.flush()
+        if found:
+            run("api", "-X", "PATCH", f"repos/{repo}/issues/comments/{found[0]}", "-F", f"body=@{file.name}")
+            return found[0]
+        return json.loads(run("api", f"repos/{repo}/issues/{pr}/comments", "-F", f"body=@{file.name}"))["id"]
+
+
 def main(argv):
     p = argparse.ArgumentParser(prog="proofreel ci", description="Helpers for CI.")
     sub = p.add_subparsers(dest="action", required=True)
@@ -177,13 +239,33 @@ def main(argv):
     s = sub.add_parser("publish", help="put a review folder on the Pages branch, or keep it in the artifact")
     s.add_argument("dir")
     s.add_argument("--mode", choices=["auto", "pages", "artifact"], default="auto")
+    s = sub.add_parser("comment", help="print the pull request comment; --post writes it and the job summary")
+    s.add_argument("dir")
+    s.add_argument("--mode", choices=["pages", "artifact"], default="pages")
+    s.add_argument("--link", required=True)
+    s.add_argument("--note", default="")
+    s.add_argument("--post", action="store_true")
     try:
         a = p.parse_args(argv)
     except SystemExit as stop:
-        raise Problem("Usage: proofreel ci check|publish <review folder>") from stop
+        raise Problem("Usage: proofreel ci check|publish|comment <review folder>") from stop
     if a.action == "publish":
         mode, link, note = publish(a.dir, a.mode, context(), os.environ.get("GITHUB_TOKEN", ""),
                                    os.environ.get("GITHUB_SERVER_URL", "https://github.com"),
                                    os.environ.get("GITHUB_OUTPUT"))
         return print(f"{mode}: {link}" + (f"\n{note}" if note else ""))
+    if a.action == "comment":
+        ctx = context()
+        body = comment(a.dir, ctx, a.link, a.mode, a.note)
+        if not a.post:
+            return print(body, end="")
+        if summary := os.environ.get("GITHUB_STEP_SUMMARY"):
+            with open(summary, "a") as out:
+                out.write(body)
+        if ctx["pr"]:
+            try:
+                post(ctx["repo"], ctx["pr"], body)
+            except Problem as problem:
+                print(f"::warning::No comment on the pull request. {problem}")
+        return
     return check(Path(a.dir))

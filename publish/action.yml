@@ -55,3 +55,12 @@ runs:
         GITHUB_TOKEN: ${{ inputs.token }}
         MODE: ${{ inputs.publish }}
       run: proofreel ci publish "$RUNNER_TEMP/proofreel-review" --mode "$MODE"
+
+    - name: Comment
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        MODE: ${{ steps.publish.outputs.mode }}
+        LINK: ${{ steps.publish.outputs.link }}
+        NOTE: ${{ steps.publish.outputs.note }}
+      run: proofreel ci comment "$RUNNER_TEMP/proofreel-review" --mode "$MODE" --link "$LINK" --note "$NOTE" --post
