@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.3.0
+
+Proof in every pull request, cheaper proofs, and steadier browser runs.
+
+- **GitHub Action:** `uses: YGao2005/proofreel@v1` replays saved flows on each pull request, with no model and no tokens, and `YGao2005/proofreel/publish@v1` puts the review page on GitHub Pages and keeps one comment on the pull request up to date: the verdict of each journey, a picture, and a link. The run and the publishing are separate jobs, so the pull request's code never runs with write access. A journey with no checks shows as "no checks", never as a pass. See docs/ci.md.
+- **Cheaper proofs:** the skill writes the whole flow and runs it with one `suite` command; the run prints a summary (each failed check with what the screen showed, and the words that appeared and went in each step), so an agent reads text, not frames. `proofreel help` is a short, task-ordered help (`help all` for every command). `suite` and `publish` print one line; the Artifact data goes to `artifact.json`. Claude Code's plugin has a `proof-runner` agent (Sonnet) that writes checks from the request, not from the code. A short proof went from 14 turns to 5 in a measured Claude Code run. `tools/agent_cost.py` measures it.
+- **Clicks in the video:** each click holds the screen it clicked for 0.3 s while its ring plays, so the ring is on the control that was clicked, not on the page that came after.
+- **Flaky journeys:** `suite --repeat N` runs each flow N times; a journey whose results differ is flaky, and not a pass.
+- **Variants on the web:** conditions `phone`, `dark`, `slow-network`, and `offline` work in the browser runner, and `suite --each-condition plain,phone,dark` runs each flow once for each.
+- **Unique data:** `${RUN}` in a flow is a new id each run, so a note saved by an earlier run cannot make a check pass.
+- **Provenance:** a check that another tool reported (`event check`) is marked "reported", and each run records its git commit and a hash of its flow.
+- **Steadier browser runs:** recordings set reduced motion (`--full-motion` turns it off) and a light color scheme; `open` waits for the first paint.
+- **No browser left behind:** a browser that `vm up web` started ends itself after 30 min with no proofreel command (`PROOFREEL_IDLE`). The test suite fails when a test leaves Chrome running.
+
 ## 1.2.2
 
 - **Fix (browser runner):** clicks and keys no longer read "no change on the screen in 2 s" when the action before them (a page load, a focus ring) changed the same pixels less than 0.6 s earlier. An input's settle time stops at the next action.
