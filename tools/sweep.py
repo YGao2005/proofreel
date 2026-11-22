@@ -21,12 +21,13 @@ ACME = Path(__file__).resolve().parent.parent / "examples" / "acme-notes"
 FAILED_REQUESTS = "net/* failed below 1 in the run"
 
 
-def suite(flows, out, broken):
+def suite(flows, out, broken, *options):
+    """Run a suite against a new Acme Notes server (BROKEN=1 when broken) and return the folder's runs."""
     server = subprocess.Popen([sys.executable, ACME / "server.py"], env={**os.environ, "BROKEN": "1" if broken else ""},
                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
         time.sleep(1)
-        subprocess.run(["proofreel", "suite", str(flows), "--out", str(out)], stdout=subprocess.DEVNULL, timeout=600)
+        subprocess.run(["proofreel", "suite", str(flows), "--out", str(out), *options], stdout=subprocess.DEVNULL, timeout=600)
     finally:
         server.terminate()
     return json.loads((out / "runs.json").read_text())["runs"]
