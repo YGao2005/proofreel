@@ -42,7 +42,7 @@
   run <flow> [--set NAME=VALUE]                         Run a flow file: one proofreel command per line. A line
                                                         `condition <name>` refuses a run VM whose state lacks it, or
                                                         applies a condition that lasts one recording.
-  suite <flows or folders...> [--state S] [--set NAME=VALUE] [--out DIR] [--title T] [--repeat N]
+  suite <flows or folders...> [--state S] [--set NAME=VALUE] [--out DIR] [--title T] [--repeat N] [--each-condition A,B]
                                                         Run each flow from a new clone of its saved VM state (a flow
                                                         line `from <state>`, or --state), and publish one page.
   render <session> [--plain] [--width W]                Make the video and page of a session again. A session is
@@ -125,7 +125,8 @@ def start(args):
     if source := session.revision():
         meta.setdefault("commit", source)
     info = {"title": args.title or args.name, "about": args.about, "meta": meta, "app": args.app, "conditions": faked,
-            "probes": probes.select(args.probe, run), **({"emulate": emulation.commands(not args.full_motion)} if web else {})}
+            "probes": probes.select(args.probe, run),
+            **({"emulate": emulation.commands(not args.full_motion, [c for c in faked if c.get("recording")])} if web else {})}
     print(f"Recording {recording.start(args.name, server, password, info, args.fps, args.reduce, run)}")
 
 
@@ -300,7 +301,7 @@ def play(steps, execute=None):
     if steps.state and steps.state != state:
         raise Problem(f"{steps.name} starts from saved state {steps.state}, and the run VM is from {state or '(none)'}. "
                       f"Start it: proofreel vm up {steps.state}. Or run it in a suite: proofreel suite {steps.name}.")
-    kept, applied = conditions.split(steps.conditions)
+    kept, applied = conditions.split(steps.conditions, run.get("os"))
     if gaps := conditions.missing(kept, have):
         raise Problem(f"{steps.name} needs condition {', '.join(gaps)}, and the run VM's state {state or '(none)'} "
                       f"has {', '.join(conditions.names(have)) or 'no conditions'}. Make a state with it: proofreel "
@@ -416,6 +417,8 @@ def parser():
     s.add_argument("--out", help="the review folder (default: a new suite folder in the sessions folder)")
     s.add_argument("--title")
     s.add_argument("--repeat", type=int, default=1, help="run each flow N times; a journey that differs between runs is flaky")
+    s.add_argument("--each-condition", default="", help="run each flow once for each condition in this list (plain: none), "
+                   "such as plain,phone,dark")
     s = sub.add_parser("ci", help="helpers for CI (see docs/ci.md)")
     s.add_argument("args", nargs=argparse.REMAINDER)
     s = sub.add_parser("render")
@@ -545,7 +548,7 @@ def vm(a):
             for name, source in plugins.known("condition").items():
                 info = plugins.manifest("condition", plugins.find("condition", name))
                 values = " ".join(f"{k}={v or '...'}" for k, v in info["values"].items())
-                lasts = "; one recording" if conditions.lasts_one_recording(info) else ""
+                lasts = "; one recording" if conditions.lasts_one_recording(info, "web" if info["os"] == ["web"] else "") else ""
                 profiles = f"\n  Profiles: {', '.join(info['profiles'])}" if info["profiles"] else ""
                 print(f"{name}  ({', '.join(info['os'])}{lasts}{', ' + source if source else ''})"
                       f"{'  ' + values if values else ''}\n  {info['fakes']}{profiles}\n  Not faked: {info['fidelity']}")
@@ -606,7 +609,7 @@ def command(argv):
             from . import suite
             values = dict(v.split("=", 1) for v in a.set)
             result, rows = suite.run(a.flows, lambda path: load_flow(path, values), play, command, a.state, a.out,
-                                     a.title, a.repeat)
+                                     a.title, a.repeat, [c for c in a.each_condition.split(",") if c])
             print(published(*result))
             return 1 if any(mark in ("FAIL", "FLAKY") for mark, _, _ in rows) else 0
         case "ci":

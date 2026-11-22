@@ -21,6 +21,8 @@ SCHEME = "cdp://"
 LINES = (Path(__file__).parent / "lines.js").read_text()
 PAINTED = "Promise.race([new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))), " \
           "new Promise(r => setTimeout(r, 3000))])"
+# WHY: the offline condition makes every request fail on purpose; the page then shows Chrome's own offline page, which a flow can check.
+OFFLINE = "net::ERR_INTERNET_DISCONNECTED"
 BUTTONS = {1: ("left", 1), 2: ("middle", 4), 3: ("right", 2)}
 MODIFIERS = {"alt": 1, "option": 1, "ctrl": 2, "control": 2, "meta": 4, "command": 4, "cmd": 4, "shift": 8}
 KEYS = {"enter": ("Enter", "Enter", 13), "return": ("Enter", "Enter", 13), "tab": ("Tab", "Tab", 9),
@@ -126,7 +128,7 @@ class WebScreen(Keyboard):
         self.events.clear()
         started = time.time()
         result = self.call("Page.navigate", url=url)
-        if "errorText" in result:
+        if "errorText" in result and result["errorText"] != OFFLINE:
             raise Problem(f"The browser could not open {url}: {result['errorText']}.")
         if "loaderId" in result:
             self.event("Page.loadEventFired", timeout)

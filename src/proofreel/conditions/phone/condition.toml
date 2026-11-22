@@ -1,0 +1,7 @@
+name = "phone"
+version = 1
+os = ["web"]
+fakes = "A phone: a 390x844 screen at 3x pixels, the touch events and the user agent of an iPhone, and the mobile layout (a page without a viewport meta tag lays out at 980 px)."
+applies = "The recorder sets DevTools device metrics, touch emulation, and the user agent on its connection for the recording. The video is portrait."
+checks = "Nothing runs in the run: the unit tests read the page's size, pixel ratio, touch support, and user agent back through a recording."
+fidelity = "Chrome renders the page, not Safari: its engine, fonts, and form controls differ. A click is a mouse click on a touch-enabled page; there is no multi-touch gesture, and no on-screen keyboard."
