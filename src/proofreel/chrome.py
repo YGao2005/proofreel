@@ -121,9 +121,13 @@ def boot(size=SIZE):
                 json.load(answer)
             break
         except (OSError, ValueError):
-            if not alive(proc.pid) or time.time() > deadline:
-                raise Problem(f"Chrome did not start: {log.read_text().strip()[-400:] or 'no output'} (see {log}). "
-                              f"Flags for Chrome, such as --no-sandbox in a container, go in PROOFREEL_CHROME_FLAGS.") from None
+            if proc.poll() is not None or time.time() > deadline:
+                quit_chrome()
+                why = (f"it ended with code {proc.returncode}" if proc.returncode is not None else
+                       f"its DevTools port {port} did not answer in {START_SECONDS} s")
+                raise Problem(f"Chrome did not start: {why}. Its output: {log.read_text().strip()[-1200:] or 'none'} "
+                              f"(see {log}). Flags for Chrome, such as --no-sandbox in a container, go in "
+                              f"PROOFREEL_CHROME_FLAGS.") from None
             time.sleep(0.1)
     with WebScreen(address) as screen:
         screen.fit(*map(int, size.split("x")))

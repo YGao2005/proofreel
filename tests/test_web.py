@@ -306,3 +306,12 @@ def test_a_check_for_data_that_an_earlier_run_saved_passes_on_a_broken_save_and_
         assert cli.load_flow(new, {"URL": url, "RUN": "mine"}).run == "mine"
     finally:
         server.shutdown()
+
+
+def test_a_browser_that_ends_at_start_says_how_it_ended(home, monkeypatch, tmp_path):
+    fake = tmp_path / "fake-chrome"
+    fake.write_text("#!/bin/sh\necho 'no display here'\nexit 3\n")
+    fake.chmod(0o755)
+    monkeypatch.setattr(chrome, "find_chrome", lambda: str(fake))
+    with pytest.raises(Problem, match=r"Chrome did not start: it ended with code 3\. Its output: no display here"):
+        vm.up("web")
