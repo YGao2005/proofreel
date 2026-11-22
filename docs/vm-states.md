@@ -84,10 +84,26 @@ proofreel start slow-load --condition slow-network:profile=none,latency=200ms
 |---|---|---|
 | `bluetooth-headset-call-mode` | the only microphone is a Bluetooth headset; when input starts, its rate drops from 48 kHz to `RATE` (24000 or 16000) | the default input is Bluetooth at 48 kHz, is `RATE` while input runs, and is 48 kHz again after |
 | `no-microphone` | no input device at all | Core Audio lists no device with input |
-| `offline` | no internet (pf refuses all traffic but SSH from the host) | pf is on; a TCP connection and DNS fail |
+| `offline` | no internet (macOS: pf refuses all traffic but SSH from the host; web: DevTools fails every request of the page, and `open` shows Chrome's offline page) | pf is on; a TCP connection and DNS fail |
 | `run-from-dmg` | the app runs from its mounted DMG (`DMG=<host path>`) | the DMG is mounted with an app at its top |
 | `quarantined-download` | the app is in `~/Downloads` with the quarantine flag and download record a browser makes, so the first open shows Gatekeeper and translocates it | the flag is set, not yet approved, and has a download record |
-| `slow-network` | one recording on a slow, choppy network (Linux and macOS): `latency` and `jitter` (round trip), `loss` and `rate` (each way). Profiles: `3g` (300ms, 50ms, 1%, 1mbit), `edge` (800ms, 100ms, 2%, 200kbit), `lossy-wifi` (60ms, 40ms, 10%, 10mbit), `none` | netem (Linux) or dummynet (macOS) shapes all traffic but SSH |
+| `slow-network` | one recording on a slow, choppy network (Linux, macOS, and the web runner): `latency` and `jitter` (round trip), `loss` and `rate` (each way). Profiles: `3g` (300ms, 50ms, 1%, 1mbit), `edge` (800ms, 100ms, 2%, 200kbit), `lossy-wifi` (60ms, 40ms, 10%, 10mbit), `none` | netem (Linux) or dummynet (macOS) shapes all traffic but SSH; on the web, DevTools shapes the page's requests |
+| `phone` | web only: a 390x844 screen at 3x, an iPhone user agent and touch events, and the mobile layout; the video is portrait | |
+| `dark` | web only: the page sees `prefers-color-scheme: dark` | |
+
+### Conditions on the web
+
+In the `web` runner, every condition lasts one recording: the same `start --condition` and flow line, and no state
+keeps it. The recorder holds the change in Chrome while it records (`emulation.py`), and it ends with `stop`. A web
+recording also sets `prefers-color-scheme: light` unless `dark` says otherwise, so a run does not depend on the
+appearance setting of the host. `slow-network` on the web has the profile's round-trip latency and rate, and no jitter or loss.
+To run every flow once for each condition, and publish each run as its own journey, labelled with the condition:
+
+```bash
+proofreel suite flows/ --each-condition plain,phone,dark,slow-network --out review
+```
+
+`plain` is a run with no condition. A page that has no `<meta name="viewport">` lays out at 980 px in the `phone` run, as it does on a phone.
 
 The headset is a small Core Audio driver (`headset.c`, an AudioServerPlugIn), built on the host with clang. It
 reports Bluetooth transport. When input starts, it asks Core Audio for a configuration change to the call rate, as a

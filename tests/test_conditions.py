@@ -43,7 +43,7 @@ def test_a_manifest_needs_every_field_its_folder_name_and_each_script(tmp_path):
 
 
 def test_a_condition_refuses_a_run_vm_of_another_system():
-    with pytest.raises(Problem, match="works on macos, and the VM is linux"):
+    with pytest.raises(Problem, match="works on macos, web, and the VM is linux"):
         conditions.record("offline", {}, "linux", recording=False)
 
 

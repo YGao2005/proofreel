@@ -1,0 +1,7 @@
+name = "dark"
+version = 1
+os = ["web"]
+fakes = "A person who set the system to dark mode: the page sees prefers-color-scheme: dark."
+applies = "The recorder sets the media feature through DevTools on its connection for the recording."
+checks = "Nothing runs in the run: the unit tests read prefers-color-scheme back through a recording."
+fidelity = "Only the media feature changes. A page that reads the theme from storage, a cookie, or a toggle is not changed, and Chrome's own controls keep their look."

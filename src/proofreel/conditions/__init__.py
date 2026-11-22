@@ -25,29 +25,31 @@ def missing(needed, conditions):
     return [name for name in needed if name not in names(conditions)]
 
 
-def lasts_one_recording(info):
-    return bool(info.get("removes"))
+def lasts_one_recording(info, system=""):
+    """A web run keeps no state of a condition: the recorder holds it (see emulation.py). A VM condition with a
+    remove step lasts one recording too."""
+    return system == "web" or bool(info.get("removes"))
 
 
 def record(name, given, system, recording):
     """The record of a condition, checked before anything runs: it fits the system, its values resolve, and it lasts
     where it is asked to (one recording, or a state)."""
     info = plugins.fits("condition", name, system)
-    if lasts_one_recording(info) != recording:
+    if lasts_one_recording(info, system) != recording:
         raise Problem(f"Condition {name} lasts one recording: proofreel start <name> --condition {name}[:KEY=VALUE,...], "
-                      f"or a flow line condition {name}." if lasts_one_recording(info) else
+                      f"or a flow line condition {name}." if lasts_one_recording(info, system) else
                       f"Condition {name} is kept in a state: proofreel vm build <state> --from <base> --condition {name}.")
     return {"name": info["name"], "version": info["version"], "values": plugins.resolve(info, given),
             **({"recording": True} if recording else {})}
 
 
-def split(items):
+def split(items, system=""):
     """A flow's condition lines as (names a state must have, items that its recording applies)."""
     kept, applied = [], []
     for item in items:
         name, given = plugins.spec(item)
         info = plugins.manifest("condition", plugins.find("condition", name))
-        if lasts_one_recording(info):
+        if lasts_one_recording(info, system):
             plugins.resolve(info, given)
             applied.append(item)
         else:
@@ -75,7 +77,10 @@ def check(run, record):
 
 
 def begin(run, records):
-    """Apply the conditions of a recording. When one fails, undo each reset that is pending, then raise."""
+    """Apply the conditions of a recording. When one fails, undo each reset that is pending, then raise. A web run
+    has no guest to apply them in: its recorder holds them."""
+    if not records or run.get("os") == "web":
+        return
     try:
         for each in records:
             apply(run, each)
