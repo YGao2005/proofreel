@@ -13,6 +13,7 @@ Proof in every pull request, cheaper proofs, and steadier browser runs.
 - **Provenance:** a check that another tool reported (`event check`) is marked "reported", and each run records its git commit and a hash of its flow.
 - **Steadier browser runs:** recordings set reduced motion (`--full-motion` turns it off) and a light color scheme; `open` waits for the first paint.
 - **No browser left behind:** a browser that `vm up web` started ends itself after 30 min with no proofreel command (`PROOFREEL_IDLE`). The test suite fails when a test leaves Chrome running.
+- When Chrome does not start, the error says whether it ended (with its exit code) or did not answer, and nothing of it is left running.
 
 ## 1.2.2
 
