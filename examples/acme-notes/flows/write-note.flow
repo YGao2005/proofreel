@@ -7,14 +7,14 @@ wait-text "Your notes" 30
 state "Editor"
 step "Write a note"
 click-text "Title"
-type "Trip plan"
+type "Trip plan ${RUN}"
 click-text "Write a note"
 type "Book the train on Friday"
 step "Save it"
 click-text "Save note"
 wait-text "Note saved" 10
 state "Saved"
-check text "Trip plan: Book the train on Friday"
+check text "Trip plan ${RUN}: Book the train on Friday"
 check metric net/* p95 --below 0.5
 check metric net/* failed --below 1
 stop

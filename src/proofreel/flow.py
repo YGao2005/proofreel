@@ -1,6 +1,7 @@
 """Flow files: one proofreel command on each line.
 
-`#` starts a comment. `${NAME}` and `${NAME:-default}` take their values from `--set NAME=VALUE`. A line
+`#` starts a comment. `${NAME}` and `${NAME:-default}` take their values from `--set NAME=VALUE`. `${RUN}` is made for
+each time a flow is read: a short unique id, so a flow can type data that no earlier run left (`--set RUN=...` replaces it). A line
 `condition <name>` says that the run VM's state must have that condition; for a condition that lasts one recording,
 `condition <name>[:KEY=VALUE,...]` applies it with the flow's `start`. A line `probe <name>[:KEY=VALUE,...]` adds
 a probe to the flow's recording. A line `from <state>` names the saved VM state the flow starts from: `run` refuses a
@@ -12,6 +13,7 @@ on. Any other failure stops the flow.
 
 import re
 import shlex
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -27,6 +29,7 @@ class Flow:
     conditions: list = field(default_factory=list)
     probes: list = field(default_factory=list)
     state: str | None = None
+    run: str = ""
 
 
 def expand(line, values):
@@ -42,7 +45,9 @@ def expand(line, values):
 def load(path, values, parse):
     """The flow's command lines as (line number, words), each checked with parse(words) before any runs."""
     path = Path(path)
-    flow = Flow(path.name)
+    run = values.get("RUN") or uuid.uuid4().hex[:8]
+    values = {**values, "RUN": run}
+    flow = Flow(path.name, run=run)
     for number, raw in enumerate(path.read_text().splitlines(), 1):
         try:
             words = shlex.split(expand(raw, values), comments=True)
