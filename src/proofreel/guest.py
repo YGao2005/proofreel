@@ -185,6 +185,10 @@ class Web(Guest):
     def open(self, run, screen, url):
         return screen.open(url)
 
+    def forward(self, run, guest_port):
+        """(the browser's DevTools port, None): the browser is on the host, so nothing needs a tunnel."""
+        return int(run["screen"].rsplit(":", 1)[1]), None
+
     def running(self, run, process):
         self.need_shell()
 

@@ -55,13 +55,16 @@ A probe is a folder like a condition (`probe.toml` and scripts), found in the sa
 `version`, `os` (the guest systems it works on), `fidelity` (what it does not measure well), `where` (`host` or
 `guest`), `privacy` (what it can see), and `[values]`. More fields:
 
-- `default = true` turns it on for every recording on its systems.
+- `default = true` turns it on for every recording on its systems. `default`, `extras`, and `tunnel` may be a table by
+  system: `default = { web = true }` turns it on for `web` only.
 - `extras` names a package or command it needs. Without it, the probe is unavailable, and the note says how to
   install it.
 - `port = true` gives it a free host port in `PROOFREEL_PORT`.
 - `tunnel = <guest port>` gives a host probe `PROOFREEL_TUNNEL`, a host port on 127.0.0.1 that reaches that port on
-  the guest's 127.0.0.1 while it runs.
+  the guest's 127.0.0.1 while it runs. On `web`, it is the browser's own DevTools port.
 - `setup = true` says that its `start` and `stop` scripts change the run VM for the recording (a proxy, a trusted CA).
+  A `web` run has no shell, so it runs no scripts. The `network` probe reads the browser's DevTools Network events
+  there, with the same series and fields as the proxy.
 - `[tracks."<series glob>"]` sets how the page and `stats` show a series: `label`, `unit`, `better` (`lower` or
   `higher`), `max`, and `bands`.
 

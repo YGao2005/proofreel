@@ -23,6 +23,20 @@ def url_label(method, url):
     return f"{method} {where}" if method else where
 
 
+def request_span(method, url, end, d, status=None, size=0, phases=None, error=None):
+    """The span line of one finished request: the one place that turns a request into a line, so every source of
+    requests keeps the same fields and never a query, header, or body. A request that got no answer has an error."""
+    line = {"m": f"net/{text((urlsplit(url).hostname or '').lower())[:100]}", "t": round(end, 4), "d": seconds(d),
+            "label": url_label(method, url)}
+    if status is not None:
+        return {**line, "ok": status < 400, "phases": phases or {}, "n": {"status": status, "size": size}}
+    return {**line, "ok": False, "phases": phases or {}, "n": {"error": text(error or "no answer")}}
+
+
+def seconds(value):
+    return round(max(0.0, value), 4)
+
+
 def part(segment):
     segment = unquote(segment.split(";", 1)[0])
     if EMAIL.search(segment):

@@ -1,3 +1,5 @@
+import http.server
+import threading
 import json
 import subprocess
 import time
@@ -5,7 +7,7 @@ import time
 import pytest
 from PIL import Image
 
-from proofreel import Problem, cdp, chrome, cli, guest, screen, vm
+from proofreel import Problem, cdp, chrome, cli, guest, recording, screen, vm
 
 PAGE = """<!doctype html><title>t</title>
 <h1>Your notes</h1>
@@ -178,3 +180,62 @@ def test_words_with_no_gap_between_them_are_one_word_as_on_the_screen(page, tmp_
     page.open((tmp_path / "inline.html").as_uri())
     assert words(page) == ["Trip plan: Book the train"]
     assert [w["text"] for w in page.lines()[0]["words"]] == ["Trip", "plan:", "Book", "the", "train"]
+
+
+SITE = """<!doctype html><title>t</title><h1>Fetching</h1>
+<script>
+fetch('/ok?token=QUERYSECRET', {headers: {'X-Key': 'HEADERSECRET'}}).then(() => fetch('/broken'))
+  .then(() => { document.title = 'done'; document.body.append('Fetched') })
+</script>
+"""
+
+
+@pytest.fixture
+def site():
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            known = self.path.startswith(("/ok", "/favicon")) or self.path == "/"
+            body = (SITE if self.path == "/" else "{}").encode()
+            self.send_response(200 if known else 500)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *args):
+            pass
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    yield f"http://127.0.0.1:{server.server_port}"
+    server.shutdown()
+
+
+def test_a_web_recording_measures_requests_and_vitals_with_no_flags(runs, site, monkeypatch):
+    # WHY: the recorder is another process: it finds the run record through PROOFREEL_HOME.
+    monkeypatch.setenv("PROOFREEL_HOME", str(runs))
+    monkeypatch.setattr(vm, "CURRENT", runs / f"{vm.RUN}.json")
+    monkeypatch.setattr(recording, "POINTER", runs / f"{vm.RUN}-session.json")
+    vm.up("web")
+    assert cli.command(["start", "web-net"]) is None
+    cli.command(["open", site + "/"])
+    cli.command(["wait-text", "Fetched", "10"])
+    # WHY: a span reaches the file a moment after the page sees the answer.
+    time.sleep(1)
+    assert cli.command(["check", "metric", "net/*", "failed", "--below", "1"]) == 1
+    cli.command(["stop"])
+    vm.down()
+    [folder] = (runs / "sessions").iterdir()
+    status = json.loads((folder / "metrics" / "probes.json").read_text())
+    assert {n: status[n]["status"] for n in ("network", "browser")} == {"network": "ok", "browser": "ok"}
+    lines = [json.loads(line) for line in (folder / "metrics" / "network.jsonl").read_text().splitlines()]
+    by_label = {line["label"]: line for line in lines if "favicon" not in line["label"]}
+    assert set(by_label) == {"GET 127.0.0.1:" + site.rsplit(":", 1)[1] + p for p in ("/", "/ok", "/broken")}
+    ok, broken = (by_label[next(k for k in by_label if k.endswith(p))] for p in ("/ok", "/broken"))
+    assert ok["m"] == "net/127.0.0.1" and ok["ok"] is True and ok["n"]["status"] == 200 and ok["n"]["size"] > 0
+    assert broken["ok"] is False and broken["n"]["status"] == 500
+    assert {"connect", "wait", "receive"} <= set(ok["phases"]) or {"wait", "receive"} <= set(ok["phases"])
+    assert "QUERYSECRET" not in (folder / "metrics" / "network.jsonl").read_text()
+    assert "HEADERSECRET" not in (folder / "metrics" / "network.jsonl").read_text()
+    assert any(json.loads(line)["m"] == "web/heap" for line in (folder / "metrics" / "browser.jsonl").read_text().splitlines())
+    check = [json.loads(line) for line in (folder / "events.jsonl").read_text().splitlines() if '"check"' in line][-1]
+    assert check["detail"] == "failed 1"

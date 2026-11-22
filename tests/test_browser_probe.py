@@ -131,3 +131,31 @@ def test_a_probe_with_a_tunnel_gets_its_port_and_the_tunnel_ends_with_it(tmp_pat
     assert given == {"guest": 9222, "port": 4321} and tunnel.poll() is not None
     assert real({"where": "host", "values": {}, "source": str(FOLDER)}, tmp_path, {}, None, 4321)[1][
         "PROOFREEL_TUNNEL"] == "4321"
+
+
+def test_network_events_make_the_span_of_the_proxy_addon_and_no_more():
+    browser = load().Browser(0, vitals=False, requests=True)
+    browser.feed({"method": "Target.attachedToTarget", "params": {
+        "sessionId": "S", "targetInfo": {"targetId": "T", "url": "about:blank"}}}, 0)
+    assert [json.loads(c)["method"] for c in browser.outbox][-1:] == ["Network.enable"]
+    timing = {"requestTime": 100.0, "dnsStart": -1, "connectStart": 1, "connectEnd": 11, "sslStart": 4, "sslEnd": 11,
+              "sendEnd": 12, "receiveHeadersEnd": 52}
+    send = {"method": "Network.requestWillBeSent", "sessionId": "S", "params": {
+        "requestId": "1", "timestamp": 100.0, "request": {
+            "url": "https://api.acme.test/items/42?token=SECRET123", "method": "GET", "headers": {"X": "HEADERSECRET"}}}}
+    got = {"method": "Network.responseReceived", "sessionId": "S", "params": {
+        "requestId": "1", "response": {"status": 200, "timing": timing}}}
+    done = {"method": "Network.loadingFinished", "sessionId": "S", "params": {
+        "requestId": "1", "timestamp": 100.1, "encodedDataLength": 300}}
+    assert browser.feed(send, 5) == [] and browser.feed(got, 5) == []
+    [line] = browser.feed(done, 5.1)
+    assert line == {"m": "net/api.acme.test", "t": 5.1, "d": 0.1, "label": "GET api.acme.test/items/:id", "ok": True,
+                    "phases": {"connect": 0.003, "tls": 0.007, "wait": 0.04, "receive": 0.048},
+                    "n": {"status": 200, "size": 300}}
+    browser.feed({**send, "params": {**send["params"], "requestId": "2"}}, 6)
+    [failed] = browser.feed({"method": "Network.loadingFailed", "sessionId": "S", "params": {
+        "requestId": "2", "timestamp": 100.5, "errorText": "net::ERR_CONNECTION_REFUSED"}}, 6.5)
+    assert failed["ok"] is False and failed["n"] == {"error": "connection refused"} and "status" not in failed["n"]
+    browser.feed({**send, "params": {**send["params"], "requestId": "3"}}, 7)
+    assert browser.feed({"method": "Network.loadingFailed", "sessionId": "S", "params": {
+        "requestId": "3", "timestamp": 100.6, "canceled": True}}, 7.1) == []

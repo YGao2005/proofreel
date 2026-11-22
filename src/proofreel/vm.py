@@ -95,7 +95,10 @@ class Run(dict):
 
     def forward(self, guest_port):
         """(host port, ssh process): while the process runs, 127.0.0.1:<host port> reaches 127.0.0.1:<guest_port>
-        in the guest. It has its own connection, so the forward ends with the process."""
+        in the guest. It has its own connection, so the forward ends with the process. A guest with no shell has
+        its own way (see guest.py)."""
+        if not self.guest.shell:
+            return self.guest.forward(self, guest_port)
         port = free_port()
         process = subprocess.Popen(
             ["ssh", *SSH_OPTS, *(["-p", str(self["port"])] if self.get("port") else []), "-N",
