@@ -75,6 +75,26 @@ from . import vm as vms
 from .screen import center, connect, find, fold, inside, matches, poll, screen_text, wait_for
 
 
+SHORT = """proofreel: record an app run as a review video and page. `proofreel help all` lists every command.
+
+A web app, in four commands:
+  vm up web                     Start a headless browser.
+  open <url>                    Show a page. `find [text]` prints the words on the screen and where to click.
+  suite <flow> --out DIR        Run the flow in a new browser and publish its review page. Prints the result.
+  vm down                       Stop the browser.
+
+A flow is a file with one command on each line. Start it with `from web`. These lines go in it:
+  start <name> --title T --about A      Begin the recording. `stop` ends it.
+  state <place> | step <text>           Say where the app is, and name the part that follows.
+  click-text <text> | type <text> | key <keys> | click <x> <y> | move <x> <y>
+  wait-text <text> [seconds]            Wait for words on the screen.
+  check text|no-text <text> [seconds]   A pass or fail on what the screen shows. --in x,y,w,h looks in one box.
+  check metric net/* p95 --below N      A budget on a measure.
+
+To explore step by step, run those lines one at a time after `start`, then `stop`. `${NAME:-default}` in a flow
+takes its value from `--set NAME=VALUE`. A native app or another system runs in a VM: `proofreel vm states`.
+"""
+
 
 def target(args):
     """The screen: (VNC server, password, run VM). The run VM is None for a screen that is not one."""
@@ -292,6 +312,8 @@ def parser():
     p.add_argument("--vnc")
     p.add_argument("--password")
     sub = p.add_subparsers(dest="command", required=True)
+    s = sub.add_parser("help", help="the short help; `help all` lists every command")
+    s.add_argument("topic", nargs="?", choices=["all"])
     s = sub.add_parser("start")
     s.add_argument("name")
     s.add_argument("--title")
@@ -554,6 +576,7 @@ def command(argv):
     if a.command in ("state", "step", "stop"):
         watch(a)
     match a.command:
+        case "help": return print(__doc__.strip() if a.topic else SHORT.strip())
         case "start":
             code = start(a)
             watch(a, force=True)

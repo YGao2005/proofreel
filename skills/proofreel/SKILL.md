@@ -7,7 +7,7 @@ description: "Use to test an app as a real user in a headless browser, a clean V
 
 ## Fast path: a web app
 
-Read the screen once, write the whole flow, run it with one command, and read the printed result. Do not rehearse steps one by one.
+Read the screen once, write the whole flow, run it with one command, and read the printed result. Do not rehearse steps one by one. For the commands, run `proofreel help` (about 1,000 characters), not `proofreel --help` (7,000); `proofreel help all` is the full list.
 
 1. `proofreel vm up web`, then `proofreel open <url>`, then `proofreel find`. This is a headless browser on this machine, and `find` prints the words on the screen with their click points. A server on this machine is at `127.0.0.1`. Do not read the app's source to learn the words: read the screen.
 2. Write one flow file (`<scratchpad>/<name>.flow`) from the user's request, not from your code: what the user does, and what the user must then see. Use made-up data only.

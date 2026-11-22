@@ -39,7 +39,7 @@ To let Claude Code drive it, add the plugin in Claude Code:
 |---|---|
 | Claude Code | The plugin above. |
 | Codex, Antigravity, Cursor | `proofreel skill install` (copies the skill to `~/.agents/skills/proofreel`, which they read). |
-| Any other agent that runs shell commands | Run `proofreel skill install --to .`, then add this line to its `AGENTS.md`: `To test an app, run proofreel --help and follow the skill at ./proofreel/SKILL.md.` |
+| Any other agent that runs shell commands | Run `proofreel skill install --to .`, then add this line to its `AGENTS.md`: `To test an app, run proofreel help and follow the skill at ./proofreel/SKILL.md.` |
 
 ## Quickstart
 
