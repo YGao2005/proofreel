@@ -1,6 +1,9 @@
 import json
 import subprocess
 
+from PIL import Image
+
+from proofreel import render
 from proofreel.demo import demo
 from proofreel.motion import FAST, Camera, Pointer, spans, timeline
 
@@ -68,3 +71,17 @@ def test_the_video_is_one_file_and_the_page_gets_the_camera_and_the_chips(tmp_pa
     typed = next(e for e in run["events"] if e["kind"] == "type")
     assert typed["chip"] and typed["dur"] > 1
     assert next(e for e in run["events"] if e["kind"] == "check").get("dur") is None
+
+
+def test_a_step_picture_never_shows_the_next_action(tmp_path):
+    frames, times = [], []
+    for n in range(30):
+        path = tmp_path / f"{n}.jpg"
+        Image.new("RGB", (64, 40), (n * 8, 0, 0)).save(path)
+        frames.append(path)
+        times.append(100 + n / 10)
+    events = [{"t": 0.5, "end": 0.62, "kind": "type", "text": "type a"},
+              {"t": 0.63, "end": 0.73, "kind": "check", "text": "a is on the screen", "ok": True},
+              {"t": 0.95, "kind": "click", "text": "click b", "x": 1, "y": 1}]
+    render.shots(tmp_path, events, frames, times, 100)
+    assert [Image.open(tmp_path / e["shot"]).getpixel((5, 5))[0] // 8 for e in events] == [9, 9, 19]

@@ -26,6 +26,7 @@ CAMERA = {"click", "double", "right", "drag", "type"}
 RING = {"click", "double", "right", "drag"}
 CHIP = {"click", "double", "right", "drag", "type", "key", "hold", "tap", "open", "wait", "check"}
 VERDICT = {"wait", "check"}
+ACTS = CHIP - VERDICT
 ROW = {"state", "step", "note", "wait", "check"}
 HIDDEN = {"move"}
 CLICK_LEAD = 0.3
