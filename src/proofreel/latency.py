@@ -2,12 +2,12 @@
 
 For an input (a click at its press, a key or typing at its first key), the reference is the last frame that arrived
 before it. The frames after it are compared with the reference in a region: REGION screen pixels around a click, the
-whole screen for keys. Pixels that already changed in the BEFORE seconds before the input (a blinking caret, a
-spinner) are masked, but only after the answer to the action before it settled: a page load or a focus ring is that
-action's answer, not motion in the background. The first frame that differs is the answer. A frame shows the screen
-at its shown time (session.shown), and the change came between the frame before and that one, so the latency is the
-middle of that time and its error is half of it. The screen has settled when it shows no change for QUIET
-seconds, or when the next action starts.
+whole screen for keys and for a click with no change near it. Pixels that already changed in the BEFORE seconds
+before the input (a blinking caret, a spinner) are masked, but only after the answer to the action before it
+settled: a page load or a focus ring is that action's answer, not motion in the background. The first frame that
+differs is the answer. A frame shows the screen at its shown time (session.shown), and the change came between the
+frame before and that one, so the latency is the middle of that time and its error is half of it. The screen has
+settled when it shows no change for QUIET seconds, or when the next action starts.
 
 measure() writes metrics/input.jsonl in the probe protocol: a span input/click or input/key for each answer, with
 err and settle, and a mark with ok false for an input that got no change on the screen in LIMIT seconds.
@@ -58,13 +58,30 @@ def region(event, kind, frame_size, scale):
 
 def answer(frames, taken, arrived, event, kind, scale, settled, after):
     """The input's span or mark (None when no frame came before it), and when its answer settled. settled is when the
-    answer to the action before it settled; after is when the next action starts."""
+    answer to the action before it settled; after is when the next action starts. A click with no change near it is
+    looked for on the whole screen, as a click in a sidebar changes the pane next to it."""
     press = event["t"]
     base = bisect_right(arrived, press) - 1
     if base < 0:
         return None, press
-    size = SMALL[kind]
-    box = region(event, kind, Image.open(frames[base]).size, scale)
+    size = Image.open(frames[base]).size
+    found = first_change(frames, taken, base, press, region(event, kind, size, scale), SMALL[kind], settled, after)
+    if found is None and kind == "click":
+        found = first_change(frames, taken, base, press, (0, 0, *size), SMALL["key"], settled, after)
+    line = {"m": f"input/{kind}", "label": event["text"]}
+    if found is None:
+        return {**line, "ok": False, "note": f"no change on the screen in {LIMIT:g} s",
+                "a": round(press + LIMIT, 4)}, press
+    first, last = found
+    since = max(taken[first - 1], press)
+    latency = (since + taken[first]) / 2 - press
+    return {**line, "d": round(latency, 3), "ok": True, "err": round((taken[first] - since) / 2, 3),
+            "settle": round(taken[last] - press, 3), "a": round(press + latency, 4)}, taken[last]
+
+
+def first_change(frames, taken, base, press, box, size, settled, after):
+    """The first and last frame of the answer in box, or None: the frames after base that differ from it, with the
+    pixels that moved in the BEFORE seconds before the press masked."""
     look = lambda i: picture(frames[i], box, size)
     reference = look(base)
     mask = Image.new("L", size, 0)
@@ -82,14 +99,7 @@ def answer(frames, taken, arrived, event, kind, scale, settled, after):
             first = i if first is None else first
             last = i
         previous, i = now, i + 1
-    line = {"m": f"input/{kind}", "label": event["text"]}
-    if first is None:
-        return {**line, "ok": False, "note": f"no change on the screen in {LIMIT:g} s",
-                "a": round(press + LIMIT, 4)}, press
-    since = max(taken[first - 1], press)
-    latency = (since + taken[first]) / 2 - press
-    return {**line, "d": round(latency, 3), "ok": True, "err": round((taken[first] - since) / 2, 3),
-            "settle": round(taken[last] - press, 3), "a": round(press + latency, 4)}, taken[last]
+    return None if first is None else (first, last)
 
 
 def measure(folder, events, frames, taken, arrived, scale):

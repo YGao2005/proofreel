@@ -142,3 +142,14 @@ def test_a_click_on_a_server_that_holds_requests_is_measured_after_the_press(tmp
     assert latency.measure(tmp_path, events, paths, session.shown(requested, arrived), arrived, scale=1.0) == 1
     line = json.loads((tmp_path / "metrics" / "input.jsonl").read_text())
     assert line["ok"] and 0 < line["d"] <= 0.12
+
+
+def test_a_click_that_changes_only_a_far_pane_is_measured_on_the_whole_screen(tmp_path):
+    def draw(d, t):
+        caret(d, t)
+        if t >= 2.3:
+            d.rectangle((800, 300, 1300, 700), fill=(10, 100, 255))
+    shown = frames(tmp_path, draw)
+    latency.measure(tmp_path, [{"t": 2.0, "kind": "click", "text": "click Stats", "x": 120, "y": 450}], *shown, scale=1.0)
+    line = json.loads((tmp_path / "metrics" / "input.jsonl").read_text())
+    assert line["ok"] and line["d"] == pytest.approx(0.3, abs=line["err"] + 0.02)
