@@ -90,3 +90,12 @@ def test_version_prints_the_package_version(capsys):
     with pytest.raises(SystemExit):
         cli.parser().parse_args(["--version"])
     assert capsys.readouterr().out.strip() == f"proofreel {__version__}"
+
+
+def test_a_flow_has_a_digest_of_its_file_that_a_value_does_not_change(tmp_path):
+    path = tmp_path / "f.flow"
+    path.write_text("note ${X:-a}\n")
+    first = flow.load(path, {}, parse=lambda words: None)
+    assert first.digest == flow.load(path, {"X": "b"}, parse=lambda words: None).digest and len(first.digest) == 8
+    path.write_text("note ${X:-b}\n")
+    assert flow.load(path, {}, parse=lambda words: None).digest != first.digest

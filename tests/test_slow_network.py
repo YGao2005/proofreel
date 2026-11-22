@@ -127,7 +127,8 @@ def test_a_flow_line_applies_a_recording_condition_at_start(home, tmp_path, monk
     path = tmp_path / "f.flow"
     path.write_text("condition slow-network:profile=edge\nstart x\nnote hello\n")
     cli.run_flow(path, {})
-    assert ran == [["start", "x", "--condition=slow-network:profile=edge"], ["note", "hello"]]
+    assert ran == [["start", "x", "--condition=slow-network:profile=edge", f"--meta=flow=f.flow {cli.load_flow(path, {}).digest}"],
+                   ["note", "hello"]]
     path.write_text("condition slow-network:profile=5g\nstart x\n")
     with pytest.raises(Problem, match="no profile '5g'"):
         cli.run_flow(path, {})

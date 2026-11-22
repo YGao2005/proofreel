@@ -89,3 +89,20 @@ def test_the_state_a_run_stopped_in_fails():
     events = [{"t": 0, "kind": "state", "text": "Home"}, {"t": 1, "kind": "check", "text": "k", "ok": True}]
     assert session.visits(events, error="flow.flow:3: exit 2")[0]["ok"] is False
     assert session.visits([], error="stopped") == []
+
+
+def test_the_revision_is_the_commit_and_whether_a_tracked_file_changed(tmp_path):
+    import subprocess
+    assert session.revision(tmp_path) is None
+    run = lambda *args: subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *args], cwd=tmp_path, check=True,
+                                       capture_output=True)
+    run("init", "-q")
+    (tmp_path / "a.txt").write_text("one")
+    run("add", "a.txt")
+    run("commit", "-qm", "one")
+    head = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=tmp_path, capture_output=True, text=True).stdout.strip()
+    assert session.revision(tmp_path) == head
+    (tmp_path / "new.txt").write_text("untracked")
+    assert session.revision(tmp_path) == head
+    (tmp_path / "a.txt").write_text("two")
+    assert session.revision(tmp_path) == f"{head}, uncommitted changes"

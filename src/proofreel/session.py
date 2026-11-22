@@ -15,6 +15,7 @@ A folder that an older proofreel wrote is upgraded as it is read, and never writ
 
 import json
 import re
+import subprocess
 import time
 from pathlib import Path
 
@@ -30,6 +31,19 @@ ACTS = CHIP - VERDICT
 ROW = {"state", "step", "note", "wait", "check"}
 HIDDEN = {"move"}
 CLICK_LEAD = 0.3
+
+
+def revision(cwd=None):
+    """The git commit of the project in cwd, with a note when a tracked file has changes: "1a2b3c4" or "1a2b3c4,
+    uncommitted changes". None outside a git repo."""
+    git = lambda *args: subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, timeout=10)
+    try:
+        head = git("rev-parse", "--short", "HEAD")
+        if head.returncode:
+            return None
+        return head.stdout.strip() + (", uncommitted changes" if git("status", "--porcelain", "--untracked-files=no").stdout.strip() else "")
+    except (OSError, subprocess.TimeoutExpired):
+        return None
 
 
 def moment(event):
